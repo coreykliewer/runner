@@ -182,7 +182,8 @@
       "dice": 2,
       "sum": 7,
       "hint":"My dice need to total 7 to open this",
-      "messageFail": "My dice must have a total value of 7"
+      "messageFail": "My dice must have a total value of 7",
+      "svg" : "<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges"> <!-- shadow --> <rect x="6" y="24" width="20" height="2" fill="#1a1a1a" opacity="0.35"/> <!-- lid back --> <rect x="7" y="10" width="18" height="7" fill="#6b3f1f"/> <!-- lid top highlight --> <rect x="8" y="11" width="16" height="1" fill="#8a552a" opacity="0.9"/> <!-- lid trim --> <rect x="7" y="16" width="18" height="2" fill="#4b2a12"/> <!-- base --> <rect x="6" y="18" width="20" height="10" fill="#5a3218"/> <!-- base highlight --> <rect x="7" y="19" width="18" height="1" fill="#7a4523" opacity="0.9"/> <!-- metal bands --> <rect x="9" y="10" width="2" height="18" fill="#b7b7b7"/> <rect x="21" y="10" width="2" height="18" fill="#b7b7b7"/> <!-- outline (draw before latch so latch sits on top of border) --> <rect x="6" y="18" width="20" height="10" fill="none" stroke="#000" stroke-width="1"/> <rect x="7" y="10" width="18" height="8" fill="none" stroke="#000" stroke-width="1"/> <!-- latch plate (LAST so it sits on top of the black border) --> <rect x="14" y="16" width="4" height="6" fill="#c9a23a"/> <rect x="15" y="18" width="2" height="3" fill="#7a5a12"/> </svg>"
     },
     "c": {
       "dice": 2,
