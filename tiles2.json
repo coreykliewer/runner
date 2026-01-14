@@ -1,1 +1,242 @@
+{
+  ".": {
+    "solid": false,
+    "gravity": true,
+    "moveCost": 1,
+    "insideMoveCost": 1,
+    "jumpAllowed": true,
+    "hint": "Mmm, dank dungeon air."
+  },
+ 
 
+  "P": {
+    "solid": true,
+    "gravity": true,
+    "moveCost": 1,
+    "jumpAllowed": true,
+    "deathMessage": "You fell to your death!",
+    "hint": "Stone dungeon flooring. Sturdy.",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 23.04 23.04'><rect fill='#352e3d' x='0' y='0' width='23.04' height='23.04'/><rect fill='#4b465a' x='0' y='12.24' width='10.8' height='10.08'/><rect fill='#4b465a' x='12.24' y='12.24' width='10.8' height='10.08'/><rect fill='#4b465a' x='.72' y='.7' width='21.6' height='10.04'/><rect fill='#000' x='0' y='0' width='.72' height='.72'/><rect fill='#000' x='0' y='22.32' width='.72' height='.72'/><rect fill='#000' x='22.32' y='0' width='.72' height='.72'/><rect fill='#000' x='22.32' y='22.32' width='.72' height='.72'/><polygon fill='#5b5a70' points='10.08 15.84 10.08 15.12 9.36 15.12 9.36 12.96 0 12.96 0 20.88 2.88 20.88 2.88 21.6 4.32 21.6 4.32 20.88 5.04 20.88 5.04 21.6 7.2 21.6 7.2 20.88 7.92 20.88 7.92 21.6 8.64 21.6 8.64 20.88 9.36 20.88 9.36 21.6 10.08 21.6 10.08 20.16 9.36 20.16 9.36 19.44 10.08 19.44 10.08 18.72 9.36 18.72 9.36 18 10.08 18 10.08 16.56 9.36 16.56 9.36 15.84 10.08 15.84'/><polygon fill='#5b5a70' points='20.88 13.68 20.88 12.96 12.96 12.96 12.96 20.88 13.68 20.88 13.68 21.6 15.12 21.6 15.12 20.88 15.84 20.88 15.84 21.6 17.28 21.6 17.28 20.88 19.44 20.88 19.44 21.6 23.04 21.6 23.04 13.68 20.88 13.68'/><polygon fill='#5b5a70' points='21.6 2.16 21.6 1.44 20.88 1.44 20.07 1.44 1.44 1.44 1.44 10.08 2.16 10.08 2.16 9.36 3.78 9.36 3.78 10.08 4.5 10.08 4.5 9.36 5.31 9.36 5.31 10.08 7.92 10.08 7.92 9.36 8.73 9.36 8.73 10.08 10.08 10.08 10.08 9.36 10.98 9.36 10.98 10.08 11.7 10.08 11.7 9.36 12.42 9.36 12.42 10.08 13.14 10.08 13.14 9.36 16.74 9.36 16.74 10.08 18.09 10.08 18.09 9.36 18.9 9.36 18.9 10.08 20.25 10.08 20.25 9.36 20.88 9.36 20.88 10.08 21.6 10.08 21.6 8.73 20.88 8.73 20.88 7.2 21.6 7.2 21.6 6.48 20.88 6.48 20.88 5.67 21.6 5.67 21.6 4.32 20.88 4.32 20.88 2.16 21.6 2.16'/><rect fill='#6b778d' x='1.44' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='1.44' y='2.88' width='.72' height='1.44'/><rect fill='#6b778d' x='1.44' y='5.76' width='.72' height='1.44'/><rect fill='#6b778d' x='1.44' y='7.92' width='.72' height='.72'/><rect fill='#6b778d' x='2.88' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='5.04' y='1.44' width='2.16' height='.72'/><rect fill='#6b778d' x='7.92' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='9.36' y='1.44' width='1.44' height='.72'/><rect fill='#6b778d' x='11.52' y='1.44' width='2.88' height='.72'/><rect fill='#6b778d' x='15.12' y='1.44' width='1.44' height='.72'/><rect fill='#6b778d' x='18' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='1.44' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='3.6' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='6.48' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='7.92' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='14.4' width='.72' height='2.16'/><rect fill='#6b778d' x='12.96' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='18.72' width='.72' height='1.44'/><rect fill='#6b778d' x='12.96' y='20.88' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='17.37' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='18.9' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='12.96' width='2.16' height='.72'/></svg>"
+  },
+
+   "S": {
+    "solid": true,
+    "gravity": true,
+    "topDamage": { "amount": 1, "when": "stand" },
+    "moveCost": 1,
+    "jumpAllowed": true,
+    "deathMessage": "Impaled on spikes!",
+    "hint":"Oooo! Those look sharp. Wouldn't want to stand on those, or land on them! Owwwie ow ow.",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18.74 16.55'><path fill='#d0d0d0' d='M.49 16.55c-.23-.14-.31-.44-.18-.68L9.37 0l9.3 15.81c.14.23.06.54-.18.68-.24.14-.54.06-.68-.18L9.37 1.95.92 16.31c-.09.16-.26.24-.43.24Z'/></svg>"
+  },
+
+  "W": {
+    "solid": false,
+    "gravity": false,
+    "sinkSpeed": 1,
+    "riseSpeed": 1,
+    "moveCost": 1,
+    "insideMoveCost": 1,
+    "jumpAllowed": true,
+    "deathMessage": "You drowned",
+    "hint": "It's dungeon water. Its wet and stinky with some sort of chunks floating in it.",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 18.85 14.93'><path fill='#3aaaff' d='M18.3,9.52c-.3,0-.55.25-.55.55,0,.01,0,.02,0,.03-.02,2.06-1.75,3.72-3.88,3.72s-3.88-1.68-3.88-3.76c0-.3-.25-.55-.55-.55s-.55.25-.55.55c0,.01,0,.02,0,.03-.02,2.05-1.75,3.72-3.88,3.72s-3.88-1.68-3.88-3.76c0-.3-.25-.55-.55-.55s-.55.25-.55.55c0,2.68,2.24,4.86,4.99,4.86,1.93,0,3.61-1.07,4.44-2.64.83,1.57,2.51,2.64,4.44,2.64,2.75,0,4.99-2.18,4.99-4.86,0-.3-.25-.55-.55-.55Z'/><path fill='#3aaaff' d='M.55,5.41c1.93,0,3.61-1.07,4.44-2.64.83,1.57,2.51,2.64,4.44,2.64s3.61-1.1,4.44-2.68c.82,1.58,2.49,2.68,4.44,2.68.3,0,.55-.25.55-.55s-.25-.55-.55-.55c-2.14,0-3.88-1.68-3.88-3.76,0-.3-.25-.55-.55-.55-.3,0-.55.25-.55.55,0,.01,0,.02,0,.03-.02,2.06-1.75,3.72-3.88,3.72s-3.88-1.68-3.88-3.76c0-.3-.25-.55-.55-.55s-.55.25-.55.55c0,.01,0,.02,0,.03-.02,2.06-1.75,3.72-3.88,3.72-.3,0-.55.25-.55.55s.25.55.55.55Z'/></svg>"
+  },
+
+  "L": {
+    "solid": false,
+    "gravity": false,
+    "insideDamage": { "amount": 999, "when": "instant" },
+    "moveCost": 1,
+    "deathMessage": "You were scorched by lava!",
+    "hint": "Ok, thats molting lava. That looks like instant death.",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 23.04 23.04'><g><path fill='#5c140b' d='M23.04,22.1v.94H0v-.94c7.68,1.88,15.36-1.87,23.04,0Z'/><path fill='#5c140b' d='M23.04,18.28v3.82c-7.68-1.87-15.36,1.88-23.04,0v-3.82c7.68-1.88,15.36,1.87,23.04,0Z'/><path fill='#a51e22' d='M23.04,16.4v1.88c-7.68,1.87-15.36-1.88-23.04,0v-1.88c7.68-1.87,15.36,1.88,23.04,0Z'/><path fill='#e16a26' d='M23.04,12.58v3.82c-7.68,1.88-15.36-1.87-23.04,0v-3.82c7.68,1.87,15.36-1.88,23.04,0Z'/><path fill='#fdb714' d='M23.04,10.7v1.88c-7.68-1.88-15.36,1.87-23.04,0v-1.88c7.68,1.88,15.36-1.87,23.04,0Z'/><path fill='#a51e22' d='M23.04,6.88v3.82c-7.68-1.87-15.36,1.88-23.04,0v-3.82c7.68-1.88,15.36,1.87,23.04,0Z'/><path fill='#5c140b' d='M23.04,5v1.88c-7.68,1.87-15.36-1.88-23.04,0v-1.88c7.68-1.88,15.36,1.88,23.04,0Z'/><path fill='#e16a26' d='M23.04,1.18v3.82c-7.68,1.88-15.36-1.88-23.04,0V1.18c7.68,1.87,15.36-1.88,23.04,0Z'/><path fill='#5c140b' d='M23.04,0v1.18C15.36-.7,7.68,3.05,0,1.18V0h23.04Z'/></g></svg>" 
+  },
+
+"E": {
+  "solid": false,
+  "gravity": true,
+  "exit": true,
+  "moveCost": 1,
+  "deathMessage": "You did it! Off to the next level",
+  "hint": "The way out!",
+  "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16.65 18.54'><path fill='#5EE076' d='M12.36 12.57a.49.49 0 0 0-.49.49v4.49H.99V.99h10.88v5.02a.49.49 0 1 0 .98 0V0H0v18.54h12.85v-5.48a.49.49 0 0 0-.49-.49Z'/><path fill='#5EE076' d='m6.77 8.9-.35.35.35.35 3.53 3.53a.49.49 0 0 0 .7-.7l-2.69-2.69h7.84a.49.49 0 1 0 0-.98H8.31l2.69-2.69a.49.49 0 0 0-.7-.7L6.77 8.9Z'/></svg>",
+  "E": "P2A1P22~P2A1P22~A1Ia1R1A22~A1P3A21~A4P2A19~A6Ib1A18~A6P2A17~A25~A25~A13Ic1A7E1A3~P8W3P14~P8W3P14~P25~P25~P25",
+  "Ea": "P25~P1A3P1A18E1P1~P1R1P1A7H1A3T1A3D1A3P3~P3A1P11A3P2A4P1~P1A3P1A11Z1A4Y1A2P1~P1A1P1A9D2P1A1P1L4P1A1D1P1~P1A1P1W1P1W1P1A3P5A1P1L4P1A1P2~P1A1P1W3P1A7P1L6P1D1A1P1~P1A2D1W1D1A3P1A4P1L1P7A1P1~P1A1P2W1P2A4P1L8P1A2D1P1~P1A1P2W1P2A1P2A1P10A2P2~P1A1P1W3P1A4P1A1P1A10P1~P1A1P1W1P1W1P1A4K1A3D1A1D1A1D1A2P1A1P1~P1B1P1W1D1W1K1S4P1H1P1S1P1S1P1S1P1S3H1P1~P3W1P1W1P19",
+  "Eb": "P25~P25~A14P7A4~A25~A25~A1R1A8T1A14~A1P3A1P2A2P8A2P1A5~A15P2A6E1A1~A22P3~A21P4~A19P6~P5L3P1Y1A3Z1P11~P2L6P2W3P12~P2L2P6W3P12~P25"
+},
+  "D": {
+    "solid": false,
+    "gravity": true,
+    "pickupType": "diamond",
+    "moveCost": 1,
+    "logHtml": true,
+    "logKind": "diamond",
+
+    "deathMessage": "My precious!<br> +1 Diamond",
+    "hint": "Oooo, a shiny trinket. I wonder if it needs a home?",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 23 23'><rect fill='#3b5969' x='5.28' y='1.76' width='0.88' height='0.88'/><rect fill='#3b5969' x='4.4' y='2.64' width='0.88' height='0.88'/><rect fill='#3b5969' x='6.16' y='0.97' width='0.88' height='0.79'/><rect fill='#3b5969' x='9.68' y='0.97' width='0.88' height='0.79'/><rect fill='#3b5969' x='8.8' y='1.76' width='0.88' height='1.76'/><rect fill='#3b5969' x='21.11' y='6.16' width='0.88' height='0.88'/><rect fill='#3b5969' x='3.52' y='3.52' width='0.88' height='0.88'/><rect fill='#3b5969' x='1.76' y='5.42' width='0.88' height='0.74'/><rect fill='#3b5969' x='14.95' y='5.42' width='0.88' height='1.62'/><rect fill='#3b5969' x='0.88' y='6.16' width='0.88' height='0.88'/><rect fill='#3b5969' x='1.76' y='5.28' width='0.88' height='0.14'/><rect fill='#3b5969' x='10.56' y='19.35' width='1.76' height='0.88'/><rect fill='#3b5969' x='2.64' y='4.4' width='0.88' height='0.88'/><rect fill='#3b5969' x='7.04' y='5.42' width='0.88' height='1.62'/><rect fill='#3b5969' x='15.83' y='0.88' width='0.88' height='0.09'/><rect fill='#3b5969' x='15.83' y='0.97' width='0.88' height='0.79'/><rect fill='#3b5969' x='12.31' y='0.97' width='0.88' height='0.79'/><rect fill='#3b5969' x='16.71' y='1.76' width='0.88' height='0.88'/><rect fill='#3b5969' x='17.59' y='2.64' width='0.88' height='0.88'/><rect fill='#3b5969' x='18.47' y='3.52' width='0.88' height='0.88'/><rect fill='#3b5969' x='20.23' y='5.28' width='0.88' height='0.14'/><rect fill='#3b5969' x='19.35' y='4.4' width='0.88' height='0.88'/><rect fill='#3b5969' x='13.19' y='1.76' width='0.88' height='1.76'/><rect fill='#3b5969' x='6.16' y='0.88' width='0.88' height='0.09'/><polygon fill='#3b5969' points='9.68 0.97 10.56 0.97 10.56 0.88 12.31 0.88 12.31 0.97 13.19 0.97 13.19 0.88 15.83 0.88 15.83 0 7.04 0 7.04 0.88 9.68 0.88 9.68 0.97'/><rect fill='#3b5969' x='7.04' y='5.28' width='0.88' height='0.14'/><rect fill='#3b5969' x='14.07' y='3.52' width='0.88' height='1.76'/><rect fill='#3b5969' x='7.92' y='3.52' width='0.88' height='1.76'/><rect fill='#3b5969' x='14.95' y='5.28' width='0.88' height='0.14'/><rect fill='#3b5969' x='10.56' y='17.59' width='1.76' height='0.88'/><rect fill='#3b5969' x='20.23' y='5.42' width='0.88' height='0.74'/><rect fill='#3b5969' x='14.07' y='16.71' width='0.88' height='0.88'/><rect fill='#3b5969' x='13.19' y='17.59' width='0.88' height='0.88'/><rect fill='#3b5969' x='14.95' y='15.83' width='0.88' height='0.88'/><rect fill='#3b5969' x='8.8' y='17.59' width='0.88' height='0.88'/><rect fill='#3b5969' x='12.31' y='18.47' width='0.88' height='0.88'/><rect fill='#3b5969' x='15.83' y='14.95' width='0.88' height='0.88'/><rect fill='#3b5969' x='7.92' y='16.71' width='0.88' height='0.88'/><rect fill='#3b5969' x='9.68' y='18.47' width='0.88' height='0.88'/><rect fill='#3b5969' x='20.23' y='10.56' width='0.88' height='0.88'/><rect fill='#3b5969' x='21.11' y='9.68' width='0.88' height='0.88'/><rect fill='#3b5969' x='16.71' y='14.07' width='0.88' height='0.88'/><polygon fill='#3b5969' points='21.99 7.04 21.99 7.92 16.71 7.92 16.71 7.04 15.83 7.04 15.83 7.92 7.04 7.92 7.04 7.04 6.16 7.04 6.16 7.92 0.88 7.92 0.88 7.04 0 7.04 0 9.68 0.88 9.68 0.88 8.8 6.16 8.8 6.16 10.56 7.04 10.56 7.04 8.8 15.83 8.8 15.83 10.56 16.71 10.56 16.71 8.8 21.99 8.8 21.99 9.68 22.87 9.68 22.87 7.04 21.99 7.04'/><rect fill='#3b5969' x='19.35' y='11.43' width='0.88' height='0.88'/><rect fill='#3b5969' x='17.59' y='13.19' width='0.88' height='0.88'/><rect fill='#3b5969' x='7.92' y='12.31' width='0.88' height='1.76'/><rect fill='#3b5969' x='18.47' y='12.31' width='0.88' height='0.88'/><rect fill='#3b5969' x='7.04' y='10.56' width='0.88' height='1.76'/><rect fill='#3b5969' x='14.07' y='12.31' width='0.88' height='1.76'/><rect fill='#3b5969' x='14.95' y='10.56' width='0.88' height='1.76'/><rect fill='#3b5969' x='13.19' y='14.07' width='0.88' height='1.76'/><rect fill='#3b5969' x='8.8' y='14.07' width='0.88' height='1.76'/><rect fill='#3b5969' x='12.31' y='15.83' width='0.88' height='1.76'/><rect fill='#3b5969' x='9.68' y='15.83' width='0.88' height='1.76'/><rect fill='#3b5969' x='5.28' y='14.07' width='0.88' height='0.88'/><rect fill='#3b5969' x='4.4' y='13.19' width='0.88' height='0.88'/><rect fill='#3b5969' x='7.04' y='15.83' width='0.88' height='0.88'/><rect fill='#3b5969' x='6.16' y='14.95' width='0.88' height='0.88'/><rect fill='#3b5969' x='2.64' y='11.43' width='0.88' height='0.88'/><rect fill='#3b5969' x='1.76' y='10.56' width='0.88' height='0.88'/><rect fill='#3b5969' x='0.88' y='9.68' width='0.88' height='0.88'/><rect fill='#3b5969' x='3.52' y='12.31' width='0.88' height='0.88'/><polygon fill='#5c8791' points='5.28 7.04 6.16 7.04 6.16 5.42 2.64 5.42 2.64 6.16 1.76 6.16 1.76 7.04 0.88 7.04 0.88 7.92 5.28 7.92 5.28 7.04'/><rect fill='#5c8791' x='7.04' y='0.88' width='2.64' height='0.09'/><polygon fill='#5c8791' points='6.16 5.28 7.04 5.28 7.04 4.4 7.92 4.4 7.92 3.52 8.8 3.52 8.8 1.76 9.68 1.76 9.68 0.97 7.04 0.97 7.04 1.76 6.16 1.76 6.16 2.64 5.28 2.64 5.28 3.52 4.4 3.52 4.4 4.4 3.52 4.4 3.52 5.28 2.64 5.28 2.64 5.42 6.16 5.42 6.16 5.28'/><rect fill='#5c8791' x='10.56' y='18.47' width='0.88' height='0.88'/><polygon fill='#5c8791' points='9.68 15.83 8.8 15.83 8.8 14.07 7.92 14.07 7.92 13.19 7.04 13.19 7.04 11.43 6.16 11.43 6.16 10.56 5.28 10.56 5.28 8.8 0.88 8.8 0.88 9.68 1.76 9.68 1.76 10.56 2.64 10.56 2.64 11.43 3.52 11.43 3.52 12.31 4.4 12.31 4.4 13.19 5.28 13.19 5.28 14.07 6.16 14.07 6.16 14.95 7.04 14.95 7.04 15.83 7.92 15.83 7.92 16.71 8.8 16.71 8.8 17.59 9.68 17.59 9.68 15.83'/><rect fill='#5c8791' x='9.68' y='17.59' width='0.88' height='0.88'/><rect fill='#84ada7' x='7.04' y='4.4' width='0.88' height='0.88'/><rect fill='#84ada7' x='11.43' y='18.47' width='0.88' height='0.88'/><rect fill='#84ada7' x='6.16' y='5.28' width='0.88' height='0.14'/><rect fill='#84ada7' x='14.07' y='2.64' width='0.88' height='0.88'/><polygon fill='#84ada7' points='13.19 0.88 13.19 0.97 13.19 1.15 13.19 1.76 15.83 1.76 15.83 1.15 15.83 0.97 15.83 0.88 13.19 0.88'/><polygon fill='#84ada7' points='14.95 7.04 14.95 5.42 14.95 5.29 14.95 5.28 14.07 5.28 14.07 4.4 12.31 4.4 12.31 5.29 12.31 5.42 12.31 6.16 11.43 6.16 11.43 5.42 11.43 5.29 11.43 5.28 9.68 5.28 9.68 4.4 11.43 4.4 11.43 3.52 13.19 3.52 13.19 1.76 12.31 1.76 12.31 1.24 12.31 0.97 12.31 0.88 10.56 0.88 10.56 0.97 10.56 1.24 10.56 1.76 9.68 1.76 9.68 3.52 8.8 3.52 8.8 5.28 7.92 5.28 7.92 5.29 7.92 5.42 7.92 7.04 7.04 7.04 7.04 7.92 15.83 7.92 15.83 7.04 14.95 7.04'/><polygon fill='#84ada7' points='17.59 9.68 16.71 9.68 16.71 10.56 15.83 10.56 15.83 12.31 14.95 12.31 14.95 14.07 14.07 14.07 14.07 15.83 13.19 15.83 13.19 17.59 14.07 17.59 14.07 16.71 14.95 16.71 14.95 15.83 15.83 15.83 15.83 14.95 16.71 14.95 16.71 14.07 17.59 14.07 17.59 13.19 18.47 13.19 18.47 12.31 19.35 12.31 19.35 11.43 20.23 11.43 20.23 10.56 21.11 10.56 21.11 9.68 21.99 9.68 21.99 8.8 17.59 8.8 17.59 9.68'/><rect fill='#84ada7' x='12.31' y='17.59' width='0.88' height='0.88'/><polygon fill='#84ada7' points='13.19 15.83 13.19 14.07 14.07 14.07 14.07 12.31 14.95 12.31 14.95 10.56 15.83 10.56 15.83 8.8 14.07 8.8 14.07 9.68 13.19 9.68 13.19 10.56 12.31 10.56 12.31 9.68 10.56 9.68 10.56 8.8 7.04 8.8 7.04 10.56 7.92 10.56 7.92 12.31 8.8 12.31 8.8 14.07 9.68 14.07 9.68 15.83 10.56 15.83 10.56 17.59 12.31 17.59 12.31 15.83 13.19 15.83'/><rect fill='#84ada7' x='5.28' y='7.04' width='0.88' height='0.88'/><rect fill='#84ada7' x='6.16' y='5.42' width='0.88' height='1.62'/><rect fill='#84ada7' x='7.04' y='12.31' width='0.88' height='0.88'/><polygon fill='#84ada7' points='21.11 7.04 21.11 6.16 20.23 6.16 20.23 5.56 20.23 5.42 20.23 5.28 19.35 5.28 19.35 4.4 18.47 4.4 18.47 3.52 17.59 3.52 17.59 2.64 15.83 2.64 15.83 3.52 14.95 3.52 14.95 5.28 15.83 5.28 15.83 5.42 15.83 5.56 15.83 7.04 16.71 7.04 16.71 7.92 21.99 7.92 21.99 7.04 21.11 7.04'/><rect fill='#84ada7' x='6.16' y='10.56' width='0.88' height='0.88'/><rect fill='#84ada7' x='5.28' y='8.8' width='0.88' height='1.76'/><polygon fill='#afcfc2' points='10.56 9.68 12.31 9.68 12.31 10.56 13.19 10.56 13.19 9.68 14.07 9.68 14.07 8.8 10.56 8.8 10.56 9.68'/><polygon fill='#afcfc2' points='16.71 1.76 14.07 1.76 14.07 2.64 14.95 2.64 14.95 3.52 15.83 3.52 15.83 2.64 16.71 2.64 16.71 1.76'/><polygon fill='#afcfc2' points='11.43 3.52 11.43 4.4 9.68 4.4 9.68 5.28 11.43 5.28 11.43 5.29 11.43 5.42 11.43 6.16 12.31 6.16 12.31 5.42 12.31 5.29 12.31 4.4 14.07 4.4 14.07 3.52 11.43 3.52'/><rect fill='#afcfc2' x='16.71' y='8.8' width='0.88' height='0.88'/></svg>"
+  },
+
+  "T": {
+    "solid": false,
+    "gravity": true,
+    "pickupType": "turbo",
+    "moveCost": 1,
+    "deathMessage": "Turbo!",
+    "hint": "I bet if I touch that, I will go twice as fast. Like getting new shoes!",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='1' y='1' width='14' height='14' rx='2' ry='2' fill='#222222'/><polygon fill='#ffcc00' points='7 1 3 9 7 9 6 15 13 6 9 6 10 1'/></svg>"
+  },
+
+  "H": {
+    "solid": false,
+    "gravity": true,
+    "pickupType": "heart",
+    "moveCost": 1,
+    "deathMessage": "Whew! You needed that!",
+    "hint": "Huh, a floating beating heart. I wonder, if I feast upon it, will I gain its essence?",
+    "svg": "<?xml version='1.0' encoding='UTF-8'?><svg id='Layer_3' data-name='Layer 3' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'><g style='fill:#945a50'><polygon points='19.2 4.24 19.2 2.54 18.24 2.54 18.24 1.7 17.28 1.7 17.28 2.54 15.36 2.54 15.36 3.39 14.4 3.39 14.4 4.24 16.32 4.24 16.32 3.39 17.28 3.39 17.28 5.09 19.2 5.09 19.2 5.94 20.16 5.94 20.16 4.24 19.2 4.24'/><rect x='18.24' y='6.78' width='.96' height='.85'/></g><g style='fill:#613943'><rect x='7.68' y='.85' width='.96' height='.85'/><rect x='9.6' y='2.54' width='.96' height='.85'/><rect x='8.64' y='1.7' width='.96' height='.85'/><rect x='2.88' y='.85' width='.96' height='.85'/><rect y='5.09' width='.96' height='1.7'/><rect x='1.92' y='1.7' width='.96' height='1.7'/><rect x='.96' y='6.78' width='.96' height='1.7'/><rect x='10.56' y='3.39' width='1.92' height='.85'/><rect x='21.12' y='3.39' width='.96' height='1.7'/><rect x='3.84' width='3.84' height='.85'/><rect x='15.36' width='3.84' height='.85'/><rect x='10.56' y='16.11' width='1.92' height='.85'/><rect x='1.92' y='8.48' width='.96' height='.85'/><rect x='14.4' y='.85' width='.96' height='.85'/><rect x='13.44' y='1.7' width='.96' height='.85'/><rect x='20.16' y='1.7' width='.96' height='1.7'/><rect x='12.48' y='2.54' width='.96' height='.85'/><rect x='19.2' y='.85' width='.96' height='.85'/><rect x='.96' y='3.39' width='.96' height='1.7'/><rect x='17.28' y='11.03' width='.96' height='.85'/><rect x='18.24' y='10.18' width='.96' height='.85'/><rect x='16.32' y='11.87' width='.96' height='.85'/><rect x='14.4' y='13.57' width='.96' height='.85'/><rect x='15.36' y='12.72' width='.96' height='.85'/><rect x='22.08' y='5.09' width='.96' height='1.7'/><rect x='19.2' y='9.33' width='.96' height='.85'/><rect x='21.12' y='6.78' width='.96' height='1.7'/><rect x='20.16' y='8.48' width='.96' height='.85'/><rect x='8.64' y='14.42' width='.96' height='.85'/><rect x='6.72' y='12.72' width='.96' height='.85'/><rect x='5.76' y='11.87' width='.96' height='.85'/><rect x='4.8' y='11.03' width='.96' height='.85'/><rect x='3.84' y='10.18' width='.96' height='.85'/><rect x='13.44' y='14.42' width='.96' height='.85'/><rect x='9.6' y='15.27' width='.96' height='.85'/><rect x='12.48' y='15.27' width='.96' height='.85'/><rect x='2.88' y='9.33' width='.96' height='.85'/><rect x='7.68' y='13.57' width='.96' height='.85'/></g><path style='fill:#844344' d='M21.12,5.09v-1.7h-.96v-1.7h-.96v-.85h-3.84v.85h-.96v.85h-.96v.85h-.96v.85h-1.92v-.85h-.96v-.85h-.96v-.85h-.96v-.85h-3.84v.85h-.96v1.7h-.96v1.7h-.96v1.7h.96v1.7h.96v.85h.96v.85h.96v.85h.96v.85h.96v.85h.96v.85h.96v.85h.96v.85h.96v.85h1.92v-.85h.96v-.85h.96v-.85h.96v-.85h.96v-.85h.96v-.85h.96v-.85h.96v-.85h.96v-.85h.96v-1.7h.96v-1.7h-.96ZM19.2,7.63h-.96v-.85h.96v.85ZM20.16,5.94h-.96v-.85h-1.92v-1.7h-.96v.85h-1.92v-.85h.96v-.85h1.92v-.85h.96v.85h.96v1.7h.96v1.7Z'/></svg>"
+  },
+"I": {
+  "solid": true,
+  "gravity": true,
+  "hint": "It looks like a sign, with writing on it. I wonder what it says.",
+  "logHtml": true,
+  "logKind": "sign",
+  "signMessage": {
+    "a": "This is sign A",
+    "b": "<b>Warning</b><br>Do not enter. This is sign B.",
+    "c": "This is sign C"
+  },
+  "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='6' rx='1' ry='1' fill='#f1c40f' stroke='#000' stroke-width='0.5'/><rect x='4' y='4' width='8' height='1' fill='#000'/><rect x='4' y='6' width='6' height='1' fill='#000'/><rect x='7' y='8' width='2' height='6' fill='#8b5a2b'/></svg>"
+},
+
+
+  "B": {
+    "solid": true,
+    "gravity": true,
+    "bounce": 0,
+    "moveCost": 1,
+    "deathMessage": "Boing!",
+    "hint": "That looks bouncy.",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='1' y='1' width='14' height='14' rx='3' ry='3' fill='#662d91'/><rect x='3' y='3' width='10' height='10' rx='2' ry='2' fill='#8a2be2'/></svg>"
+  },
+
+  "X": {
+    "solid": true,
+    "gravity": true,
+    "moveCost": 1
+  },
+
+  "Y": {
+    "solid": true,
+    "gravity": true,
+    "slope": "left",
+    "moveCost": 1,
+    "hint":"Its a ramp, I can run up and down it, like a big boy!",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 23.04 23.04'><g transform='translate(23.04 0) scale(-1 1)'><path fill='#352e3d' d='M23.04 0 13.68 9.36H12.96V10.08H12.24V10.8H11.52V11.52H10.8V12.24L.72 22.32H0V23.04H23.04Z'/><rect fill='#4b465a' x='12.24' y='12.24' width='10.8' height='10.08'/><path fill='#4b465a' d='M22.32.72V0H21.6V.72H20.88V1.44H20.16V2.16H19.44V2.88H18.72V3.6H18V4.32H17.28V5.04H16.56V5.76H15.84V6.48H15.12V7.2H14.4V7.92H13.68V8.64H12.96V9.36H12.24V10.08H11.52V10.8H22.32Z'/><rect fill='#4b465a' x='10.8' y='10.8' width='.72' height='.72'/><path fill='#4b465a' d='M10.08 12.24H9.36V12.96H8.64V13.68H7.92V14.4H7.2V15.12H6.48V15.84H5.76V16.56H5.04V17.28H4.32V18H3.6V18.72H2.88V19.44H2.16V20.16H1.44V20.88H.72V21.6H0V22.32H10.8V11.52H10.08Z'/><rect fill='#000' x='22.32' y='0' width='.72' height='.72'/><rect fill='#000' x='22.32' y='22.32' width='.72' height='.72'/><polygon fill='#5b5a70' points='9.36 13.68 8.64 14.4 7.92 14.4 7.92 15.12 7.2 15.12 7.2 15.84 5.04 18 4.32 18 4.32 18.72 2.16 20.88 2.88 20.88 2.88 21.6 4.32 21.6 4.32 20.88 5.04 20.88 5.04 21.6 7.2 21.6 7.2 20.88 7.92 20.88 7.92 21.6 8.64 21.6 8.64 20.88 9.36 20.88 9.36 21.6 10.08 21.6 10.08 20.16 9.36 20.16 9.36 19.44 10.08 19.44 10.08 18.72 9.36 18.72 9.36 18 10.08 18 10.08 16.56 9.36 16.56 9.36 15.84 10.08 15.84 10.08 15.12 9.36 15.12 9.36 13.68'/><polygon fill='#5b5a70' points='20.88 13.68 20.88 12.96 12.96 12.96 12.96 20.88 13.68 20.88 13.68 21.6 15.12 21.6 15.12 20.88 15.84 20.88 15.84 21.6 17.28 21.6 17.28 20.88 19.44 20.88 19.44 21.6 23.04 21.6 23.04 13.68'/><polygon fill='#5b5a70' points='16.74 9.36 16.74 10.08 18.09 10.08 18.09 9.36 18.9 9.36 18.9 10.08 20.25 10.08 20.25 9.36 20.88 9.36 20.88 10.08 21.6 10.08 21.6 8.73 20.88 8.73 20.88 7.2 21.6 7.2 21.6 6.48 20.88 6.48 20.88 5.67 21.6 5.67 21.6 4.32 20.88 4.32 20.88 2.16 21.6 2.16 21.6 1.44 18.72 4.32 18 4.32 18 5.04 16.56 6.48 15.84 6.48 15.84 7.2 15.12 7.2 15.12 7.92 13.68 9.36'/><rect fill='#6b778d' x='12.96' y='14.4' width='.72' height='2.16'/><rect fill='#6b778d' x='12.96' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='18.72' width='.72' height='1.44'/><rect fill='#6b778d' x='12.96' y='20.88' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='17.37' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='18.9' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='21.6' y='.72' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='20.16' y='2.16' width='.72' height='.72'/><rect fill='#6b778d' x='19.44' y='2.88' width='.72' height='.72'/><rect fill='#6b778d' x='18.72' y='3.6' width='.72' height='.72'/><rect fill='#6b778d' x='17.28' y='5.04' width='.72' height='.72'/><rect fill='#6b778d' x='16.56' y='5.76' width='.72' height='.72'/><rect fill='#6b778d' x='13.68' y='8.64' width='.72' height='.72'/><rect fill='#6b778d' x='10.08' y='12.24' width='.72' height='.72'/><rect fill='#6b778d' x='9.36' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='8.64' y='13.68' width='.72' height='.72'/><rect fill='#6b778d' x='6.48' y='15.84' width='.72' height='.72'/><rect fill='#6b778d' x='5.76' y='16.56' width='.72' height='.72'/><rect fill='#6b778d' x='5.04' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='3.6' y='18.72' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='7.92' width='.72' height='.72'/><rect fill='#6b778d' x='2.88' y='19.44' width='.72' height='.72'/><rect fill='#6b778d' x='2.16' y='20.16' width='.72' height='.72'/><rect fill='#6b778d' x='1.44' y='20.88' width='.72' height='.72'/></g></svg>"
+  },
+
+  "Z": {
+    "solid": true,
+    "gravity": true,
+    "slope": "right",
+    "moveCost": 1,
+    "hint":"Its a ramp, I can run up and down it, like a big boy!",
+    "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 23.04 23.04'><path fill='#352e3d' d='M23.04 0 13.68 9.36H12.96V10.08H12.24V10.8H11.52V11.52H10.8V12.24L.72 22.32H0V23.04H23.04Z'/><rect fill='#4b465a' x='12.24' y='12.24' width='10.8' height='10.08'/><path fill='#4b465a' d='M22.32.72V0H21.6V.72H20.88V1.44H20.16V2.16H19.44V2.88H18.72V3.6H18V4.32H17.28V5.04H16.56V5.76H15.84V6.48H15.12V7.2H14.4V7.92H13.68V8.64H12.96V9.36H12.24V10.08H11.52V10.8H22.32Z'/><rect fill='#4b465a' x='10.8' y='10.8' width='.72' height='.72'/><path fill='#4b465a' d='M10.08 12.24H9.36V12.96H8.64V13.68H7.92V14.4H7.2V15.12H6.48V15.84H5.76V16.56H5.04V17.28H4.32V18H3.6V18.72H2.88V19.44H2.16V20.16H1.44V20.88H.72V21.6H0V22.32H10.8V11.52H10.08Z'/><rect fill='#000' x='22.32' y='0' width='.72' height='.72'/><rect fill='#000' x='22.32' y='22.32' width='.72' height='.72'/><polygon fill='#5b5a70' points='9.36 13.68 8.64 14.4 7.92 14.4 7.92 15.12 7.2 15.12 7.2 15.84 5.04 18 4.32 18 4.32 18.72 2.16 20.88 2.88 20.88 2.88 21.6 4.32 21.6 4.32 20.88 5.04 20.88 5.04 21.6 7.2 21.6 7.2 20.88 7.92 20.88 7.92 21.6 8.64 21.6 8.64 20.88 9.36 20.88 9.36 21.6 10.08 21.6 10.08 20.16 9.36 20.16 9.36 19.44 10.08 19.44 10.08 18.72 9.36 18.72 9.36 18 10.08 18 10.08 16.56 9.36 16.56 9.36 15.84 10.08 15.84 10.08 15.12 9.36 15.12 9.36 13.68'/><polygon fill='#5b5a70' points='20.88 13.68 20.88 12.96 12.96 12.96 12.96 20.88 13.68 20.88 13.68 21.6 15.12 21.6 15.12 20.88 15.84 20.88 15.84 21.6 17.28 21.6 17.28 20.88 19.44 20.88 19.44 21.6 23.04 21.6 23.04 13.68'/><polygon fill='#5b5a70' points='16.74 9.36 16.74 10.08 18.09 10.08 18.09 9.36 18.9 9.36 18.9 10.08 20.25 10.08 20.25 9.36 20.88 9.36 20.88 10.08 21.6 10.08 21.6 8.73 20.88 8.73 20.88 7.2 21.6 7.2 21.6 6.48 20.88 6.48 20.88 5.67 21.6 5.67 21.6 4.32 20.88 4.32 20.88 2.16 21.6 2.16 21.6 1.44 18.72 4.32 18 4.32 18 5.04 16.56 6.48 15.84 6.48 15.84 7.2 15.12 7.2 15.12 7.92 13.68 9.36'/><rect fill='#6b778d' x='12.96' y='14.4' width='.72' height='2.16'/><rect fill='#6b778d' x='12.96' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='18.72' width='.72' height='1.44'/><rect fill='#6b778d' x='12.96' y='20.88' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='17.37' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='18.9' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='21.6' y='.72' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='20.16' y='2.16' width='.72' height='.72'/><rect fill='#6b778d' x='19.44' y='2.88' width='.72' height='.72'/><rect fill='#6b778d' x='18.72' y='3.6' width='.72' height='.72'/><rect fill='#6b778d' x='17.28' y='5.04' width='.72' height='.72'/><rect fill='#6b778d' x='16.56' y='5.76' width='.72' height='.72'/><rect fill='#6b778d' x='13.68' y='8.64' width='.72' height='.72'/><rect fill='#6b778d' x='10.08' y='12.24' width='.72' height='.72'/><rect fill='#6b778d' x='9.36' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='8.64' y='13.68' width='.72' height='.72'/><rect fill='#6b778d' x='6.48' y='15.84' width='.72' height='.72'/><rect fill='#6b778d' x='5.76' y='16.56' width='.72' height='.72'/><rect fill='#6b778d' x='5.04' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='3.6' y='18.72' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='7.92' width='.72' height='.72'/><rect fill='#6b778d' x='2.88' y='19.44' width='.72' height='.72'/><rect fill='#6b778d' x='2.16' y='20.16' width='.72' height='.72'/><rect fill='#6b778d' x='1.44' y='20.88' width='.72' height='.72'/></svg>"
+  },
+  
+  "R": {
+  "solid": false,
+  "gravity": true,
+  "hint":"Oh, hello, I represent you in stick figure form? Handsome, arent I?",
+  "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 16'><path fill='#ffffff' d='M8.4 7.67c.18.18.46.18.64 0l2.8-2.8c.18-.18.18-.46 0-.64s-.46-.18-.64 0L8.72 6.71 6.24 4.23c-.08-.08-.19-.11-.3-.11H1.95c-.25 0-.45.2-.45.45v3.97c0 .25.2.45.45.45s.45-.2.45-.45V5.48h3.06v6.17l-2.2 2.2-2.48-2.48c-.18-.18-.46-.18-.64 0s-.18.46 0 .64l2.8 2.8c.08.08.2.13.32.13s.23-.05.32-.13l2.66-2.66h3.34v3.51c0 .25.2.45.45.45s.45-.2.45-.45v-3.97c0-.25-.2-.45-.45-.45h-3.66V5.99l2.03 2.03z'/><path fill='#ffffff' d='M7.48 4.42c1.22 0 2.21-.99 2.21-2.21S8.7 0 7.48 0 5.27.99 5.27 2.21s.99 2.21 2.21 2.21z'/></svg>"
+},
+"K": {
+  "solid": true,
+  "gravity": true,
+  "hint":"How do I open this?",
+  "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path d='M10 14 V9 C10 5.7 12.7 3 16 3 C19.3 3 22 5.7 22 9 V14' fill='none' stroke='#cccccc' stroke-width='3' stroke-linecap='round'/><rect x='7' y='14' width='18' height='15' rx='2' ry='2' fill='#666666'/><circle cx='16' cy='21' r='2' fill='#222222'/><rect x='15' y='21' width='2' height='4' fill='#222222'/></svg>",
+
+  "lock": {
+    "a": {
+      "dice": 1,
+      "value": 4,
+      "messageFail": "I dont have a 4 die.",
+      "hint":"I need a 4 die to open that lock"
+    },
+    "b": {
+      "dice": 2,
+      "sum": 7,
+      "hint":"My dice need to total 7 to open this",
+      "messageFail": "My dice must have a total value of 7"
+    },
+    "c": {
+      "dice": 2,
+      "exact": [2, 5],
+      "hint":"This needs 2 exact numbers",
+      "messageFail": "The lock needs a 2 and a 5."
+    },
+    "d": {
+      "dice": 2,
+      "parity": "even",
+      "hint":"The dice need to total to an even number",
+      "messageFail": "What are the ODDs of me MISSING this?"
+    }
+  }
+},
+"M": {
+  "solid": true,
+  "logHtml": true,
+  "logKind": "monster",
+  "monster": {
+    "a": {
+      "name": "Snake",
+      "hint": "I'm a snaaaaake",
+      "hp": 1,
+      "playerHit": {
+        "dice": 1,
+        "value": 1,
+        "damage": 1,
+        "messageHit": "Got it! The snake recoils.",
+        "messageFail": "The snake is slippery. You need a 1 die to land a hit."
+      },
+      "monsterHit": {
+        "dice": 2,
+        "parity": "even",
+        "damage": 1,
+        "logKind": "combat",
+        "logHtml": true,
+        "messageHit": "The dice show an even total. The snake darts in and bites. Nnnnnn... I'm a snnnaaaaake."
+      },
+      "messageFail": "The snake blocks your path.",
+ "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 78.68 66.23'><defs><style>.cls-1{fill:#3cb371;stroke-width:0px;}</style></defs><path class='cls-1' d='M45.13,62.24H2c-1.1,0-2,.89-2,2s.89,2,2,2h43.13c1.1,0,2-.89,2-2s-.89-2-2-2Z'/><path class='cls-1' d='M45.13,51.13H2c-1.1,0-2,.89-2,2s.89,2,2,2h43.13c1.1,0,2-.89,2-2s-.89-2-2-2Z'/><path class='cls-1' d='M45.13,40.02H2c-1.1,0-2,.89-2,2s.89,2,2,2h43.13c1.1,0,2-.89,2-2s-.89-2-2-2Z'/><path class='cls-1' d='M38.88.5c-.92-.24-2-.36-3.13-.43h-.08c-1.7-.1-3.52-.06-5.11-.03-.67.01-1.29.03-1.82.03H11.42c-1.85,0-3.36,1.51-3.36,3.36v12.1c0,1.85,1.51,3.36,3.36,3.36h1.75v4.5c0,1.1.89,2,2,2s2-.89,2-2v-4.5h18.53c1.85,0,3.36-1.51,3.36-3.36V4.72c3.62,1.22,7.42,3.97,7.42,10.17,0,6.78-2.35,14.56-20.66,14.56-1.1,0-2,.89-2,2s.89,2,2,2c16.36,0,24.65-6.24,24.65-18.56,0-7.26-4.23-12.5-11.6-14.39ZM35.07,14.88H12.06V4.06h23.01v10.82Z'/><path class='cls-1' d='M70.62,45.77c-1.1,0-2,.89-2,2v14.47h-15.11c-1.1,0-2,.89-2,2s.89,2,2,2h17.11c1.1,0,2-.89,2-2v-16.47c0-1.1-.89-2-2-2Z'/><path class='cls-1' d='M75.5,17.93h-10.56c-1.75,0-3.18,1.43-3.18,3.18v16.27c0,1.76,1.43,3.18,3.18,3.18h10.56c1.75,0,3.18-1.43,3.18-3.18v-16.27c0-1.75-1.43-3.18-3.18-3.18ZM74.69,21.92v5.33h-8.94v-5.33h8.94ZM65.75,36.57v-5.33h8.94v5.33h-8.94Z'/></svg>"
+      },
+    "dead": {
+      "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 62.57 35.06'><defs><style>.cls-1{fill:#ffffff;stroke-width:0px;}</style></defs><g><path class='cls-1' d='M31.29,1.85c-7.65,0-13.86,6.2-13.86,13.86,0,5.45,3.15,10.15,7.73,12.42v5.09h12.59v-5.25c4.4-2.32,7.4-6.94,7.4-12.26,0-7.65-6.2-13.86-13.86-13.86ZM25.46,21.73c-2.32,0-4.2-1.88-4.2-4.2s1.88-4.2,4.2-4.2,4.2,1.88,4.2,4.2-1.88,4.2-4.2,4.2ZM37.11,21.73c-2.32,0-4.2-1.88-4.2-4.2s1.88-4.2,4.2-4.2,4.2,1.88,4.2,4.2-1.88,4.2-4.2,4.2Z'/></g></svg>"
+    }
+  }
+},
+"C": {
+  "solid": false,
+  "gravity": true,
+  "pickupType": "dead",
+  "pickupMessage": "Oh nice, if I keep collecting these, I can make a belt.",
+    "moveCost": 1,
+    "hint":"Its a corpse... I must take it as a trophy to prove my kill! Bwahahaha!",
+  "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><style>.cls-1{fill:#999999;stroke-width:0px;}</style></defs><g transform='translate(0 6) scale(0.51)'><g><g><path class='cls-1' d='M2.3,11.83c1.71.74,3.69-.04,4.43-1.75.12-.28.19-.57.23-.86l7.77,3.37,1.69.73c.26-1.69.79-3.29,1.56-4.74l-1.27-.55-7.65-3.32c.74-1.71-.04-3.69-1.75-4.43-1.71-.74-3.69.04-4.43,1.75-.5,1.16-.29,2.44.42,3.37-1.17.12-2.25.84-2.75,2-.74,1.71.04,3.69,1.75,4.43Z'/><path class='cls-1' d='M44.81,9.04c.72,1.48,1.21,3.09,1.41,4.79l9.65-3.81c.03.29.09.58.2.87.68,1.73,2.64,2.58,4.37,1.89,1.73-.68,2.58-2.64,1.89-4.37-.46-1.17-1.52-1.93-2.69-2.09.74-.91,1-2.18.53-3.36-.68-1.73-2.64-2.58-4.37-1.89s-2.58,2.64-1.89,4.37l-9.11,3.6Z'/><path class='cls-1' d='M60.27,23.23c-1.71-.74-3.69.04-4.43,1.75l-10.33-4.48c-.55,1.6-1.36,3.08-2.38,4.38l10.86,4.71c-.18.23-.35.48-.47.76-.74,1.71.04,3.69,1.75,4.43,1.71.74,3.69-.04,4.43-1.75.5-1.16.29-2.44-.42-3.37,1.17-.12,2.25-.84,2.75-2,.74-1.71-.04-3.69-1.75-4.43Z'/><path class='cls-1' d='M16.91,20.07l-.7.28-1.95.77-7.75,3.06c-.68-1.73-2.64-2.58-4.37-1.89-1.73.68-2.58,2.64-1.89,4.37.46,1.17,1.52,1.93,2.69,2.09-.74.91-1,2.18-.53,3.36.68,1.73,2.64,2.58,4.37,1.89,1.73-.68,2.58-2.64,1.89-4.37-.11-.29-.27-.54-.45-.77l7.88-3.11,1.95-.77,1.14-.45c-.98-1.34-1.76-2.83-2.26-4.45Z'/></g><path class='cls-1' d='M31.29,1.85c-7.65,0-13.86,6.2-13.86,13.86,0,5.45,3.15,10.15,7.73,12.42v5.09h12.59v-5.25c4.4-2.32,7.4-6.94,7.4-12.26,0-7.65-6.2-13.86-13.86-13.86ZM25.46,21.73c-2.32,0-4.2-1.88-4.2-4.2s1.88-4.2,4.2-4.2,4.2,1.88,4.2,4.2-1.88,4.2-4.2,4.2ZM37.11,21.73c-2.32,0-4.2-1.88-4.2-4.2s1.88-4.2,4.2-4.2,4.2,1.88,4.2,4.2-1.88,4.2-4.2,4.2Z'/></g></g></svg>"
+},
+"F": {
+  "solid": false,
+  "gravity": false,
+  "moveCost": 1,
+  "jumpAllowed": true,
+  "fog": true,
+  "hint": "Unexplored.",
+  "svg": "<svg xmlns='http://www.w3.org/2000/svg' shape-rendering='crispEdges' viewBox='0 0 32 32'><path d='M0 0h32v32H0z' fill='#262626'/><path d='M2 1h2v2H2zm7 1h2v2H9zm6-1h2v2h-2zm7 2h2v2h-2zm6-1h2v2h-2zM4 7h2v2H4zm8-1h2v2h-2zm7 1h2v2h-2zm7 1h2v2h-2zM1 13h2v2H1zm7-1h2v2H8zm8 1h2v2h-2zm8-1h2v2h-2zm5 2h2v2h-2zM5 18h2v2H5zm8 1h2v2h-2zm8-1h2v2h-2zm6 2h2v2h-2zM3 25h2v2H3zm7 1h2v2h-2zm8-1h2v2h-2zm7 2h2v2h-2zm5-1h2v2h-2z' fill='#4d4d4d'/><path d='M6 3h2v2H6zm11 2h2v2h-2zm7 1h2v2h-2zM6 10h2v2H6zm15-1h2v2h-2zm-10 6h2v2h-2zm9 1h2v2h-2zM7 21h2v2H7zm9 1h2v2h-2zm7 1h2v2h-2zm-11 6h2v2h-2zm10 0h2v2h-2z' fill='#737373'/><path d='M14 9h2v2h-2zM2 21h2v2H2zm26-3h2v2h-2z' fill='#000'/></svg>"
+}
+
+
+
+
+}
