@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Runner Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="game-frame">
+    <!-- Controls -->
+  <div id="controlCenter">
+
+    <div id="diceDisplay">
+      <div class="die" id="die1">0</div>
+      <div class="die" id="die2">0</div>
+    </div>
+
+    <!-- HUD message (non-modal) -->
+    <button id="roll">Roll Dice</button>
+
+    <div id="controls">
+      <div class="row">
+        <button id="btn-up">&#9650;</button>
+      </div>
+      <div class="row margin-bottom-1rem">
+        <button id="btn-left">&#9664;</button>
+        <button id="btn-down">&#9660;</button>
+        <button id="btn-right">&#9654;</button>
+      </div>
+      <div id="message"><div id="info"></div></div>
+    </div>
+
+  </div>
+<div id="game-container">
+
+  <!-- Modal sign message -->
+  <div id="messageModal" hidden>
+    <div id="messageModalContent"></div>
+  </div>
+
+  <!-- Game canvas -->
+<canvas id="game" width="800" height="510"></canvas>
+  <div id="gameGridOverlay"></div>
+
+
+
+</div>
+  
+  <div id="log"><p>Roll the dice to set your movement points.</p>Use the arrows or AWSD to move.</div>
+  
+
+
+  
+  </div>
+<script src="game.js"></script>
+</body>
+</html>
