@@ -153,19 +153,6 @@
   "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 16'><path fill='#ffffff' d='M8.4 7.67c.18.18.46.18.64 0l2.8-2.8c.18-.18.18-.46 0-.64s-.46-.18-.64 0L8.72 6.71 6.24 4.23c-.08-.08-.19-.11-.3-.11H1.95c-.25 0-.45.2-.45.45v3.97c0 .25.2.45.45.45s.45-.2.45-.45V5.48h3.06v6.17l-2.2 2.2-2.48-2.48c-.18-.18-.46-.18-.64 0s-.18.46 0 .64l2.8 2.8c.08.08.2.13.32.13s.23-.05.32-.13l2.66-2.66h3.34v3.51c0 .25.2.45.45.45s.45-.2.45-.45v-3.97c0-.25-.2-.45-.45-.45h-3.66V5.99l2.03 2.03z'/><path fill='#ffffff' d='M7.48 4.42c1.22 0 2.21-.99 2.21-2.21S8.7 0 7.48 0 5.27.99 5.27 2.21s.99 2.21 2.21 2.21z'/></svg>"
 },
 "K": {
-  "_comment_lock_rules": [
-    "LOCK RULE OPTIONS (per variant like lock.a, lock.b, etc.)",
-    "dice: 1  -> requires one die to match value",
-    "  - value: <number>           e.g., {\"dice\":1, \"value\":4}",
-    "dice: 2  -> uses both dice",
-    "  - sum: <number>             e.g., {\"dice\":2, \"sum\":7}",
-    "  - parity: \"even\"|\"odd\"   e.g., {\"dice\":2, \"parity\":\"even\"}",
-    "  - exact: [a,b]              e.g., {\"dice\":2, \"exact\":[2,5]}",
-    "optional fields:",
-    "  - hint: string",
-    "  - messageFail: string",
-    "  - svg: \"<svg...>\" (variant-specific art override for this lock)"
-  ],
   "solid": true,
   "gravity": true,
   "hint":"How do I open this?",
