@@ -203,6 +203,7 @@ tryFetch([...TILE_URLS])
       const def = TILE[key];
       if (!def) continue;
       
+      // Base tile svg
       if (typeof def.svg === "string" && def.svg.trim().length > 0) {
         def.img = svgToImg(def.svg);
       }
@@ -216,6 +217,16 @@ tryFetch([...TILE_URLS])
       }
     }
   } 
+      // Lock variant SVGs (K.a, K.b, etc.)
+if (key === "K" && def.lock) {
+  for (const v in def.lock) {
+    const l = def.lock[v];
+    if (typeof l.svg === "string" && l.svg.trim()) {
+      l.img = svgToImg(l.svg);
+    }
+  }
+}
+
     }
     // FIX: Initialize game ONLY after tiles are loaded
     initGame(); 
@@ -2014,6 +2025,16 @@ function drawTile(t, x, y) {
       img = m.img;
     }
   }
+
+    // Lock variant override
+  if (t === "K" && def?.lock) {
+    const v = signVariantAt(x, y);
+    const l = def.lock?.[v];
+    if (l?.img) {
+      img = l.img;
+    }
+  }
+
 
   if (img) {
     ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
