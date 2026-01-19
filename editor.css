@@ -79,3 +79,141 @@ body {
   font-size: 16px;
   cursor: pointer;
 }
+
+/* =========================================================
+   Toolbox form controls (Variant box)
+   ========================================================= */
+
+#toolbox h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+#toolbox label {
+  display: block;
+  text-align: left;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+/* Variant input */
+#variantBox {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background: #111;
+  color: #fff;
+  outline: none;
+  font-size: 14px;
+}
+
+#variantBox::placeholder {
+  color: rgba(255,255,255,0.35);
+}
+
+#variantBox:focus {
+  border-color: #99aaff;
+  box-shadow: 0 0 0 2px rgba(85, 107, 255, 0.25);
+}
+
+/* Small helper text under Variant box */
+.toolbox-help {
+  margin: 6px 0 12px;
+  font-size: 12px;
+  opacity: 0.8;
+  text-align: left;
+  line-height: 1.2;
+}
+
+/* =========================================================
+   Palette layout improvements
+   - makes many tiles usable without huge scrolling
+   ========================================================= */
+
+#tilePalette {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  align-items: start;
+}
+
+.tile-selector {
+  /* keep your existing, but slightly more "button-like" */
+  padding: 6px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid #666;
+  background: #222;
+  color: #fff;
+  border-radius: 4px;
+}
+
+.tile-selector img {
+  image-rendering: pixelated;
+  display: block;
+}
+
+.tile-selector.selected {
+  background: #556bff;
+  border-color: #99aaff;
+}
+
+/* Optional: hover state */
+.tile-selector:hover {
+  border-color: #888;
+}
+
+
+/* =========================================================
+   Editor layout polish
+   ========================================================= */
+
+#toolbox {
+  width: 220px;              /* a bit wider so input looks clean */
+  background: #333;
+  padding: 12px;
+  border-radius: 6px;
+  color: #fff;
+}
+
+/* Slightly nicer separation between grid and toolbox */
+#editor {
+  display: flex;
+  gap: 16px;
+  margin: 20px auto;
+  max-width: 1100px;
+  align-items: flex-start;
+}
+
+/* Make grid feel less cramped */
+#grid {
+  display: grid;
+  grid-template-columns: repeat(25, 24px);
+  grid-template-rows: repeat(15, 24px);
+  gap: 1px;
+  background: #111;          /* helps the 1px gaps read as gridlines */
+  padding: 6px;
+  border-radius: 6px;
+}
+
+/* Optional: clearer cell border + hover */
+.cell {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #222;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+.cell:hover {
+  border-color: #444;
+}
+
