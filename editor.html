@@ -1,56 +1,56 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Runner Level Editor</title>
-<link rel="stylesheet" href="editor.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runner Level Editor</title>
+  <link rel="stylesheet" href="editor.css" />
 </head>
 <body>
 
-<h1>Runner Level Editor</h1>
+  <h1>Runner Level Editor</h1>
 
-<div id="editor">
+  <div id="editor">
 
-  <!-- TOOLBOX -->
-<div id="tilesPanel">
-  <h3>Tiles</h3>
+    <!-- TOOLBOX -->
+    <div id="toolbox">
+      <h3>Tiles</h3>
 
-  <label for="variantBox" style="display:block; margin:6px 0 4px;">
-    Variant (optional)
-  </label>
-  <input
-    id="variantBox"
-    type="text"
-    placeholder="e.g. a, b, aa, exit1"
-    maxlength="12"
-    style="width: 100%; padding: 6px;"
-  />
-  <div style="font-size: 12px; opacity: 0.8; margin: 4px 0 10px;">
-    Paint: click. Pick: Shift-click or right-click.
+      <label for="variantBox">Variant (optional)</label>
+      <input
+        id="variantBox"
+        type="text"
+        placeholder="e.g. a, b, aa, exit1"
+        maxlength="12"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <div class="toolbox-help">
+        Paint: click. Pick: Shift-click or right-click.
+      </div>
+
+      <div id="tilePalette"></div>
+    </div>
+
+    <!-- GRID -->
+    <div id="grid" aria-label="Level grid"></div>
+
   </div>
 
-  <div id="tilePalette"></div>
-</div>
+  <!-- MAP I/O -->
+  <div id="mapIO">
+    <textarea id="mapBox" rows="4" placeholder="Map code will appear here..."></textarea>
 
-
-
-  <!-- GRID -->
-  <div id="grid"></div>
-</div>
-
-<!-- MAP I/O -->
-<div id="mapIO">
-  <textarea id="mapBox" rows="4" placeholder="Map code will appear here..."></textarea>
-
-  <div id="mapButtons">
-    <button id="loadMap">Load Map</button>
-    <button id="generateMap">Generate Map</button>
-    <button id="clearMap">Clear Map</button>
-    <button id="dynamicMap">Dynamic Map</button>
-    <button id="openMap">Open Map</button>
+    <div id="mapButtons">
+      <button id="loadMap" type="button">Load Map</button>
+      <button id="generateMap" type="button">Generate Map</button>
+      <button id="clearMap" type="button">Clear Map</button>
+      <button id="dynamicMap" type="button">Dynamic Map</button>
+      <button id="openMap" type="button">Open Map</button>
+    </div>
   </div>
-</div>
 
-<script src="editor.js"></script>
+  <script src="editor.js"></script>
 </body>
 </html>
