@@ -12,10 +12,26 @@
 <div id="editor">
 
   <!-- TOOLBOX -->
-  <div id="toolbox">
+<div id="tilesPanel">
   <h3>Tiles</h3>
-  <div id="tilePalette" class="tile-palette"></div>
+
+  <label for="variantBox" style="display:block; margin:6px 0 4px;">
+    Variant (optional)
+  </label>
+  <input
+    id="variantBox"
+    type="text"
+    placeholder="e.g. a, b, aa, exit1"
+    maxlength="12"
+    style="width: 100%; padding: 6px;"
+  />
+  <div style="font-size: 12px; opacity: 0.8; margin: 4px 0 10px;">
+    Paint: click. Pick: Shift-click or right-click.
+  </div>
+
+  <div id="tilePalette"></div>
 </div>
+
 
 
   <!-- GRID -->
