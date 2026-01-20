@@ -244,11 +244,7 @@ let signVariantMap = [];
   return signVariantMap[y][x] || null;
 }
 
-function sanitizeVariant(raw) {
-  if (!raw) return null;
-  const v = String(raw).trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
-  return v ? v : null;
-}
+
 
 // =========================
 // Fog of War (MVP)
@@ -417,120 +413,89 @@ function initGame() {
 
     // --- DECODER FUNCTIONS ---
 function decodeRow(encoded, rowIndex) {
-  let tiles = [];
+  let row = "";
   let variants = [];
-
   monsterStateMap[rowIndex] = [];
 
   let i = 0;
 
-  while (i < encoded.length && tiles.length < COLS) {
+  while (i < encoded.length) {
     const ch = encoded[i];
 
-    // -------------------------
-    // Literal dot support
-    // -------------------------
-    if (ch === ".") {
-      tiles.push(".");
-      variants.push(null);
-      i++;
+
+// LITERAL DOT = empty tile
+if (ch === ".") {
+  row += ".";
+  variants.push(null);
+  i++;
+  continue;
+}
+if (ch === "M" && /[a-z]/i.test(encoded[i + 1])) {
+  const variant = encoded[i + 1];
+  const xPos = row.length;
+
+  row += "M";
+  variants.push(variant);
+
+  const def = TILE["M"]?.monster?.[variant];
+  monsterStateMap[rowIndex][xPos] = def?.hp ?? 1;
+
+  i += 2;
+  continue;
+}
+
+
+// LOCK TILE: K + letter
+if (ch === "K" && /[a-z]/i.test(encoded[i + 1])) {
+  row += "K";
+  variants.push(encoded[i + 1]);
+  i += 2;
+  continue;
+}
+    
+// GENERIC VARIANT TILE (Ia, Ib, Ic, etc.)
+if (/[A-Z]/.test(ch) && /[a-z]/.test(encoded[i + 1])) {
+  row += ch;
+  variants.push(encoded[i + 1]);
+  i += 2;
+  continue;
+}    
+
+
+    // RUN-LENGTH TILE
+    if (/[A-Za-z]/.test(ch)) {
+      let j = i + 1;
+      let num = "";
+
+      while (j < encoded.length && /\d/.test(encoded[j])) {
+        num += encoded[j];
+        j++;
+      }
+
+      const count = num ? parseInt(num, 10) : 1;
+      const tile = ch === "A" ? "." : ch;
+
+      for (let k = 0; k < count; k++) {
+        row += tile;
+        variants.push(null);
+      }
+
+      i = j;
       continue;
     }
 
-    // Only parse letters as tokens
-    if (!/[A-Za-z]/.test(ch)) {
-      i++;
-      continue;
-    }
-
-    // Base tile char (A is encoded air)
-    let tileChar = (ch === "A") ? "." : ch;
-
-    let variant = null;
-    let count = 1;
-
-    // -------------------------
-    // NEW: brace variant form: T{variant}N
-    // Example: I{aa}1
-    // -------------------------
-    if (encoded[i + 1] === "{") {
-      const end = encoded.indexOf("}", i + 2);
-      if (end !== -1) {
-        variant = sanitizeVariant(encoded.slice(i + 2, end));
-        i = end + 1; // now positioned after }
-      } else {
-        // malformed token; treat as single tile
-        i++;
-      }
-
-      // Read digits after brace (count)
-      let num = "";
-      while (i < encoded.length && /\d/.test(encoded[i])) {
-        num += encoded[i];
-        i++;
-      }
-      if (num) count = parseInt(num, 10) || 1;
-
-    } else if (/[A-Z]/.test(ch) && /[a-z]/.test(encoded[i + 1] || "")) {
-      // -------------------------
-      // LEGACY: single-letter variant: Ia, Ma, Ka
-      // Optional digits after it: Ia3
-      // -------------------------
-      variant = sanitizeVariant(encoded[i + 1]);
-      i += 2;
-
-      let num = "";
-      while (i < encoded.length && /\d/.test(encoded[i])) {
-        num += encoded[i];
-        i++;
-      }
-      if (num) count = parseInt(num, 10) || 1;
-
-    } else {
-      // -------------------------
-      // RUN-LENGTH: TNNN (or bare T meaning 1)
-      // -------------------------
-      i += 1;
-
-      let num = "";
-      while (i < encoded.length && /\d/.test(encoded[i])) {
-        num += encoded[i];
-        i++;
-      }
-      if (num) count = parseInt(num, 10) || 1;
-    }
-
-    // Emit cells
-    for (let k = 0; k < count && tiles.length < COLS; k++) {
-      tiles.push(tileChar);
-
-      // Never store variants on air
-      const v = (tileChar === ".") ? null : (variant || null);
-      variants.push(v);
-
-      // Initialize monster HP at this position
-      if (tileChar === "M") {
-        const xPos = tiles.length - 1;
-        const def = TILE["M"]?.monster?.[v];
-        monsterStateMap[rowIndex][xPos] = def?.hp ?? 1;
-      }
-    }
+    i++;
   }
 
-  // Pad out the row
-  while (tiles.length < COLS) {
-    tiles.push(".");
+  // Pad row
+  while (row.length < COLS) {
+    row += ".";
     variants.push(null);
   }
 
-  // Clamp
-  tiles.length = COLS;
-  variants.length = COLS;
-
   signVariantMap[rowIndex] = variants;
-  return tiles.join("");
+  return row;
 }
-
 
   const savedLevel = sessionStorage.getItem("levelKey");
 if (savedLevel) {
@@ -538,33 +503,19 @@ if (savedLevel) {
 }
 
     function decodeMap(encoded) {
-  const rowStrings = encoded.includes("~") ? encoded.split("~") : encoded.split(".");
-
-  const output = [];
-  bounceHeight = [];
-  sinkDelayMap = [];
-
-  // do NOT skip empty rows; decodeRow will pad correctly
-  for (let r = 0; r < rowStrings.length && output.length < ROWS; r++) {
-    const decoded = decodeRow(rowStrings[r] || "", output.length);
-
-    output.push(decoded.split(""));
-    bounceHeight.push(Array(COLS).fill(0));
-    sinkDelayMap.push(Array(COLS).fill(null));
-  }
-
-  // If fewer than ROWS, pad with empty rows
-  while (output.length < ROWS) {
-    output.push(Array(COLS).fill("."));
-    bounceHeight.push(Array(COLS).fill(0));
-    sinkDelayMap.push(Array(COLS).fill(null));
-    signVariantMap[output.length - 1] = Array(COLS).fill(null);
-    monsterStateMap[output.length - 1] = Array(COLS).fill(null);
-  }
-
-  return output;
-}
-
+      const rowStrings = encoded.split("~");
+      const output = [];
+      bounceHeight = [];
+      sinkDelayMap = [];
+      for (const row of rowStrings) {
+        if (!row.trim()) continue;
+        const decoded = decodeRow(row, output.length);
+        output.push(decoded.split(""));
+        bounceHeight.push(Array(decoded.length).fill(0));
+        sinkDelayMap.push(Array(decoded.length).fill(null));
+      }
+      return output;
+    }
     
 
 
