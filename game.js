@@ -537,23 +537,24 @@ if (savedLevel) {
   currentLevelKey = savedLevel;
 }
 
-    function decodeMap(encoded) {
-  const rowStrings = encoded.includes("~") ? encoded.split("~") : encoded.split(".");
+function decodeMap(encoded) {
+  let rowStrings;
+
+  if (encoded.includes("~")) rowStrings = encoded.split("~");
+  else if (encoded.includes(".")) rowStrings = encoded.split(".");
+  else rowStrings = [encoded]; // single-row fallback
 
   const output = [];
   bounceHeight = [];
   sinkDelayMap = [];
 
-  // do NOT skip empty rows; decodeRow will pad correctly
   for (let r = 0; r < rowStrings.length && output.length < ROWS; r++) {
     const decoded = decodeRow(rowStrings[r] || "", output.length);
-
     output.push(decoded.split(""));
     bounceHeight.push(Array(COLS).fill(0));
     sinkDelayMap.push(Array(COLS).fill(null));
   }
 
-  // If fewer than ROWS, pad with empty rows
   while (output.length < ROWS) {
     output.push(Array(COLS).fill("."));
     bounceHeight.push(Array(COLS).fill(0));
@@ -564,6 +565,7 @@ if (savedLevel) {
 
   return output;
 }
+
 
     
 
@@ -590,18 +592,38 @@ function getHashParams() {
   return new URLSearchParams(raw);
 }
 
+// ============================================================
+// URL Hash helpers: #map=...&st=...
+// Robust against dots, braces, etc. in map payload.
+// ============================================================
+
 function safeDecodeURIComponent(s) {
   try { return decodeURIComponent(s); }
   catch { return s; }
 }
 
-function getMapFromURL() {
-  const hash = window.location.hash || "";
+/**
+ * Extract a single hash param value without URLSearchParams brittleness.
+ * Reads from "#..." and returns the raw (still-encoded) value.
+ */
+function getHashParamRaw(name) {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  if (!hash) return null;
 
-  // Support both "#map=..." and "#map=...&st=..."
-  const params = getHashParams();
-  const mapParam = params.get("map");
-  if (mapParam) return safeDecodeURIComponent(mapParam);
+  // split by & only (we never use "." or "~" as param separators)
+  const parts = hash.split("&");
+  for (const p of parts) {
+    const eq = p.indexOf("=");
+    if (eq === -1) continue;
+    const k = p.slice(0, eq);
+    if (k === name) return p.slice(eq + 1);
+  }
+  return null;
+}
+
+function getMapFromURL() {
+  const raw = getHashParamRaw("map");
+  if (raw != null && raw !== "") return safeDecodeURIComponent(raw);
 
   // HARD RESET when landing on base URL (no map in hash)
   sessionStorage.removeItem("exitIndex");
@@ -612,9 +634,8 @@ function getMapFromURL() {
 }
 
 function getStatsFromURL() {
-  const params = getHashParams();
-  const st = params.get("st");
-  return st ? safeDecodeURIComponent(st) : null;
+  const raw = getHashParamRaw("st");
+  return raw ? safeDecodeURIComponent(raw) : null;
 }
 
 
