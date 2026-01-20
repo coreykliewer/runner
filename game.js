@@ -54,11 +54,53 @@ let turboExecuting = false;
 // Global grid/runner variables (initialized in initGame)
 let grid = [];
 let runner = null; 
-let currentExitIndex = Number(sessionStorage.getItem("exitIndex") ?? 1);
 let monsterStateMap = [];
 let currentLevelKey = "default";
 let turboGravityUsed = false;
 let kills = 0;
+
+
+function safeDecodeURIComponent(s) {
+  try { return decodeURIComponent(s); }
+  catch { return s; }
+}
+
+/**
+ * Extract a single hash param value without URLSearchParams brittleness.
+ * Reads from "#..." and returns the raw (still-encoded) value.
+ */
+function getHashParamRaw(name) {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  if (!hash) return null;
+
+  // split by & only (we never use "." or "~" as param separators)
+  const parts = hash.split("&");
+  for (const p of parts) {
+    const eq = p.indexOf("=");
+    if (eq === -1) continue;
+    const k = p.slice(0, eq);
+    if (k === name) return p.slice(eq + 1);
+  }
+  return null;
+}
+
+function getStatsFromURL() {
+  const raw = getHashParamRaw("st");
+  return raw ? safeDecodeURIComponent(raw) : null;
+}
+
+  
+function getMapFromURL() {
+  const raw = getHashParamRaw("map");
+  if (raw != null && raw !== "") return safeDecodeURIComponent(raw);
+
+  sessionStorage.removeItem("exitIndex");
+  sessionStorage.removeItem("levelKey");
+  currentExitIndex = 0;
+  currentLevelKey = "default";
+  return null;
+}
+
 
 function onCanvasClick(e) {
   if (!canvas || !grid || !grid.length) return;
@@ -602,46 +644,6 @@ function decodeMap(encoded) {
   
   
 
-
-// ============================================================
-// URL Hash helpers: #map=...&st=...
-// Robust against dots, braces, etc. in map payload.
-// ============================================================
-
-function safeDecodeURIComponent(s) {
-  try { return decodeURIComponent(s); }
-  catch { return s; }
-}
-
-/**
- * Extract a single hash param value without URLSearchParams brittleness.
- * Reads from "#..." and returns the raw (still-encoded) value.
- */
-function getHashParamRaw(name) {
-  const hash = (window.location.hash || "").replace(/^#/, "");
-  if (!hash) return null;
-
-  // split by & only (we never use "." or "~" as param separators)
-  const parts = hash.split("&");
-  for (const p of parts) {
-    const eq = p.indexOf("=");
-    if (eq === -1) continue;
-    const k = p.slice(0, eq);
-    if (k === name) return p.slice(eq + 1);
-  }
-  return null;
-}
-
-function getMapFromURL() {
-  const raw = getHashParamRaw("map");
-  if (raw != null && raw !== "") return safeDecodeURIComponent(raw);
-
-  sessionStorage.removeItem("exitIndex");
-  sessionStorage.removeItem("levelKey");
-  currentExitIndex = 0;
-  currentLevelKey = "default";
-  return null;
-}
 
 
 
