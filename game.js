@@ -1,4 +1,4 @@
-//version 1.4 Final - 1/19 2026 - 9:12
+//version 1.4 Final - 1/19 2026 - 9:16
 // ================================================ = == = ========
 // Dice display + spin
 // ============================================================
@@ -406,21 +406,22 @@ function decodeCarryStats(str) {
 // Also used as fallback when exit key "E" is not defined in tiles2.json
 // ============================================================
 const DEFAULT_ENCODED_MAP = [
-  "A24P1",
-  "A25",
-  "A11D1A13",
-  "A11P1A6D1A6",
-  "A2R1A2M{a}1A1Z1P2A5I{b}1A1P1A7",
-  "P10A2P2A1P2A3Y1A4",
-  "A7P1A12P1Y1A3",
-  "A1M{a}1A4D1K{a}1A5H1A11",
-  "P3W3P3W3P4A7Z1A1",
-  "P5W1P8A8Z1P1A1",
-  "A5W1A11S1A3Z1P2A1",
-  "A1E1A3W1A6D1A3B1P1A7",
-  "A1P3A1W1A1P1A2T1P2A12",
-  "L4P1W1P1L2P2L6P3A5",
-  "P25"
+const DEFAULT_ENCODED_MAP = [
+  "........................P",
+  ".........................",
+  "...........D.............",
+  "...........P......D......",
+  "..R..Ma.ZPP.....Ib.P......",
+  "PPPPPPPPPP..PP.PP...Y....",
+  ".......P............PY...",
+  ".Ma....DKa.....H...........",
+  "PPPWWWPPPWWWPPPP.......Z.",
+  "PPPPPWPPPPPPPP........ZP.",
+  ".....W...........S...ZPP.",
+  ".E...W......D...BP.......",
+  ".PPP.W.P..TPP............",
+  "LLLLPWPLLPPLLLLLLPPP....."
+].join("~");
 ].join("~");
 
 
