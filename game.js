@@ -406,22 +406,21 @@ function decodeCarryStats(str) {
 // Also used as fallback when exit key "E" is not defined in tiles2.json
 // ============================================================
 const DEFAULT_ENCODED_MAP = [
-const DEFAULT_ENCODED_MAP = [
-  "........................P",
-  ".........................",
-  "...........D.............",
-  "...........P......D......",
-  "..R..Ma.ZPP.....Ib.P......",
-  "PPPPPPPPPP..PP.PP...Y....",
-  ".......P............PY...",
-  ".Ma....DKa.....H...........",
-  "PPPWWWPPPWWWPPPP.......Z.",
-  "PPPPPWPPPPPPPP........ZP.",
-  ".....W...........S...ZPP.",
-  ".E...W......D...BP.......",
-  ".PPP.W.P..TPP............",
-  "LLLLPWPLLPPLLLLLLPPP....."
-].join("~");
+  "A24P1",
+  "A25",
+  "A11D1A13",
+  "A11P1A6D1A6",
+  "A2R1A2M{a}1A1Z1P2A5I{b}1A1P1A7",
+  "P10A2P2A1P2A3Y1A4",
+  "A7P1A12P1Y1A3",
+  "A1M{a}1A4D1K{a}1A5H1A11",
+  "P3W3P3W3P4A7Z1A1",
+  "P5W1P8A8Z1P1A1",
+  "A5W1A11S1A3Z1P2A1",
+  "A1E1A3W1A6D1A3B1P1A7",
+  "A1P3A1W1A1P1A2T1P2A12",
+  "L4P1W1P1L2P2L6P3A5",
+  "P25"
 ].join("~");
 
 
@@ -637,18 +636,13 @@ function getMapFromURL() {
   const raw = getHashParamRaw("map");
   if (raw != null && raw !== "") return safeDecodeURIComponent(raw);
 
-  // HARD RESET when landing on base URL (no map in hash)
   sessionStorage.removeItem("exitIndex");
   sessionStorage.removeItem("levelKey");
   currentExitIndex = 0;
-  currentLevelKey = "E";
+  currentLevelKey = "default";
   return null;
 }
 
-function getStatsFromURL() {
-  const raw = getHashParamRaw("st");
-  return raw ? safeDecodeURIComponent(raw) : null;
-}
 
 
 
@@ -670,9 +664,7 @@ function getStatsFromURL() {
 
   // Pick your “start key”. If you want variants later, this can be "Ea", "Eb", etc.
   const startKey = currentLevelKey || "default";
-  const startMapString = TILE?.["E"]?.[startKey];
-
-  const startMapString = TILE?.["E"]?.[startKey];
+const startMapString = TILE?.["E"]?.[startKey];
 
   if (typeof startMapString === "string" && startMapString.trim()) {
     console.log(`[Runner] Boot map from tiles2.json: E.${startKey}`);
@@ -856,7 +848,7 @@ function tileData(ch) {
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
     exit: !!def.exit,
-    levels: Object.keys(def).filter(k => k.startsWith("Level-") || /^E[a-z]?$/.test(k))  .sort(),
+    levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
     slope: def.slope || null,
     deathMessage: def.deathMessage || null,
     fallDamageThreshold: def.fallDamageThreshold != null ? def.fallDamageThreshold : 3,
