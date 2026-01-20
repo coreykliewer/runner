@@ -1,4 +1,4 @@
-//version 1.4 Final - 1/19 2026 - 8:53
+//version 1.4 Final - 1/19 2026 - 9:12
 // ================================================ = == = ========
 // Dice display + spin
 // ============================================================
@@ -56,7 +56,7 @@ let grid = [];
 let runner = null; 
 let currentExitIndex = Number(sessionStorage.getItem("exitIndex") ?? 1);
 let monsterStateMap = [];
-let currentLevelKey = "E";
+let currentLevelKey = "default";
 let turboGravityUsed = false;
 let kills = 0;
 
@@ -226,6 +226,20 @@ if (key === "K" && def.lock) {
     }
   }
 }
+// Generic variant SVG loaders (optional but recommended)
+const VARIANT_BUCKETS = ["sign", "exit", "platform", "pickup", "decor"];
+
+for (const bucket of VARIANT_BUCKETS) {
+  const obj = def[bucket];
+  if (!obj || typeof obj !== "object") continue;
+
+  for (const v in obj) {
+    const entry = obj[v];
+    if (entry && typeof entry.svg === "string" && entry.svg.trim()) {
+      entry.img = svgToImg(entry.svg);
+    }
+  }
+}
 
     }
     // FIX: Initialize game ONLY after tiles are loaded
@@ -392,20 +406,21 @@ function decodeCarryStats(str) {
 // Also used as fallback when exit key "E" is not defined in tiles2.json
 // ============================================================
 const DEFAULT_ENCODED_MAP = [
-  "........................P",
-  ".........................",
-  "...........D.............",
-  "...........P......D......",
-  "..R..Ma.ZPP.....Ib.P......",
-  "PPPPPPPPPP..PP.PP...Y....",
-  ".......P............PY...",
-  ".Ma....DKa.....H...........",
-  "PPPWWWPPPWWWPPPP.......Z.",
-  "PPPPPWPPPPPPPP........ZP.",
-  ".....W...........S...ZPP.",
-  ".E...W......D...BP.......",
-  ".PPP.W.P..TPP............",
-  "LLLLPWPLLPPLLLLLLPPP....."
+  "A24P1",
+  "A25",
+  "A11D1A13",
+  "A11P1A6D1A6",
+  "A2R1A2M{a}1A1Z1P2A5I{b}1A1P1A7",
+  "P10A2P2A1P2A3Y1A4",
+  "A7P1A12P1Y1A3",
+  "A1M{a}1A4D1K{a}1A5H1A11",
+  "P3W3P3W3P4A7Z1A1",
+  "P5W1P8A8Z1P1A1",
+  "A5W1A11S1A3Z1P2A1",
+  "A1E1A3W1A6D1A3B1P1A7",
+  "A1P3A1W1A1P1A2T1P2A12",
+  "L4P1W1P1L2P2L6P3A5",
+  "P25"
 ].join("~");
 
 
@@ -586,11 +601,7 @@ function decodeMap(encoded) {
   
   
   
-  
-function getHashParams() {
-  const raw = (window.location.hash || "").replace(/^#/, "");
-  return new URLSearchParams(raw);
-}
+
 
 // ============================================================
 // URL Hash helpers: #map=...&st=...
@@ -657,9 +668,9 @@ function getStatsFromURL() {
   signVariantMap = []; // reset variants for new map
 
   // Pick your “start key”. If you want variants later, this can be "Ea", "Eb", etc.
-  const startKey = currentLevelKey || "E";
+  const startKey = currentLevelKey || "default";
+  const startMapString = TILE?.["E"]?.[startKey];
 
-  // Your maps are stored under TILE["E"][<key>] per handleExit()
   const startMapString = TILE?.["E"]?.[startKey];
 
   if (typeof startMapString === "string" && startMapString.trim()) {
@@ -855,13 +866,11 @@ function tileData(ch) {
 }
 
 function exitIdAt(x, y) {
-  // Base tile must be E
   if (tileAt(x, y) !== "E") return null;
-
-  // Variant letter (a, b, c...)
-  const v = signVariantAt(x, y);
-  return v ? ("E" + v) : "E";
+  return signVariantAt(x, y) || "default";
 }
+
+
 
 function TIP(tileChar) { return tileData(tileChar); }
 function isFluidTile(tile) { return (!tile.solid && tile.gravity === false); }
@@ -1773,20 +1782,20 @@ function attemptStep(dx, dy) {
 
 
 function handleExit(tile) {
-  const destKey = exitIdAt(runner.x, runner.y);
-  if (!destKey) {
-    setMessage("Exit error: not standing on an exit.", { kind: "message" });
-    return;
-  }
+const destKey = exitIdAt(runner.x, runner.y);
+if (!destKey) {
+  setMessage("Exit error: not standing on an exit.", { kind: "message" });
+  return;
+}
 
-  // Attempt to load from tiles2.json (E, Ea, Eb...)
-  let mapString = TILE?.["E"]?.[destKey];
+// maps live at TILE.E[<exitKey>] where exitKey is "default", "exit1", etc.
+let mapString = TILE?.["E"]?.[destKey];
 
-  // Fallback rule you requested:
-  // If key is exactly "E" and it's not defined in tiles2.json, use the hard-coded default map.
-  if ((!mapString || typeof mapString !== "string") && destKey === "E") {
-    mapString = DEFAULT_ENCODED_MAP;
-  }
+// fallback: only for default
+if ((!mapString || typeof mapString !== "string") && destKey === "default") {
+  mapString = DEFAULT_ENCODED_MAP;
+}
+
 
   // If still missing (e.g., Ea not defined), do NOT fallback—show a wiring message.
   if (!mapString || typeof mapString !== "string") {
@@ -2123,15 +2132,13 @@ return;
 
 function getParamAny(name) {
   // 1) hash params (#...&fog=off)
-  const hashRaw = (window.location.hash || "").replace(/^#/, "");
-  const hashParams = new URLSearchParams(hashRaw);
-  const hv = hashParams.get(name);
-  if (hv != null) return hv;
+  const hvRaw = getHashParamRaw(name);
+  if (hvRaw != null) return safeDecodeURIComponent(hvRaw);
 
   // 2) query params (?fog=off)
-  const qv = new URLSearchParams(window.location.search || "").get(name);
-  return qv;
+  return new URLSearchParams(window.location.search || "").get(name);
 }
+
 
 function isFogEnabled() {
   const v = (getParamAny("fog") || "").trim().toLowerCase();
