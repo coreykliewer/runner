@@ -50,7 +50,7 @@ function svgToImg(svg) {
 // ---------------------------------------------------------
 // Load tiles2.json and prep TILE images + palette
 // ---------------------------------------------------------
-fetch("https://corsproxy.io/?https://clikproductions.com/runner/tiles2.json?cachekill=" + Date.now())
+fetch("tiles2.json?cachekill=" + Date.now())
   .then(res => res.json())
   .then(json => {
     TILE = json || {};
@@ -373,7 +373,7 @@ document.getElementById("openMap").addEventListener("click", () => {
   if (!code) return alert("Generate or paste a map first.");
 
   window.open(
-    "https://clikproductions.com/runner/index.html#map=" + encodeURIComponent(code),
+    "index.html#map=" + encodeURIComponent(code),
     "_blank"
   );
 });
