@@ -835,7 +835,11 @@ function getSignPayloadAt(x, y) {
 
 function tileData(ch) {
   const def = TILE[ch] || {};
-  const solid = def.solid === true;
+  const exit = !!def.exit;
+
+  // Exits must be enterable; treat as non-solid even if tiles2.json accidentally marks solid:true
+  const solid = exit ? false : (def.solid === true);
+
   const gravity = def.gravity !== undefined ? def.gravity : true;
 
   return {
@@ -849,16 +853,16 @@ function tileData(ch) {
     bounce: typeof def.bounce === "number" ? def.bounce : 0,
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
-    exit: !!def.exit,
+    exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
     slope: def.slope || null,
     deathMessage: def.deathMessage || null,
     fallDamageThreshold: def.fallDamageThreshold != null ? def.fallDamageThreshold : 3,
     fallDamageMultiplier: def.fallDamageMultiplier != null ? def.fallDamageMultiplier : 1,
     fallDamageCancel: def.fallDamageCancel != null ? !!def.fallDamageCancel : (!solid && gravity === false)
-
   };
 }
+
 
 function exitIdAt(x, y) {
   if (tileAt(x, y) !== "E") return null;
@@ -1635,63 +1639,109 @@ function forceDown() {
   if (gameOver) return;
 
   const here = tileData(tileAt(runner.x, runner.y));
-  const belowChar = tileAt(runner.x, runner.y + 1);
-  const below = tileData(belowChar);
-  checkAdjacentMonsterAttacks();
-
-
-if (below.solid) {
-  handleBlockedTile(runner.x, runner.y + 1, "Blocked");
-  return; // handleBlockedTile already draws
-}
-
-
 
   // ---------------------------------------------------
-  // ONLY charge movement if gravity is DISABLED
-  // --------------------------------------------------
+  // ONLY charge movement if gravity is DISABLED (water / fluid)
+  // ---------------------------------------------------
   if (here.gravity === false) {
     const moveCost = here.moveCostInside ?? here.moveCostTop ?? 1;
     if (!spendMovement(moveCost)) return;
   }
 
-  // --------------------------------------------------
-  // APPLY MOVE
-  // --------------------------------------------------
-const wasInWater = inWater();
+  const tx = runner.x;
+  const ty = runner.y + 1;
 
-runner.y += 1;
+  let belowChar = tileAt(tx, ty);
+  let below = tileData(belowChar);
 
-const thisTile = tileData(tileAt(runner.x, runner.y));
-const nowInWater = (thisTile.gravity === false);
+  // ---------------------------------------------------
+  // SPECIAL: stomp/fight a monster directly below you
+  // ---------------------------------------------------
+  if (belowChar === "M") {
+    // Attempt combat in-place (stomp)
+    tryFightMonsterAt(tx, ty);
 
-if (nowInWater) {
-  runner.fallDistance = 0;
-  if (!wasInWater) setMessage("Splash! You're in water.");
-} else {
-  runner.fallDistance++;
-  logMessage("Down", { type: "move" });
+    // Re-check what is now below (monster might have turned into "C" or "." etc.)
+    belowChar = tileAt(tx, ty);
+    below = tileData(belowChar);
 
-}
+    // If still solid, you cannot move down into it this press
+    if (below.solid && !below.exit) {
+      updateInfo("Force-down (stomped)");
+      draw();
+      return;
+    }
+  }
 
-if (thisTile.exit) {
-  handleExit(thisTile);
-  return;
-}
-  
-  
+  // ---------------------------------------------------
+  // SPECIAL: try unlock a lock directly below you
+  // ---------------------------------------------------
+  if (belowChar === "K") {
+    const opened = tryUnlockLockAt(tx, ty);
+
+    // Re-check after attempt
+    belowChar = tileAt(tx, ty);
+    below = tileData(belowChar);
+
+    // If not opened and still solid, stop here
+    if (!opened && below.solid && !below.exit) {
+      updateInfo("Force-down (locked)");
+      draw();
+      return;
+    }
+  }
+
+  // ---------------------------------------------------
+  // BLOCKED (normal solids)
+  // Note: exits are always enterable if you applied the tileData() fix above
+  // ---------------------------------------------------
+  if (below.solid && !below.exit) {
+    handleBlockedTile(tx, ty, "Blocked");
+    return; // handleBlockedTile already draws
+  }
+
+  // ---------------------------------------------------
+  // APPLY MOVE DOWN
+  // ---------------------------------------------------
+  const wasInWater = inWater();
+
+  runner.y += 1;
+
+  const thisTile = tileData(tileAt(runner.x, runner.y));
+  const nowInWater = (thisTile.gravity === false);
+
+  if (nowInWater) {
+    runner.fallDistance = 0;
+    if (!wasInWater) setMessage("Splash! You're in water.");
+  } else {
+    runner.fallDistance++;
+    logMessage("Down", { type: "move" });
+  }
+
+  // Exit triggers immediately upon entering
+  if (thisTile.exit) {
+    handleExit(thisTile);
+    return;
+  }
+
   applyInsideDamage(thisTile);
+  if (gameOver) return;
+
   handlePickupsAtCurrent();
 
   const nextBelow = tileData(tileAt(runner.x, runner.y + 1));
-  if (nextBelow.solid) {
+  if (nextBelow.solid && thisTile.gravity !== false) {
     resolveFallLanding();
     applyTopDamage(nextBelow);
   }
 
+  // Combat checks after movement settles
+  checkAdjacentMonsterAttacks();
+
   updateInfo("Force-down");
   draw();
 }
+
 
 
 
