@@ -124,6 +124,29 @@ function highlightPaletteTile(code) {
   });
 }
 
+
+function splitRowsFlexible(raw) {
+  const s = (raw || "").trim();
+  if (!s) return [];
+
+  // Prefer ~ first (your canonical row separator), then legacy '.', then newlines
+  const delim = s.includes("~") ? "~" : (s.includes(".") ? "." : null);
+
+  if (delim) {
+    return s
+      .split(delim)
+      .map(r => r.trim())
+      .filter(r => r.length > 0);
+  }
+
+  return s
+    .split(/\r?\n/)
+    .map(r => r.trim())
+    .filter(r => r.length > 0);
+}
+
+
+
 // ---------------------------------------------------------
 // Build editor grid (using CANVAS for each tile)
 // ---------------------------------------------------------
@@ -332,7 +355,7 @@ document.getElementById("loadMap").addEventListener("click", () => {
   const code = document.getElementById("mapBox").value.trim();
   if (!code) return alert("Paste a map code first.");
 
-  const rows = code.split(".");
+const rows = splitRowsFlexible(code);
   if (rows.length !== ROWS) {
     return alert("Incorrect number of rows.");
   }
@@ -360,7 +383,7 @@ document.getElementById("loadMap").addEventListener("click", () => {
 // Generate code from current map
 // ---------------------------------------------------------
 document.getElementById("generateMap").addEventListener("click", () => {
-  const encoded = Array.from({ length: ROWS }, (_, y) => encodeRowWithVariants(y)).join(".");
+  const encoded = Array.from({ length: ROWS }, (_, y) => encodeRowWithVariants(y)).join("~");
   document.getElementById("mapBox").value = encoded;
   console.log("[EDITOR] Map encoded to textarea.");
 });
@@ -451,7 +474,7 @@ document.getElementById("dynamicMap").addEventListener("click", () => {
     }
   }
 
-  const encoded = Array.from({ length: ROWS }, (_, y) => encodeRowWithVariants(y)).join(".");
+  const encoded = Array.from({ length: ROWS }, (_, y) => encodeRowWithVariants(y)).join("~");
   document.getElementById("mapBox").value = encoded;
 
   console.log("[EDITOR] Dynamic cave map generated.");
@@ -467,7 +490,7 @@ document.getElementById("dynamicMap").addEventListener("click", () => {
   const code = decodeURIComponent(hash.slice(5));
   if (!code) return;
 
-  const rows = code.split(".");
+const rows = splitRowsFlexible(code);
   if (rows.length !== ROWS) {
     alert("Map code in URL is invalid (wrong row count).");
     return;
