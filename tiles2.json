@@ -5,7 +5,7 @@
     "moveCost": 1,
     "insideMoveCost": 1,
     "jumpAllowed": true,
-     "deathMessage": "date: 02012026 1244",
+     "deathMessage": "date: 02012026 1253",
     "hint": "Mmm, dank dungeon air."
   },
  
@@ -53,6 +53,21 @@
     "hint": "Ok, thats molting lava. That looks like instant death.",
     "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 23.04 23.04'><g><path fill='#5c140b' d='M23.04,22.1v.94H0v-.94c7.68,1.88,15.36-1.87,23.04,0Z'/><path fill='#5c140b' d='M23.04,18.28v3.82c-7.68-1.87-15.36,1.88-23.04,0v-3.82c7.68-1.88,15.36,1.87,23.04,0Z'/><path fill='#a51e22' d='M23.04,16.4v1.88c-7.68,1.87-15.36-1.88-23.04,0v-1.88c7.68-1.87,15.36,1.88,23.04,0Z'/><path fill='#e16a26' d='M23.04,12.58v3.82c-7.68,1.88-15.36-1.87-23.04,0v-3.82c7.68,1.87,15.36-1.88,23.04,0Z'/><path fill='#fdb714' d='M23.04,10.7v1.88c-7.68-1.88-15.36,1.87-23.04,0v-1.88c7.68,1.88,15.36-1.87,23.04,0Z'/><path fill='#a51e22' d='M23.04,6.88v3.82c-7.68-1.87-15.36,1.88-23.04,0v-3.82c7.68-1.88,15.36,1.87,23.04,0Z'/><path fill='#5c140b' d='M23.04,5v1.88c-7.68,1.87-15.36-1.88-23.04,0v-1.88c7.68-1.88,15.36,1.88,23.04,0Z'/><path fill='#e16a26' d='M23.04,1.18v3.82c-7.68,1.88-15.36-1.88-23.04,0V1.18c7.68,1.87,15.36-1.88,23.04,0Z'/><path fill='#5c140b' d='M23.04,0v1.18C15.36-.7,7.68,3.05,0,1.18V0h23.04Z'/></g></svg>" 
   },
+
+
+"E": {
+  "solid": false,
+  "gravity": true,
+  "exit": true,
+  "moveCost": 1,
+  "deathMessage": "You did it! Off to the next level",
+  "hint": "The way out!",
+  "svg": "<svg ...></svg>",
+  "default": "P2A1P22~P2A1P22~A1a1R1A22~A1P3A21~A4P2A19~A6b1A18~A6P2A17~A25~A25~A3E{a}1A9c1A2E{b}1A3a1A4~P8W3P14~P8W3P14~P25~P25~P25", 
+  "a":       "P25~P1A3P1A18Eb1P1~P1R1P1A7H1A3T1A3D1A3P3~P3A1P11A3P2A4P1~P1A3P1A11Z1A4Y1A2P1~P1A1P1A9D2P1A1P1L4P1A1D1P1~P1A1P1W1P1W1P1A3P5A1P1L4P1A1P2~P1A1P1W3P1A7P1L6P1D1A1P1~P1A2D1W1D1A3P1A4P1L1P7A1P1~P1A1P2W1P2A4P1L8P1A2D1P1~P1A1P2W1P2A1P2A1P10A2P2~P1A1P1W3P1A4P1A1P1A10P1~P1A1P1W1P1W1P1A4K1A3D1A1D1A1D1A2P1A1P1~P1B1P1W1D1W1K1S4P1H1P1S1P1S1P1S1P1S3H1P1~P3W1P1W1P19",
+  "b":       "P25~P25~A14P7A4~A25~A25~A1R1A8T1A14~A1P3A1P2A2P8A2P1A5~A15P2A6E1A1~A22P3~A21P4~A19P6~P5L3P1Y1A3Z1P11~P2L6P2W3P12~P2L2P6W3P12~P25"
+},
+  
 
 "E": {
   "solid": false,
