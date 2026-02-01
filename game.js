@@ -624,7 +624,10 @@ function decodeMap(encoded) {
 }
 
 
-    
+function hasEDefaultMap() {
+  const s = TILE?.["E"]?.["default"];
+  return (typeof s === "string" && s.trim().length > 0);
+}    
 
 
 // ============================================================
@@ -659,23 +662,22 @@ function decodeMap(encoded) {
   grid = decodeMap(encodedMap);
 
 } else {
-  // Base URL boot: prefer tiles2.json start map, fall back to hard-coded map
-  console.log("No #map in URL; using tiles2.json start map (or fallback)");
-
+  console.log("No #map in URL; using tiles2.json E.default (or fallback)");
   signVariantMap = []; // reset variants for new map
 
-  // Pick your “start key”. If you want variants later, this can be "Ea", "Eb", etc.
-  const startKey = currentLevelKey || "default";
-const startMapString = TILE?.["E"]?.[startKey];
-
-  if (typeof startMapString === "string" && startMapString.trim()) {
-    console.log(`[Runner] Boot map from tiles2.json: E.${startKey}`);
-    grid = decodeMap(startMapString);
+  if (hasEDefaultMap()) {
+    console.log("[Runner] Boot map from tiles2.json: E.default");
+    currentLevelKey = "default";
+    sessionStorage.setItem("levelKey", "default");
+    grid = decodeMap(TILE["E"]["default"]);
   } else {
-    console.warn(`[Runner] tiles2.json missing E.${startKey}; using DEFAULT_ENCODED_MAP`);
+    console.warn("[Runner] tiles2.json missing E.default; using DEFAULT_ENCODED_MAP");
+    currentLevelKey = "default";
+    sessionStorage.setItem("levelKey", "default");
     grid = decodeMap(DEFAULT_ENCODED_MAP);
   }
 }
+
 
   
   // Reset exit progression when a new map loads
