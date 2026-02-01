@@ -1,4 +1,9 @@
 {
+  "_comment": "02012026",
+  "tiles": { }
+}
+
+{
   ".": {
     "solid": false,
     "gravity": true,
