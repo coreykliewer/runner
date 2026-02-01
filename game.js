@@ -447,23 +447,24 @@ function decodeCarryStats(str) {
 // Default hard-coded level map (fallback when no #map=...)
 // Also used as fallback when exit key "E" is not defined in tiles2.json
 // ============================================================
-const DEFAULT_ENCODED_MAP = [
-  "A24P1",
-  "A25",
-  "A11D1A13",
-  "A11P1A6D1A6",
-  "A2R1A2M{a}1A1Z1P2A5I{b}1A1P1A7",
-  "P10A2P2A1P2A3Y1A4",
-  "A7P1A12P1Y1A3",
-  "A1M{a}1A4D1K{a}1A5H1A11",
-  "P3W3P3W3P4A7Z1A1",
-  "P5W1P8A8Z1P1A1",
-  "A5W1A11S1A3Z1P2A1",
-  "A1E1A3W1A6D1A3B1P1A7",
-  "A1P3A1W1A1P1A2T1P2A12",
-  "L4P1W1P1L2P2L6P3A5",
-  "P25"
-].join("~");
+
+// const DEFAULT_ENCODED_MAP = [
+//  "A24P1",
+//  "A25",
+//  "A11D1A13",
+//  "A11P1A6D1A6",
+//  "A2R1A2M{a}1A1Z1P2A5I{b}1A1P1A7",
+//  "P10A2P2A1P2A3Y1A4",
+//  "A7P1A12P1Y1A3",
+//  "A1M{a}1A4D1K{a}1A5H1A11",
+//  "P3W3P3W3P4A7Z1A1",
+//  "P5W1P8A8Z1P1A1",
+//  "A5W1A11S1A3Z1P2A1",
+//  "A1E1A3W1A6D1A3B1P1A7",
+//  "A1P3A1W1A1P1A2T1P2A12",
+//  "L4P1W1P1L2P2L6P3A5",
+//  "P25"
+//].join("~");
 
 
 
@@ -657,7 +658,7 @@ function hasEDefaultMap() {
   
 
 
-   if (encodedMap) {
+ /*  if (encodedMap) {
   console.log("Using encoded map:", encodedMap);
   grid = decodeMap(encodedMap);
 
@@ -675,8 +676,34 @@ function hasEDefaultMap() {
     currentLevelKey = "default";
     sessionStorage.setItem("levelKey", "default");
     grid = decodeMap(DEFAULT_ENCODED_MAP);
+  } 
+}*/
+
+if (encodedMap) {
+  console.log("Using encoded map:", encodedMap);
+  grid = decodeMap(encodedMap);
+
+} else {
+  console.log("No #map in URL; booting from tiles2.json E.default ONLY");
+  signVariantMap = []; // reset variants for new map
+
+  const mapString = TILE?.E?.default;
+
+  if (typeof mapString !== "string" || !mapString.trim()) {
+    // Hard fail: do NOT load factory, do NOT guess.
+    gameOver = true;
+    setMessage("BOOT ERROR: tiles2.json is missing E.default, so no level can load.", {
+      kind: "message"
+    });
+    draw();
+    return;
   }
+
+  currentLevelKey = "default";
+  sessionStorage.setItem("levelKey", "default");
+  grid = decodeMap(mapString);
 }
+
 
 
   
@@ -1826,27 +1853,14 @@ function attemptStep(dx, dy) {
   return true;
 }
 
-
-
 function handleExit(tile) {
-const destKey = exitIdAt(runner.x, runner.y);
-if (!destKey) {
-  setMessage("Exit error: not standing on an exit.", { kind: "message" });
-  return;
-}
+  // find the exit key (variant) at runner position
+  const destKey = exitIdAt(runner.x, runner.y) || "default";
 
-// maps live at TILE.E[<exitKey>] where exitKey is "default", "exit1", etc.
-let mapString = TILE?.["E"]?.[destKey];
+  const mapString = TILE?.E?.[destKey];
 
-// fallback: only for default
-if ((!mapString || typeof mapString !== "string") && destKey === "default") {
-  mapString = DEFAULT_ENCODED_MAP;
-}
-
-
-  // If still missing (e.g., Ea not defined), do NOT fallback—show a wiring message.
-  if (!mapString || typeof mapString !== "string") {
-    setMessage(`Exit ${destKey} is not wired (no map found).`, {
+  if (typeof mapString !== "string" || !mapString.trim()) {
+    setMessage(`Exit ${destKey} is not wired (no TILE.E.${destKey} map found).`, {
       tileChar: "E",
       kind: "message"
     });
@@ -1856,7 +1870,7 @@ if ((!mapString || typeof mapString !== "string") && destKey === "default") {
 
   currentLevelKey = destKey;
   sessionStorage.setItem("levelKey", currentLevelKey);
-  sessionStorage.removeItem("exitIndex"); // legacy cleanup
+  sessionStorage.removeItem("exitIndex"); // optional cleanup
 
   updateInfo(`Entering ${destKey}...`);
   draw();
@@ -1868,6 +1882,7 @@ if ((!mapString || typeof mapString !== "string") && destKey === "default") {
 
   setTimeout(() => window.location.reload(), 0);
 }
+
 
 
 
