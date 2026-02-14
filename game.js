@@ -1894,7 +1894,14 @@ function handleExit(tile) {
 // ============================================================
 // MOVEMENT
 // ============================================================
-function singleMove(dx, dy) {
+function singleMove(dx, dy, opts = {}) {
+  const isDiagonalJump = (opts && opts.diagonal === true);
+
+  // If diagonal jump, enforce dy=-1 and dx=±1
+  if (isDiagonalJump) {
+    if (dy !== -1) dy = -1;
+    if (dx !== -1 && dx !== 1) return;
+  }
 // ============================================================
 // TURBO MODE: Double-speed movement (UP/LEFT/RIGHT)
 // ============================================================
@@ -1982,6 +1989,14 @@ turboExecuting = false;
 // STANDARD MOVEMENT LOGIC
 // ============================================
 
+
+function diagonalJump(dx) {
+  // dx must be -1 (left) or 1 (right)
+  singleMove(dx, -1, { diagonal: true });
+}
+
+  
+
  if (gameOver) return;
   if (totalMovementPoints() <= 0 && !turboExecuting) return; // Allow if executing turbo
 
@@ -2054,22 +2069,21 @@ return; // handleBlockedTile already draws
   if (dx > 0) runner.facingLeft = false;
 
   // ======================================================
-  // UP MOVEMENT VALIDATION
+  // UP MOVEMENT VALIDATION (includes diagonal jump)
   // ======================================================
   if (dy === -1) {
     if (target.solid) return;
-    
-    // FIX: If turboExecuting, assume we already checked/burned credits in the wrapper.
+
+    // Need jump credit unless in fluid
     if (!turboExecuting && !isFluidTile(here) && runner.jumpCredits <= 0) return;
   }
-  
 
 
-  // ======================================================
+   // ======================================================
   // Movement cost
   // ======================================================
-  let moveCost = isFluidTile(here) ? target.moveCostInside : target.moveCostTop;
-   
+  let moveCost = isDiagonalJump ? 2 : (isFluidTile(here) ? target.moveCostInside : target.moveCostTop);
+
   if (!turboExecuting) {
     if (!spendMovement(moveCost)) return;
   }
@@ -2090,9 +2104,9 @@ if (dy === 0 && dx !== 0) {
   logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
 }
 if (dy === -1 && !isFluidTile(target)) {
-  logMessage("Jump", { type: "move" });
+  if (isDiagonalJump) logMessage(dx < 0 ? "Jump ↖" : "Jump ↗", { type: "move" });
+  else logMessage("Jump", { type: "move" });
 }
-
 // If we were falling and are now supported, resolve landing effects
 const belowNow = tileData(tileAt(runner.x, runner.y + 1));
 if (runner.fallDistance > 0 && belowNow.solid) {
@@ -2332,23 +2346,34 @@ window.addEventListener("keydown", e => {
   if (modalOpen) return; // HARD PAUSE
   e.preventDefault();
   if (gameOver) return;
+
   const k = e.key.toLowerCase();
+
   if (k === "a") singleMove(-1, 0);
   if (k === "d") singleMove(1, 0);
   if (k === "s") forceDown();
   if (k === "w") singleMove(0, -1);
+
+  // NEW:
+  if (k === "q") diagonalJump(-1);
+  if (k === "e") diagonalJump(1);
 });
 
 
 document.addEventListener("DOMContentLoaded", () => {
-    setupDieSelection();
-    document.getElementById("btn-up").onclick = () => singleMove(0, -1);
-    document.getElementById("btn-down").onclick = () => forceDown();
-    document.getElementById("btn-left").onclick = () => singleMove(-1, 0);
-    document.getElementById("btn-right").onclick = () => singleMove(1, 0);
-    document.getElementById("roll").onclick = () => rollDice();
-});
+  setupDieSelection();
 
+  document.getElementById("btn-up").onclick = () => singleMove(0, -1);
+  document.getElementById("btn-down").onclick = () => forceDown();
+  document.getElementById("btn-left").onclick = () => singleMove(-1, 0);
+  document.getElementById("btn-right").onclick = () => singleMove(1, 0);
+
+  // NEW:
+  document.getElementById("btn-up-left").onclick = () => diagonalJump(-1);
+  document.getElementById("btn-up-right").onclick = () => diagonalJump(1);
+
+  document.getElementById("roll").onclick = () => rollDice();
+});
 // ============================================================
 // Dice roll
 // ============================================================
