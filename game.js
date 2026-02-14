@@ -29,6 +29,10 @@ function spinDie(element) {
   setTimeout(() => element.style.transform = "rotate(0deg)", 250);
 }
 
+window.diagonalJump = function(dx) {
+  singleMove(dx, -1, { diagonal: true });
+};
+
 // ============================================================
 // Canvas + globals
 // ============================================================
