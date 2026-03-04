@@ -1,4 +1,5 @@
-//version 1.4 Final - 2/01 1356 2026 - 01
+// EDIT NOTE: Declared `currentExitIndex` as an explicit top-level game state variable to avoid implicit global assignment.
+//version 1.5 Final - 3/04 
 // ================================================ = == = ========
 // Dice display + spin
 // ============================================================
@@ -60,6 +61,7 @@ let grid = [];
 let runner = null; 
 let monsterStateMap = [];
 let currentLevelKey = "default";
+let currentExitIndex = 0;
 let turboGravityUsed = false;
 let kills = 0;
 
