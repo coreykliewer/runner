@@ -1,3 +1,4 @@
+// EDIT NOTE: Added hash-param parsing for `map` via getHashParamRaw() and switched URL auto-load to decode only the `map` value, improving multi-param hash handling.
 // ---------------------------------------------------------
 // Global tile metadata (loaded from tiles2.json)
 // ---------------------------------------------------------
@@ -145,7 +146,18 @@ function splitRowsFlexible(raw) {
     .filter(r => r.length > 0);
 }
 
+function getHashParamRaw(name) {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  if (!hash) return null;
 
+  const parts = hash.split("&");
+  for (const part of parts) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq) === name) return part.slice(eq + 1);
+  }
+  return null;
+}
 
 // ---------------------------------------------------------
 // Build editor grid (using CANVAS for each tile)
@@ -484,10 +496,9 @@ document.getElementById("dynamicMap").addEventListener("click", () => {
 // AUTO-LOAD MAP FROM URL (#map=...)
 // ---------------------------------------------------------
 (function loadMapFromURL() {
-  const hash = window.location.hash;
-  if (!hash.startsWith("#map=")) return;
-
-  const code = decodeURIComponent(hash.slice(5));
+  const rawMap = getHashParamRaw("map");
+  if (rawMap == null || rawMap === "") return;
+  const code = decodeURIComponent(rawMap);
   if (!code) return;
 
 const rows = splitRowsFlexible(code);
