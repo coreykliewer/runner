@@ -312,6 +312,63 @@ function sanitizeVariant(raw) {
   return v ? v : null;
 }
 
+
+function getVariantBucketEntry(baseDef, variant) {
+  if (!baseDef || !variant) return null;
+
+  const bucketOrder = ["monster", "lock", "sign", "exit", "platform", "pickup", "decor"];
+
+  for (const bucket of bucketOrder) {
+    const group = baseDef[bucket];
+    if (group && typeof group === "object" && group[variant]) {
+      return {
+        bucket,
+        entry: group[variant]
+      };
+    }
+  }
+
+  return null;
+}
+
+function getTileContextAt(x, y) {
+  const ch = tileAt(x, y);
+  const baseDef = TILE[ch] || {};
+  const variant = signVariantAt(x, y);
+
+  const variantInfo = getVariantBucketEntry(baseDef, variant);
+  const variantBucket = variantInfo?.bucket || null;
+  const variantDef = variantInfo?.entry || null;
+
+  const effectiveDef = {
+    ...baseDef,
+    ...(variantDef || {})
+  };
+
+  return {
+    x,
+    y,
+    ch,
+    variant,
+    baseDef,
+    variantBucket,
+    variantDef,
+    def: effectiveDef
+  };
+}
+
+function getEffectiveTileDefAt(x, y) {
+  return getTileContextAt(x, y).def;
+}
+
+function getRenderableImageAt(x, y) {
+  const ctx = getTileContextAt(x, y);
+  return ctx.def?.img || ctx.baseDef?.img || null;
+}
+
+
+
+
 // =========================
 // Fog of War (MVP)
 // =========================
@@ -781,86 +838,76 @@ function tileAt(x, y) {
   if (x < 0 || y < 0 || y >= grid.length || x >= grid[0].length) return "X";
   return grid[y][x];
 }
-
 function getTileHintAt(x, y) {
-  const ch = tileAt(x, y);
-  const def = TILE[ch];
+  const ctx = getTileContextAt(x, y);
+  const def = ctx.def;
+
   if (!def) return null;
 
-  const v = signVariantAt(x, y);
+  if (typeof def.hint === "string") return def.hint;
 
-  // Monster variant override (preferred, because monsters are variant-driven)
-  if (def.monster && v && def.monster[v] && def.monster[v].hint) {
-    return def.monster[v].hint;
+  if (def.hint && typeof def.hint === "object") {
+    if (ctx.variant && def.hint[ctx.variant]) return def.hint[ctx.variant];
+    if (def.hint.default) return def.hint.default;
   }
-
-  // Generic hint support
-  const h = def.hint;
-  if (!h) return null;
-
-  // Simple string hint
-  if (typeof h === "string") return h;
-
-  // Variant dictionary hint: { a: "...", b: "...", default: "..." }
-  if (v && typeof h === "object" && h[v]) return h[v];
-  if (typeof h === "object" && h.default) return h.default;
 
   return null;
 }
 
 
 function getSignMessageAt(x, y) {
+  const ctx = getTileContextAt(x, y);
+  const def = ctx.def;
 
-
-  const ch = tileAt(x, y);
-
-  const def = TILE[ch];
-
-  if (!def) {
-    return null;
-  }
-
-
-  if (!def.signMessage) {
-    return null;
-  }
+  if (!def || !def.signMessage) return null;
 
   if (typeof def.signMessage === "string") {
     return def.signMessage;
   }
 
-  const v = signVariantAt(x, y);
+  if (ctx.variant && typeof def.signMessage === "object" && def.signMessage[ctx.variant]) {
+    return def.signMessage[ctx.variant];
+  }
 
-  const msg = v && def.signMessage[v] ? def.signMessage[v] : null;
+  if (typeof def.signMessage === "object" && def.signMessage.default) {
+    return def.signMessage.default;
+  }
 
-  return msg;
+  return null;
 }
 
 function getSignPayloadAt(x, y) {
-  const ch = tileAt(x, y);
-  const def = TILE[ch];
+  const ctx = getTileContextAt(x, y);
+  const def = ctx.def;
+
   if (!def) return null;
 
-  const v = signVariantAt(x, y);
-
-  // Prefer HTML sign text if present
   if (def.signHtml) {
-    const html =
-      typeof def.signHtml === "string"
-        ? def.signHtml
-        : (v && def.signHtml[v]) ? def.signHtml[v] : null;
+    if (typeof def.signHtml === "string") {
+      return { text: def.signHtml, html: true, tileChar: ctx.ch };
+    }
 
-    if (html) return { text: html, html: true, tileChar: ch };
+    if (ctx.variant && typeof def.signHtml === "object" && def.signHtml[ctx.variant]) {
+      return { text: def.signHtml[ctx.variant], html: true, tileChar: ctx.ch };
+    }
+
+    if (typeof def.signHtml === "object" && def.signHtml.default) {
+      return { text: def.signHtml.default, html: true, tileChar: ctx.ch };
+    }
   }
 
-  // Fallback to plain signMessage
   if (def.signMessage) {
-    const msg =
-      typeof def.signMessage === "string"
-        ? def.signMessage
-        : (v && def.signMessage[v]) ? def.signMessage[v] : null;
+    if (typeof def.signMessage === "string") {
+      return { text: def.signMessage, html: false, tileChar: ctx.ch };
+    }
 
-    if (msg) return { text: msg, html: false, tileChar: ch };
+    if (ctx.variant && typeof def.signMessage === "object" && def.signMessage[ctx.variant]) {
+      return { text: def.signMessage[ctx.variant], html: false, tileChar: ctx.ch };
+    }
+
+    if (typeof def.signMessage === "object" && def.signMessage.default) {
+      return { text: def.signMessage.default, html: false, tileChar: ctx.ch };
+    }
   }
 
   return null;
@@ -2174,40 +2221,15 @@ draw();
 function drawTile(t, x, y) {
   const px = x * TILE_SIZE;
   const py = y * TILE_SIZE;
-  const def = TILE[t];
 
-  let img = def?.img || null;
-
-  // Monster variant override
-  if (def?.monster) {
-    const v = signVariantAt(x, y);
-    const m = def.monster?.[v];
-    if (m?.img) {
-      img = m.img;
-    }
-  }
-
-    // Lock variant override
-  if (t === "K" && def?.lock) {
-    const v = signVariantAt(x, y);
-    const l = def.lock?.[v];
-    if (l?.img) {
-      img = l.img;
-    }
-  }
-
+  const img = getRenderableImageAt(x, y);
 
   if (img) {
     ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
     return;
   }
 
-  // fallback
-  //ctx.fillStyle = "#000";
-  //ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-  // fallback: transparent (draw nothing)
-return;
-
+  return;
 }
 
 
