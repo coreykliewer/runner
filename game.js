@@ -1,5 +1,5 @@
 // EDIT NOTE: Declared `currentExitIndex` as an explicit top-level game state variable to avoid implicit global assignment.
-//version 1.5 Final - 3/04 
+//version 1.5 Final - 3/28
 // ================================================ = == = ========
 // Dice display + spin
 // ============================================================
