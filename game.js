@@ -1144,6 +1144,92 @@ function handleBlockedTile(x, y, label = "Blocked") {
 
 
 
+
+
+
+
+
+
+
+
+
+function resolveSolidInteractionAt(x, y, options = {}) {
+  const {
+    blockedLabel = "Blocked",
+    allowLock = true,
+    allowMonster = true,
+    drawAfter = false
+  } = options;
+
+  const ctx = getTileContextAt(x, y);
+  const ch = ctx.ch;
+
+  if (!tileData(ch).solid) {
+    return {
+      handled: false,
+      blocked: false,
+      moved: false,
+      kind: "none"
+    };
+  }
+
+  if (allowLock && ch === "K") {
+    const opened = tryUnlockLockAt(x, y);
+
+    if (drawAfter) draw();
+
+    return {
+      handled: true,
+      blocked: !opened,
+      moved: false,
+      opened,
+      kind: "lock"
+    };
+  }
+
+  if (allowMonster && ch === "M") {
+    const defeated = tryFightMonsterAt(x, y);
+
+    if (drawAfter) draw();
+
+    return {
+      handled: true,
+      blocked: !defeated,
+      moved: false,
+      defeated,
+      kind: "monster"
+    };
+  }
+
+  handleBlockedTile(x, y, blockedLabel);
+
+  return {
+    handled: true,
+    blocked: true,
+    moved: false,
+    kind: "blocked"
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function totalMovementPoints() { return dieValue1 + dieValue2; }
 
 function updateInfo(label = "") {
@@ -1865,23 +1951,19 @@ function attemptStep(dx, dy) {
     target = tileData(targetChar);
   }
 
-  // --- SOLID TILE HANDLING (locks/monsters/signs) ---
-  if (target.solid) {
-    const ch = tileAt(toX, toY);
+// --- SOLID TILE HANDLING (via shared resolver) ---
+if (target.solid) {
+  const result = resolveSolidInteractionAt(toX, toY, {
+    blockedLabel: "Blocked",
+    allowLock: true,
+    allowMonster: true,
+    drawAfter: false
+  });
 
-    if (ch === "K") {
-      tryUnlockLockAt(toX, toY);
-      return false;
-    }
-
-    if (ch === "M") {
-      tryFightMonsterAt(toX, toY);
-      return false;
-    }
-
-    handleBlockedTile(toX, toY, "Blocked"); // this already draws
+  if (result.handled) {
     return false;
   }
+}
 
   const prevX = runner.x;
   const prevY = runner.y;
