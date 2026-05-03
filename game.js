@@ -2049,8 +2049,9 @@ if (runner.turbo && !turboExecuting) {
 
     if (turboEligible) {
 
-        // Must have at least 1 movement point!
-        if (!spendMovement(1)) return; 
+        // Must have at least 1 movement point, but do not spend it yet.
+// Interactions like monster combat need to see the current dice values.
+if (totalMovementPoints() <= 0) return;
 
         // ---------------------------------------------------
         // Burn a jump ONLY if trying to move UP.
@@ -2075,16 +2076,19 @@ if (runner.turbo && !turboExecuting) {
 const firstCanMove = attemptStep(dx, dy);
 if (!firstCanMove) {
   turboExecuting = false;
-
-  const tx = runner.x + dx;
-  const ty = runner.y + dy;
-
-handleBlockedTile(tx, ty, "Turbo Blocked");
-turboExecuting = false;
-return; // handleBlockedTile already draws
+  updateInfo("Turbo stopped");
+  draw();
+  return;
 }
 
-
+// Spend the turbo movement point only after a successful movement step.
+// This preserves dice values for locks and monster checks.
+if (!spendMovement(1)) {
+  turboExecuting = false;
+  draw();
+  return;
+}
+      
 // Turbo gravity: allow ONLY once
 if (dy === 0 && !turboGravityUsed) {
   applyGravityAfterMove();
@@ -2092,7 +2096,21 @@ if (dy === 0 && !turboGravityUsed) {
 }
 
 // SAFE STEP #2
-attemptStep(dx, dy);
+const secondCanMove = attemptStep(dx, dy);
+if (!secondCanMove) {
+  turboExecuting = false;
+  updateInfo("Turbo stopped");
+  draw();
+  return;
+}
+
+// Spend movement for second step
+if (!spendMovement(1)) {
+  turboExecuting = false;
+  draw();
+  return;
+}
+
 // END TURBO
 turboExecuting = false;
 
