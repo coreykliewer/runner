@@ -2182,10 +2182,7 @@ if (target.solid && !target.slope) {
   }
 }
 
-  // SIGN FALLBACK
-handleBlockedTile(toX, toY, "Blocked");
-return; // handleBlockedTile already draws
-}
+
 
 
 
