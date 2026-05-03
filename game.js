@@ -2170,23 +2170,17 @@ function diagonalJump(dx) {
 
 if (target.solid && !target.slope) {
 
-  // LOCK HANDLING
-if (tileAt(toX, toY) === "K") {
-  if (tryUnlockLockAt(toX, toY)) {
-    // Lock opened; allow next move
-    draw();
+  const result = resolveSolidInteractionAt(toX, toY, {
+    blockedLabel: "Blocked",
+    allowLock: true,
+    allowMonster: true,
+    drawAfter: true // IMPORTANT: singleMove expects draw side-effects
+  });
+
+  if (result.handled) {
     return;
   }
-  draw();
-  return;
 }
-
-if (tileAt(toX, toY) === "M") {
-  tryFightMonsterAt(toX, toY);
-  draw();
-  return;
-}
-
 
   // SIGN FALLBACK
 handleBlockedTile(toX, toY, "Blocked");
