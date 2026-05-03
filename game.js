@@ -2069,10 +2069,15 @@ if (totalMovementPoints() <= 0) return;
         turboExecuting = true;
         turboGravityUsed = false;
 
-        // -----------------------------------------------------
-        // SAFE STEP #1
-        // -----------------------------------------------------
+
+
+
+
+
 // SAFE STEP #1
+const startX = runner.x;
+const startY = runner.y;
+
 const firstCanMove = attemptStep(dx, dy);
 if (!firstCanMove) {
   turboExecuting = false;
@@ -2081,58 +2086,30 @@ if (!firstCanMove) {
   return;
 }
 
-// Spend the turbo movement point only after a successful movement step.
-// This preserves dice values for locks and monster checks.
 if (!spendMovement(1)) {
+  runner.x = startX;
+  runner.y = startY;
+
   turboExecuting = false;
   draw();
   return;
-}
-      
-// Turbo gravity: allow ONLY once
-if (dy === 0 && !turboGravityUsed) {
-  applyGravityAfterMove();
-  turboGravityUsed = true;
 }
 
 // SAFE STEP #2
 const secondCanMove = attemptStep(dx, dy);
-if (!secondCanMove) {
-  turboExecuting = false;
-  updateInfo("Turbo stopped");
-  draw();
-  return;
-}
 
-// Spend movement for second step
-if (!spendMovement(1)) {
-  turboExecuting = false;
-  draw();
-  return;
-}
+// (optional) no rollback on step 2 — consistent with standard movement
 
-// END TURBO
 turboExecuting = false;
 
+// FULL POST PIPELINE
+runAttributeCheck();
+applyGravityAfterMove();
+checkAdjacentMonsterAttacks();
 
-        // End turbo if entering fluid
-        const afterTile = tileData(tileAt(runner.x, runner.y));
-      
-      
-        if (isFluidTile(afterTile)) {
-            runner.turbo = false;
-            runner.turboFlashTimer = 0;
-        }
-
-        // End turbo if movement ends
-        if (totalMovementPoints() <= 0) {
-            runner.turbo = false;
-            runner.turboFlashTimer = 0;
-        }
-
-        updateInfo("Turbo Move (2 steps!)");
-        draw();
-        return;
+updateInfo(secondCanMove ? "Turbo Move (2 steps!)" : "Turbo Move (1 step)");
+draw();
+return;
     }
 }
 
