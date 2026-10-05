@@ -14,6 +14,8 @@ describe("browser smoke fixtures", () => {
     assert.match(html, /href="style\.css"/);
     assert.match(gameJs, /StateModule\.decodeCarryStats/);
     assert.match(gameJs, /StateModule\.encodeCarryStatsFromRunner/);
+    assert.match(gameJs, /addRunnerCounter\("diagonal_jump"\)/);
+    assert.doesNotMatch(gameJs, /diagonal\s*===\s*true\)\s*addRunnerCounter\("double_jump"\)/);
   });
 
   it("keeps the editor shell wired to expected assets and DOM ids", async () => {

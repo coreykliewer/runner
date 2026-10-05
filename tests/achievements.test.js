@@ -73,6 +73,7 @@ describe("achievement rules", () => {
           left: 1,
           jump: 1,
           double_jump: 1,
+          diagonal_jump: 1,
           fall: 1,
           dice_roll: 1,
           fall_in_water: 1
@@ -87,6 +88,7 @@ describe("achievement rules", () => {
       "first_left",
       "first_jump",
       "first_double_jump",
+      "first_diagonal_jump",
       "first_fall",
       "first_dice_roll",
       "first_fall_in_water"
@@ -96,6 +98,7 @@ describe("achievement rules", () => {
       left: 1,
       jump: 1,
       double_jump: 1,
+      diagonal_jump: 1,
       fall: 1,
       dice_roll: 1,
       fall_in_water: 1

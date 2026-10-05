@@ -893,7 +893,8 @@ function recordMovementStats(dx, dy, options = {}) {
   if (dy === 0 && dx > 0) addRunnerCounter("right");
   if (dy === -1) {
     addRunnerCounter("jump");
-    if (options.diagonal === true) addRunnerCounter("double_jump");
+    if (options.diagonalJump === true) addRunnerCounter("diagonal_jump");
+    if (options.doubleJump === true) addRunnerCounter("double_jump");
   }
   for (const tag of options.tile?.tags || []) {
     addRunnerCounter(`move_in_${tag}`);
@@ -2880,8 +2881,6 @@ if (target.solid && !target.slope) {
     checkStatAchievements(movementAchievementContext);
   }
 
-  const hadJumpCredit = (dy === -1 && !isFluidTile(target) && runner.jumpCredits > 0);
-
   // ======================================================
   // Apply movement
   // ======================================================
@@ -2908,6 +2907,13 @@ if (runner.fallDistance > 0 && belowNow.solid) {
 // If we entered fluid, limit jumps
 if (isFluidTile(target)) runner.jumpCredits = 1;
 
+const usedSecondVerticalJumpCredit =
+  dy === -1 &&
+  !isDiagonalJump &&
+  !isFluidTile(target) &&
+  !turboExecuting &&
+  runner.jumpCredits === 1;
+
 // Burn jump credit (only if NOT turbo; turbo wrapper already burns it)
 if (dy === -1 && !isFluidTile(target) && !turboExecuting) {
   runner.jumpCredits = Math.max(0, runner.jumpCredits - 1);
@@ -2920,7 +2926,11 @@ handlePickupsAtCurrent();
 
 // Re-read tile after pickups (pickups can change the tile underfoot)
 const tileAfterPickups = tileData(tileAt(runner.x, runner.y));
-recordMovementStats(dx, dy, { diagonal: isDiagonalJump, tile: tileAfterPickups });
+recordMovementStats(dx, dy, {
+  diagonalJump: isDiagonalJump,
+  doubleJump: usedSecondVerticalJumpCredit,
+  tile: tileAfterPickups
+});
 applyTileStatGrants(tileAfterPickups);
 if (tileAfterPickups.exit) {
   handleExit(tileAfterPickups);
