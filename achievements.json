@@ -108,6 +108,18 @@
       "grantStats": {
         "dice_roll": 1
       }
+    },
+    {
+      "id": "first_fall_in_water",
+      "title": "You fell in water.",
+      "body": "A softer landing, technically.",
+      "when": {
+        "stat": "fall_in_water",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "fall_in_water": 1
+      }
     }
   ]
 }

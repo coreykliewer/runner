@@ -74,7 +74,8 @@ describe("achievement rules", () => {
           jump: 1,
           double_jump: 1,
           fall: 1,
-          dice_roll: 1
+          dice_roll: 1,
+          fall_in_water: 1
         },
         stats: {},
         achievements: []
@@ -87,7 +88,8 @@ describe("achievement rules", () => {
       "first_jump",
       "first_double_jump",
       "first_fall",
-      "first_dice_roll"
+      "first_dice_roll",
+      "first_fall_in_water"
     ]);
     assert.deepEqual(result.state.runner.stats, {
       right: 1,
@@ -95,7 +97,8 @@ describe("achievement rules", () => {
       jump: 1,
       double_jump: 1,
       fall: 1,
-      dice_roll: 1
+      dice_roll: 1,
+      fall_in_water: 1
     });
   });
 });

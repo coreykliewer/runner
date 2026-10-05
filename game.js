@@ -2148,6 +2148,7 @@ function applyFullGravity() {
     // If we just entered fluid, do NOT accumulate fall distance.
     if (thisTile.gravity === false) {
       runner.fallDistance = 0;
+      addRunnerCounter("fall_in_water");
       setMessage("Fall was broken.");
       applyInsideDamage(thisTile);
       if (gameOver) return;
@@ -2223,6 +2224,7 @@ function applyGravityAfterMove() {
     // If we stepped into a no-gravity tile (water), fall distance should not accumulate.
     if (nowHere.gravity === false) {
       runner.fallDistance = 0;
+      addRunnerCounter("fall_in_water");
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
