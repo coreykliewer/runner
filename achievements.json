@@ -120,6 +120,18 @@
       "grantStats": {
         "fall_in_water": 1
       }
+    },
+    {
+      "id": "hundred_water_moves",
+      "title": "You moved through water 100 times.",
+      "body": "You are starting to understand the current.",
+      "when": {
+        "stat": "move_in_water",
+        "atLeast": 100
+      },
+      "grantStats": {
+        "swimming": 1
+      }
     }
   ]
 }

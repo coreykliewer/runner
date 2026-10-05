@@ -874,12 +874,14 @@ function addRunnerCounter(name, amount = 1) {
 }
 
 function recordMovementStats(dx, dy, options = {}) {
+  addRunnerCounter("move");
   if (dy === 0 && dx < 0) addRunnerCounter("left");
   if (dy === 0 && dx > 0) addRunnerCounter("right");
   if (dy === -1) {
     addRunnerCounter("jump");
     if (options.diagonal === true) addRunnerCounter("double_jump");
   }
+  if (options.inWater === true) addRunnerCounter("move_in_water");
 }
 
 function runTutorialNarrative(context) {
@@ -2510,11 +2512,11 @@ if (target.solid) {
   if (dy === 0 && dx !== 0) {
     logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
   }
-  recordMovementStats(dx, dy);
 
   checkLanding(prevX, prevY, runner.x, runner.y);
 
   const tile = tileData(tileAt(runner.x, runner.y));
+  recordMovementStats(dx, dy, { inWater: isFluidTile(tile) });
   if (tile.exit) {
     handleExit(tile);
     return false; // stop further movement
@@ -2804,6 +2806,7 @@ runAttributeCheck();
 // Gravity / swim resolution
 // Gravity / swim resolution
 if (isFluidTile(tileAfterPickups)) {
+  addRunnerCounter("move_in_water");
   runner.fallDistance = 0;
   logMessage("Swim", { type: "move" });
 } else {
