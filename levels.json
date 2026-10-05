@@ -5,7 +5,7 @@
     "default": {
       "id": "default",
       "name": "Dungeon Entrance",
-      "map": "P2A1P22~P2A1P22~A2R1A22~A1P3A21~A4P2A19~A6b1A18~A6P2A17~A25~A25~A3E{a}1A9c1A2E{b}1A3a1A4~P8W3P14~P8W3P14~P25~P25~P25",
+      "map": "P2A1P22~P2A1P22~A2R1A22~A1P3A1D1A19~A4P2A19~A6b1A18~A6P2A17~A25~A25~A3E{a}1A9c1A2E{b}1A3a1A4~P8W3P14~P8W3P14~P25~P25~P25",
       "exits": {
         "a": "a",
         "b": "b"
