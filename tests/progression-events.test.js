@@ -47,5 +47,6 @@ describe("progression and narrative events", () => {
 
     assert.equal(result.state.runner.xp, 5);
     assert.equal(result.state.runner.achievements[0].id, "shiny_start");
+    assert.equal(result.actions[0].type, "message");
   });
 });

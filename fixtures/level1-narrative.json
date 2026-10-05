@@ -29,6 +29,10 @@
       },
       "actions": [
         {
+          "type": "message",
+          "text": "You found your first diamond. The dungeon notices shiny habits."
+        },
+        {
           "type": "xp",
           "amount": 5
         },

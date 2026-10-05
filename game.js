@@ -205,10 +205,13 @@ const TILE_URLS = [
 ];
 
 const LEVEL_URL = "levels.json";
+const NARRATIVE_URL = "fixtures/level1-narrative.json";
 let LEVELS = null;
 let StateModule = null;
 let ResumeLinksModule = null;
 let GameMapRuntimeModule = null;
+let NarrativeEventsModule = null;
+let NARRATIVE_EVENTS = [];
 
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
@@ -330,6 +333,38 @@ function loadGameMapRuntimeModule() {
     });
 }
 
+function loadNarrativeEventsModule() {
+  return import("./src/events.js")
+    .then(module => {
+      NarrativeEventsModule = module;
+      console.log("[Runner] events.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      NarrativeEventsModule = null;
+      console.warn("[Runner] Failed to load events.js; tutorial narrative disabled.", err);
+      return null;
+    });
+}
+
+function loadNarrativeData() {
+  return fetch(addCacheBust(NARRATIVE_URL), { cache: "no-store" })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(json => {
+      NARRATIVE_EVENTS = Array.isArray(json?.events) ? json.events : [];
+      console.log("[Runner] tutorial narrative loaded successfully.");
+      return NARRATIVE_EVENTS;
+    })
+    .catch(err => {
+      NARRATIVE_EVENTS = [];
+      console.warn("[Runner] Failed to load tutorial narrative; continuing without it.", err);
+      return [];
+    });
+}
+
 tryFetch([...TILE_URLS])
   .then(res => {
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -389,7 +424,9 @@ for (const bucket of VARIANT_BUCKETS) {
       loadLevels(),
       loadStateModule(),
       loadResumeLinksModule(),
-      loadGameMapRuntimeModule()
+      loadGameMapRuntimeModule(),
+      loadNarrativeEventsModule(),
+      loadNarrativeData()
     ]).then(() => initGame());
   })
   .catch(err => {
@@ -398,7 +435,9 @@ for (const bucket of VARIANT_BUCKETS) {
       loadLevels(),
       loadStateModule(),
       loadResumeLinksModule(),
-      loadGameMapRuntimeModule()
+      loadGameMapRuntimeModule(),
+      loadNarrativeEventsModule(),
+      loadNarrativeData()
     ]).then(() => initGame()); 
   });
   
@@ -686,6 +725,63 @@ function getMapFromSavedState(state) {
   }
 
   return null;
+}
+
+function buildNarrativeState() {
+  if (!StateModule || !runner) return null;
+
+  return StateModule.createInitialState({
+    levelKey: currentLevelKey || "default",
+    exitIndex: currentExitIndex || 0,
+    runner: {
+      ...runner,
+      xp: runner.xp || 0,
+      achievements: runner.achievements || [],
+      storyFlags: runner.storyFlags || {}
+    },
+    world: {
+      mapHash: currentMapString || "",
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
+function applyNarrativeState(state) {
+  if (!state?.runner || !runner) return;
+
+  runner.xp = state.runner.xp || 0;
+  runner.achievements = state.runner.achievements || [];
+  runner.storyFlags = state.runner.storyFlags || {};
+  runner.narrativeEventsSeen = state.world?.narrativeEventsSeen || [];
+}
+
+function runTutorialNarrative(context) {
+  if (!NarrativeEventsModule || !NARRATIVE_EVENTS.length || !runner) return;
+
+  const baseState = buildNarrativeState();
+  if (!baseState) return;
+
+  const result = NarrativeEventsModule.runNarrativeEvents(
+    NARRATIVE_EVENTS,
+    context,
+    baseState
+  );
+
+  applyNarrativeState(result.state);
+
+  for (const action of result.actions || []) {
+    if (action.type === "message" && action.text) {
+      setMessage(action.text, {
+        kind: "tutorial",
+        html: action.html === true
+      });
+    }
+  }
+
+  if ((result.actions || []).length > 0) {
+    updateInfo();
+    savePersistentGameState();
+  }
 }
 
 // ============================================================
@@ -1055,6 +1151,11 @@ if (savedMap && savedGameState?.dice) {
   rollCount = savedGameState.dice.rollCount || 0;
   updateDiceDisplay(dieValue1, dieValue2, false);
 }
+
+runTutorialNarrative({
+  type: "level_start",
+  level: currentLevelKey
+});
   
 if (isFogEnabled()) initFogForCurrentGrid();
 else fog = null;
@@ -1481,6 +1582,7 @@ function updateInfo(label = "") {
   const rolls = rollCount;
   const fallDistance = runner.fallDistance;
   const killCount = runner.kills;
+  const xp = runner.xp || 0;
 
   const lines = [
     label ? `${label}` : null,
@@ -1490,6 +1592,7 @@ function updateInfo(label = "") {
     `Hearts: ${hearts}`,
     `Diamonds: ${diamonds}`,
     `Kills: ${killCount}`,
+    `XP: ${xp}`,
     `Times rolled: ${rolls}`
   ].filter(Boolean);
 
@@ -1814,6 +1917,14 @@ function handlePickupsAtCurrent() {
     runner.kills++;
     if (msg) setMessage(msg, { tileChar: ch, kind: "dead", html: !!def.logHtml });
   }
+
+  runTutorialNarrative({
+    type: "pickup",
+    level: currentLevelKey,
+    tile: ch,
+    variant: signVariantAt(runner.x, runner.y),
+    pickupType: data.pickupType
+  });
 
   grid[runner.y][runner.x] = ".";
   savePersistentGameState();
