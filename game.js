@@ -705,6 +705,7 @@ function buildPersistentGameState() {
       turboMultiplier: runner.turboMultiplier || 2,
       fallDistance: runner.fallDistance || 0,
       xp: runner.xp || 0,
+      stats: runner.stats || {},
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
     },
@@ -775,6 +776,7 @@ function buildNarrativeState() {
     runner: {
       ...runner,
       xp: runner.xp || 0,
+      stats: runner.stats || {},
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
     },
@@ -789,6 +791,7 @@ function applyNarrativeState(state) {
   if (!state?.runner || !runner) return;
 
   runner.xp = state.runner.xp || 0;
+  runner.stats = state.runner.stats || runner.stats || {};
   runner.achievements = state.runner.achievements || [];
   runner.storyFlags = state.runner.storyFlags || {};
   runner.narrativeEventsSeen = state.world?.narrativeEventsSeen || [];
@@ -803,6 +806,7 @@ function buildAchievementState() {
     runner: {
       ...runner,
       xp: runner.xp || 0,
+      stats: runner.stats || {},
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
     },
@@ -840,6 +844,30 @@ function checkStatAchievements() {
   if ((result.unlocked || []).length > 0) {
     updateInfo();
     savePersistentGameState();
+  }
+}
+
+function ensureRunnerStats() {
+  if (!runner.stats || typeof runner.stats !== "object" || Array.isArray(runner.stats)) {
+    runner.stats = {};
+  }
+  return runner.stats;
+}
+
+function addRunnerStat(name, amount = 1) {
+  if (!runner || !name) return 0;
+  const stats = ensureRunnerStats();
+  stats[name] = Math.max(0, Number(stats[name] || 0) + amount);
+  checkStatAchievements();
+  return stats[name];
+}
+
+function recordMovementStats(dx, dy, options = {}) {
+  if (dy === 0 && dx < 0) addRunnerStat("left");
+  if (dy === 0 && dx > 0) addRunnerStat("right");
+  if (dy === -1) {
+    addRunnerStat("jump");
+    if (options.diagonal === true) addRunnerStat("double_jump");
   }
 }
 
@@ -1222,6 +1250,7 @@ runner = {
   bouncePending: false,
   bounceHeightRemaining: 0,
   xp: 0,
+  stats: {},
   achievements: [],
   storyFlags: {},
   narrativeEventsSeen: [],
@@ -1241,6 +1270,8 @@ if (savedMap && savedGameState?.runner) {
     bounceHeightRemaining: 0
   };
 }
+
+ensureRunnerStats();
 
 if (savedMap && savedGameState?.dice) {
   dieValue1 = savedGameState.dice.dieValue1 || 0;
@@ -2112,6 +2143,7 @@ function applyFullGravity() {
 
     logMessage("Falling", { type: "move" });
     runner.fallDistance++;
+    addRunnerStat("fall");
 
     // FIX: apply inside damage to the tile we are now standing in
     applyInsideDamage(thisTile);
@@ -2181,6 +2213,7 @@ function applyGravityAfterMove() {
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
+      addRunnerStat("fall");
     }
 
     // Apply INSIDE damage for the tile we are now in
@@ -2426,6 +2459,7 @@ if (target.solid) {
   if (dy === 0 && dx !== 0) {
     logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
   }
+  recordMovementStats(dx, dy);
 
   checkLanding(prevX, prevY, runner.x, runner.y);
 
@@ -2687,6 +2721,7 @@ if (dy === -1 && !isFluidTile(target)) {
   if (isDiagonalJump) logMessage(dx < 0 ? "Jump ↖" : "Jump ↗", { type: "move" });
   else logMessage("Jump", { type: "move" });
 }
+recordMovementStats(dx, dy, { diagonal: isDiagonalJump });
 // If we were falling and are now supported, resolve landing effects
 const belowNow = tileData(tileAt(runner.x, runner.y + 1));
 if (runner.fallDistance > 0 && belowNow.solid) {

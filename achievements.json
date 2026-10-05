@@ -27,6 +27,51 @@
         "stat": "xp",
         "atLeast": 1
       }
+    },
+    {
+      "id": "first_right",
+      "title": "You moved right.",
+      "body": "Forward is a direction. Probably.",
+      "when": {
+        "stat": "right",
+        "atLeast": 1
+      }
+    },
+    {
+      "id": "first_left",
+      "title": "You moved left.",
+      "body": "Retreating counts as strategy.",
+      "when": {
+        "stat": "left",
+        "atLeast": 1
+      }
+    },
+    {
+      "id": "first_jump",
+      "title": "You jumped.",
+      "body": "Gravity has been notified.",
+      "when": {
+        "stat": "jump",
+        "atLeast": 1
+      }
+    },
+    {
+      "id": "first_double_jump",
+      "title": "You made your first double jump.",
+      "body": "A little airtime, a little audacity.",
+      "when": {
+        "stat": "double_jump",
+        "atLeast": 1
+      }
+    },
+    {
+      "id": "first_fall",
+      "title": "You fell.",
+      "body": "The dungeon has vertical opinions.",
+      "when": {
+        "stat": "fall",
+        "atLeast": 1
+      }
     }
   ]
 }

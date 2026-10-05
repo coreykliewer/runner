@@ -62,4 +62,28 @@ describe("achievement rules", () => {
       "first_xp"
     ]);
   });
+
+  it("can unlock achievements from open-ended runner stats", async () => {
+    const rules = await loadRules();
+    const result = checkAchievementRules(createInitialState({
+      runner: {
+        stats: {
+          right: 1,
+          left: 1,
+          jump: 1,
+          double_jump: 1,
+          fall: 1
+        },
+        achievements: []
+      }
+    }), rules);
+
+    assert.deepEqual(result.unlocked.map(item => item.id), [
+      "first_right",
+      "first_left",
+      "first_jump",
+      "first_double_jump",
+      "first_fall"
+    ]);
+  });
 });

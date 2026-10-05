@@ -30,12 +30,18 @@ export function checkAchievementRules(state, rules = []) {
   return { state: nextState, unlocked };
 }
 
+export function getStateStat(state, stat) {
+  const statBagValue = state.runner?.stats?.[stat];
+  if (statBagValue != null) return Number(statBagValue) || 0;
+  return Number(state.runner?.[stat] || 0);
+}
+
 function ruleMatches(state, rule) {
   const condition = rule?.when || rule;
   if (!rule?.id || !condition?.stat) return false;
   if (hasAchievement(state, rule.id)) return false;
 
-  const value = Number(state.runner?.[condition.stat] || 0);
+  const value = getStateStat(state, condition.stat);
   if (condition.atLeast != null) return value >= condition.atLeast;
   if (condition.lessThan != null) return value < condition.lessThan;
   if (condition.equals != null) return value === condition.equals;
