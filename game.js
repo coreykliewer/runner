@@ -652,6 +652,10 @@ const DEFAULT_CARRY_STATS = {
 };
 
 function encodeCarryStatsFromRunner(r) {
+  if (StateModule?.encodeCarryStatsFromRunner) {
+    return StateModule.encodeCarryStatsFromRunner(r);
+  }
+
   // compact + versioned; numbers base36 to shorten
   return [
     "v1",
@@ -664,6 +668,10 @@ function encodeCarryStatsFromRunner(r) {
 }
 
 function decodeCarryStats(str) {
+  if (StateModule?.decodeCarryStats) {
+    return StateModule.decodeCarryStats(str);
+  }
+
   const out = { ...DEFAULT_CARRY_STATS };
   if (!str || typeof str !== "string") return out;
 
