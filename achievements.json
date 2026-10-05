@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "achievements": [
+    {
+      "id": "first_diamond",
+      "title": "You found your first diamond.",
+      "body": "The dungeon notices shiny habits.",
+      "when": {
+        "stat": "score",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "diamond": 1
+      }
+    },
+    {
+      "id": "first_kill",
+      "title": "You defeated your first monster.",
+      "body": "Something in the dark learned your name.",
+      "when": {
+        "stat": "kills",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "monster_kill": 1
+      }
+    },
+    {
+      "id": "first_xp",
+      "title": "You earned your first XP.",
+      "body": "Progress has a taste now.",
+      "when": {
+        "stat": "xp",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "earned_xp": 1
+      }
+    },
+    {
+      "id": "first_right",
+      "title": "You moved right.",
+      "body": "Forward is a direction. Probably.",
+      "when": {
+        "stat": "right",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "right": 1
+      }
+    },
+    {
+      "id": "first_left",
+      "title": "You moved left.",
+      "body": "Retreating counts as strategy.",
+      "when": {
+        "stat": "left",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "left": 1
+      }
+    },
+    {
+      "id": "first_jump",
+      "title": "You jumped.",
+      "body": "Gravity has been notified.",
+      "when": {
+        "stat": "jump",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "jump": 1
+      }
+    },
+    {
+      "id": "first_double_jump",
+      "title": "You made your first double jump.",
+      "body": "A little airtime, a little audacity.",
+      "when": {
+        "stat": "double_jump",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "double_jump": 1
+      }
+    },
+    {
+      "id": "first_fall",
+      "title": "You fell.",
+      "body": "The dungeon has vertical opinions.",
+      "when": {
+        "stat": "fall",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "fall": 1
+      }
+    },
+    {
+      "id": "first_dice_roll",
+      "title": "You rolled the dice.",
+      "body": "Chance has entered the room.",
+      "when": {
+        "stat": "dice_roll",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "dice_roll": 1
+      }
+    },
+    {
+      "id": "first_fall_in_water",
+      "title": "You fell in water.",
+      "body": "A softer landing, technically.",
+      "when": {
+        "stat": "fall_in_water",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "fall_in_water": 1
+      }
+    }
+  ]
+}

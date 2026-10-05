@@ -62,6 +62,7 @@ let runner = null;
 let monsterStateMap = [];
 let currentLevelKey = "default";
 let currentExitIndex = 0;
+let currentMapString = "";
 let turboGravityUsed = false;
 let kills = 0;
 
@@ -93,6 +94,11 @@ function getHashParamRaw(name) {
 function getStatsFromURL() {
   const raw = getHashParamRaw("st");
   return raw ? safeDecodeURIComponent(raw) : null;
+}
+
+function shouldResumeFromLocalState() {
+  const raw = getHashParamRaw("resume");
+  return raw === "1" || raw === "true";
 }
 
   
@@ -198,6 +204,18 @@ const TILE_URLS = [
     "https://api.allorigins.win/raw?url=https://clikproductions.com/runner/tiles2.json"
 ];
 
+const LEVEL_URL = "levels.json";
+const NARRATIVE_URL = "fixtures/level1-narrative.json";
+const ACHIEVEMENTS_URL = "achievements.json";
+let LEVELS = null;
+let StateModule = null;
+let ResumeLinksModule = null;
+let GameMapRuntimeModule = null;
+let NarrativeEventsModule = null;
+let AchievementsModule = null;
+let NARRATIVE_EVENTS = [];
+let ACHIEVEMENT_RULES = [];
+
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
 
@@ -235,6 +253,154 @@ function tryFetch(urls) {
     });
 }
 
+function loadLevels() {
+  return fetch(addCacheBust(LEVEL_URL), { cache: "no-store" })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(json => {
+      LEVELS = normalizeLevels(json);
+      console.log("[Runner] levels.json loaded successfully.");
+      return LEVELS;
+    })
+    .catch(err => {
+      LEVELS = null;
+      console.warn("[Runner] Failed to load levels.json; using tiles2.json embedded maps.", err);
+      return null;
+    });
+}
+
+function normalizeLevels(json) {
+  const levels = json?.levels && typeof json.levels === "object" ? json.levels : {};
+  return {
+    defaultLevel: json?.defaultLevel || "default",
+    levels
+  };
+}
+
+function getLevelMap(levelKey = "default") {
+  const fromLevels = LEVELS?.levels?.[levelKey]?.map;
+  if (typeof fromLevels === "string" && fromLevels.trim()) return fromLevels;
+
+  const fromTileExit = TILE?.E?.[levelKey];
+  if (typeof fromTileExit === "string" && fromTileExit.trim()) return fromTileExit;
+
+  return null;
+}
+
+function getDefaultLevelKey() {
+  return LEVELS?.defaultLevel || "default";
+}
+
+function loadStateModule() {
+  return import("./src/state.js")
+    .then(module => {
+      StateModule = module;
+      console.log("[Runner] state.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      StateModule = null;
+      console.warn("[Runner] Failed to load state.js; local persistence disabled.", err);
+      return null;
+    });
+}
+
+function loadResumeLinksModule() {
+  return import("./src/resumeLinks.js")
+    .then(module => {
+      ResumeLinksModule = module;
+      window.getRunnerResumeLink = () => module.createLocalResumeUrl(window.location.href);
+      console.log("[Runner] resumeLinks.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      ResumeLinksModule = null;
+      console.warn("[Runner] Failed to load resumeLinks.js; portal links will use fallback hash generation.", err);
+      return null;
+    });
+}
+
+function loadGameMapRuntimeModule() {
+  return import("./src/gameMapRuntime.js")
+    .then(module => {
+      GameMapRuntimeModule = module;
+      console.log("[Runner] gameMapRuntime.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      GameMapRuntimeModule = null;
+      console.warn("[Runner] Failed to load gameMapRuntime.js; using fallback map decoder.", err);
+      return null;
+    });
+}
+
+function loadNarrativeEventsModule() {
+  return import("./src/events.js")
+    .then(module => {
+      NarrativeEventsModule = module;
+      console.log("[Runner] events.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      NarrativeEventsModule = null;
+      console.warn("[Runner] Failed to load events.js; tutorial narrative disabled.", err);
+      return null;
+    });
+}
+
+function loadNarrativeData() {
+  return fetch(addCacheBust(NARRATIVE_URL), { cache: "no-store" })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(json => {
+      NARRATIVE_EVENTS = Array.isArray(json?.events) ? json.events : [];
+      console.log("[Runner] tutorial narrative loaded successfully.");
+      return NARRATIVE_EVENTS;
+    })
+    .catch(err => {
+      NARRATIVE_EVENTS = [];
+      console.warn("[Runner] Failed to load tutorial narrative; continuing without it.", err);
+      return [];
+    });
+}
+
+function loadAchievementsModule() {
+  return import("./src/achievements.js")
+    .then(module => {
+      AchievementsModule = module;
+      console.log("[Runner] achievements.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      AchievementsModule = null;
+      console.warn("[Runner] Failed to load achievements.js; stat achievements disabled.", err);
+      return null;
+    });
+}
+
+function loadAchievementRules() {
+  return fetch(addCacheBust(ACHIEVEMENTS_URL), { cache: "no-store" })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(json => {
+      ACHIEVEMENT_RULES = AchievementsModule
+        ? AchievementsModule.normalizeAchievementRules(json)
+        : (Array.isArray(json?.achievements) ? json.achievements : []);
+      console.log("[Runner] achievements.json loaded successfully.");
+      return ACHIEVEMENT_RULES;
+    })
+    .catch(err => {
+      ACHIEVEMENT_RULES = [];
+      console.warn("[Runner] Failed to load achievements.json; stat achievements disabled.", err);
+      return [];
+    });
+}
 
 tryFetch([...TILE_URLS])
   .then(res => {
@@ -290,12 +456,28 @@ for (const bucket of VARIANT_BUCKETS) {
 }
 
     }
-    // FIX: Initialize game ONLY after tiles are loaded
-    initGame(); 
+    // FIX: Initialize game ONLY after tiles and optional levels are loaded
+    return Promise.all([
+      loadLevels(),
+      loadStateModule(),
+      loadResumeLinksModule(),
+      loadGameMapRuntimeModule(),
+      loadNarrativeEventsModule(),
+      loadNarrativeData(),
+      loadAchievementsModule().then(() => loadAchievementRules())
+    ]).then(() => initGame());
   })
   .catch(err => {
     console.error("[Runner] Failed to load tiles2.json, using fallback only:", err);
-    initGame(); 
+    Promise.all([
+      loadLevels(),
+      loadStateModule(),
+      loadResumeLinksModule(),
+      loadGameMapRuntimeModule(),
+      loadNarrativeEventsModule(),
+      loadNarrativeData(),
+      loadAchievementsModule().then(() => loadAchievementRules())
+    ]).then(() => initGame()); 
   });
   
   
@@ -506,6 +688,239 @@ function decodeCarryStats(str) {
   return out;
 }
 
+function buildPersistentGameState() {
+  if (!StateModule || !runner) return null;
+
+  return StateModule.createInitialState({
+    levelKey: currentLevelKey || "default",
+    exitIndex: currentExitIndex || 0,
+    runner: {
+      x: runner.x,
+      y: runner.y,
+      hearts: runner.hearts,
+      score: runner.score,
+      kills: runner.kills,
+      jumpCredits: runner.jumpCredits || 0,
+      turbo: runner.turbo === true,
+      turboMultiplier: runner.turboMultiplier || 2,
+      fallDistance: runner.fallDistance || 0,
+      xp: runner.xp || 0,
+      counters: runner.counters || {},
+      stats: runner.stats || {},
+      achievements: runner.achievements || [],
+      storyFlags: runner.storyFlags || {}
+    },
+    dice: {
+      dieValue1,
+      dieValue2,
+      selectedDie,
+      rollCount
+    },
+    world: {
+      mapHash: currentMapString && ResumeLinksModule
+        ? ResumeLinksModule.createResumeHash({
+          map: currentMapString,
+          runner,
+          level: currentLevelKey || "default"
+        })
+        : (window.location.hash || ""),
+      fogRevealed: [],
+      pickupsCollected: [],
+      monstersDefeated: [],
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
+function savePersistentGameState() {
+  if (!StateModule || !runner) return;
+
+  try {
+    const state = buildPersistentGameState();
+    if (state) StateModule.saveState(state);
+  } catch (err) {
+    console.warn("[Runner] Failed to save local game state.", err);
+  }
+}
+
+function getSavedGameState() {
+  if (!StateModule) return null;
+
+  try {
+    return StateModule.loadState();
+  } catch (err) {
+    console.warn("[Runner] Failed to load local game state.", err);
+    return null;
+  }
+}
+
+function getMapFromSavedState(state) {
+  const hash = state?.world?.mapHash || "";
+  if (!hash) return null;
+
+  const params = hash.startsWith("#") ? hash.slice(1) : hash;
+  for (const part of params.split("&")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq) === "map") return safeDecodeURIComponent(part.slice(eq + 1));
+  }
+
+  return null;
+}
+
+function buildNarrativeState() {
+  if (!StateModule || !runner) return null;
+
+  return StateModule.createInitialState({
+    levelKey: currentLevelKey || "default",
+    exitIndex: currentExitIndex || 0,
+    runner: {
+      ...runner,
+      xp: runner.xp || 0,
+      counters: runner.counters || {},
+      stats: runner.stats || {},
+      achievements: runner.achievements || [],
+      storyFlags: runner.storyFlags || {}
+    },
+    world: {
+      mapHash: currentMapString || "",
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
+function applyNarrativeState(state) {
+  if (!state?.runner || !runner) return;
+
+  runner.xp = state.runner.xp || 0;
+  runner.counters = state.runner.counters || runner.counters || {};
+  runner.stats = state.runner.stats || runner.stats || {};
+  runner.achievements = state.runner.achievements || [];
+  runner.storyFlags = state.runner.storyFlags || {};
+  runner.narrativeEventsSeen = state.world?.narrativeEventsSeen || [];
+}
+
+function buildAchievementState() {
+  if (!StateModule || !runner) return null;
+
+  return StateModule.createInitialState({
+    levelKey: currentLevelKey || "default",
+    exitIndex: currentExitIndex || 0,
+    runner: {
+      ...runner,
+      xp: runner.xp || 0,
+      counters: runner.counters || {},
+      stats: runner.stats || {},
+      achievements: runner.achievements || [],
+      storyFlags: runner.storyFlags || {}
+    },
+    world: {
+      mapHash: currentMapString || "",
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
+function applyAchievementState(state) {
+  applyNarrativeState(state);
+}
+
+function renderAchievement(action) {
+  setMessage(formatAchievementMessage(action), {
+    kind: "achievement",
+    html: true
+  });
+}
+
+function checkStatAchievements() {
+  if (!AchievementsModule || !ACHIEVEMENT_RULES.length || !runner) return;
+
+  const baseState = buildAchievementState();
+  if (!baseState) return;
+
+  const result = AchievementsModule.checkAchievementRules(baseState, ACHIEVEMENT_RULES);
+  applyAchievementState(result.state);
+
+  for (const achievement of result.unlocked || []) {
+    renderAchievement(achievement);
+  }
+
+  if ((result.unlocked || []).length > 0) {
+    updateInfo();
+    savePersistentGameState();
+  }
+}
+
+function ensureRunnerStats() {
+  if (!runner.stats || typeof runner.stats !== "object" || Array.isArray(runner.stats)) {
+    runner.stats = {};
+  }
+  return runner.stats;
+}
+
+function ensureRunnerCounters() {
+  if (!runner.counters || typeof runner.counters !== "object" || Array.isArray(runner.counters)) {
+    runner.counters = {};
+  }
+  return runner.counters;
+}
+
+function addRunnerCounter(name, amount = 1) {
+  if (!runner || !name) return 0;
+  const counters = ensureRunnerCounters();
+  counters[name] = Math.max(0, Number(counters[name] || 0) + amount);
+  checkStatAchievements();
+  return counters[name];
+}
+
+function recordMovementStats(dx, dy, options = {}) {
+  if (dy === 0 && dx < 0) addRunnerCounter("left");
+  if (dy === 0 && dx > 0) addRunnerCounter("right");
+  if (dy === -1) {
+    addRunnerCounter("jump");
+    if (options.diagonal === true) addRunnerCounter("double_jump");
+  }
+}
+
+function runTutorialNarrative(context) {
+  if (!NarrativeEventsModule || !NARRATIVE_EVENTS.length || !runner) return;
+
+  const baseState = buildNarrativeState();
+  if (!baseState) return;
+
+  const result = NarrativeEventsModule.runNarrativeEvents(
+    NARRATIVE_EVENTS,
+    context,
+    baseState
+  );
+
+  applyNarrativeState(result.state);
+
+  for (const action of result.actions || []) {
+    if (action.type === "message" && action.text) {
+      setMessage(action.text, {
+        kind: "tutorial",
+        html: action.html === true
+      });
+    } else if (action.type === "achievement" && action.title) {
+      renderAchievement(action);
+    }
+  }
+
+  checkStatAchievements();
+
+  if ((result.actions || []).length > 0) {
+    updateInfo();
+    savePersistentGameState();
+  }
+}
+
+function formatAchievementMessage(action) {
+  const title = action.title || "Achievement unlocked";
+  const body = action.body ? `<br>${action.body}` : "";
+  return `<b>ACHIEVEMENT: ${title}</b>${body}`;
+}
+
 // ============================================================
 // Default hard-coded level map (fallback when no #map=...)
 // Also used as fallback when exit key "E" is not defined in tiles2.json
@@ -659,6 +1074,20 @@ if (savedLevel) {
 }
 
 function decodeMap(encoded) {
+  if (GameMapRuntimeModule) {
+    const runtime = GameMapRuntimeModule.decodeGameMap(encoded, {
+      tiles: TILE,
+      rows: ROWS,
+      cols: COLS
+    });
+
+    signVariantMap = runtime.signVariantMap;
+    monsterStateMap = runtime.monsterStateMap;
+    bounceHeight = runtime.bounceHeight;
+    sinkDelayMap = runtime.sinkDelayMap;
+    return runtime.grid;
+  }
+
   let rowStrings;
 
   if (encoded.includes("~")) rowStrings = encoded.split("~");
@@ -689,7 +1118,7 @@ function decodeMap(encoded) {
 
 
 function hasEDefaultMap() {
-  const s = TILE?.["E"]?.["default"];
+  const s = getLevelMap(getDefaultLevelKey());
   return (typeof s === "string" && s.trim().length > 0);
 }    
 
@@ -717,6 +1146,8 @@ function hasEDefaultMap() {
 
 
     // --- MAP BUILDING ----
+    const savedGameState = shouldResumeFromLocalState() ? getSavedGameState() : null;
+    const savedMap = getMapFromSavedState(savedGameState);
     const encodedMap = getMapFromURL();
   
 
@@ -744,26 +1175,38 @@ function hasEDefaultMap() {
 
 if (encodedMap) {
   console.log("Using encoded map:", encodedMap);
+  currentMapString = encodedMap;
   grid = decodeMap(encodedMap);
 
+} else if (savedMap) {
+  console.log("Using saved local game map.");
+  currentLevelKey = savedGameState.levelKey || currentLevelKey || "default";
+  currentExitIndex = savedGameState.exitIndex || 0;
+  currentMapString = savedMap;
+  sessionStorage.setItem("levelKey", currentLevelKey);
+  sessionStorage.setItem("exitIndex", currentExitIndex);
+  grid = decodeMap(savedMap);
+
 } else {
-  console.log("No #map in URL; booting from tiles2.json E.default ONLY");
+  console.log("No #map in URL; booting from levels.json default level or tiles2.json fallback");
   signVariantMap = []; // reset variants for new map
 
-  const mapString = TILE?.E?.default;
+  const levelKey = getDefaultLevelKey();
+  const mapString = getLevelMap(levelKey);
 
   if (typeof mapString !== "string" || !mapString.trim()) {
     // Hard fail: do NOT load factory, do NOT guess.
     gameOver = true;
-    setMessage("BOOT ERROR: tiles2.json is missing E.default, so no level can load.", {
+    setMessage("BOOT ERROR: no default level map could be loaded.", {
       kind: "message"
     });
     draw();
     return;
   }
 
-  currentLevelKey = "default";
-  sessionStorage.setItem("levelKey", "default");
+  currentLevelKey = levelKey;
+  currentMapString = mapString;
+  sessionStorage.setItem("levelKey", levelKey);
   grid = decodeMap(mapString);
 }
 
@@ -817,11 +1260,49 @@ runner = {
   heartFlashTimer: 0,
   bouncePending: false,
   bounceHeightRemaining: 0,
+  xp: 0,
+  counters: {},
+  stats: {},
+  achievements: [],
+  storyFlags: {},
+  narrativeEventsSeen: [],
   dead: false
 };
+
+if (savedMap && savedGameState?.runner) {
+  runner = {
+    ...runner,
+    ...savedGameState.runner,
+    dead: false,
+    damageFlashTimer: 0,
+    diamondFlashTimer: 0,
+    turboFlashTimer: 0,
+    heartFlashTimer: 0,
+    bouncePending: false,
+    bounceHeightRemaining: 0
+  };
+}
+
+ensureRunnerStats();
+ensureRunnerCounters();
+
+if (savedMap && savedGameState?.dice) {
+  dieValue1 = savedGameState.dice.dieValue1 || 0;
+  dieValue2 = savedGameState.dice.dieValue2 || 0;
+  selectedDie = savedGameState.dice.selectedDie || null;
+  rollCount = savedGameState.dice.rollCount || 0;
+  updateDiceDisplay(dieValue1, dieValue2, false);
+}
+
+runTutorialNarrative({
+  type: "level_start",
+  level: currentLevelKey
+});
   
 if (isFogEnabled()) initFogForCurrentGrid();
 else fog = null;
+
+savePersistentGameState();
 
 
     // Start the game loop now that everything is ready
@@ -935,6 +1416,7 @@ function tileData(ch) {
     bounce: typeof def.bounce === "number" ? def.bounce : 0,
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
+    effects: Array.isArray(def.effects) ? def.effects : [],
     exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
     slope: def.slope || null,
@@ -1243,6 +1725,7 @@ function updateInfo(label = "") {
   const rolls = rollCount;
   const fallDistance = runner.fallDistance;
   const killCount = runner.kills;
+  const xp = runner.xp || 0;
 
   const lines = [
     label ? `${label}` : null,
@@ -1252,10 +1735,12 @@ function updateInfo(label = "") {
     `Hearts: ${hearts}`,
     `Diamonds: ${diamonds}`,
     `Kills: ${killCount}`,
+    `XP: ${xp}`,
     `Times rolled: ${rolls}`
   ].filter(Boolean);
 
   el.innerHTML = lines.join("<br>");
+  savePersistentGameState();
 }
 
 
@@ -1282,6 +1767,7 @@ function takeDamage(n, sourceTile) {
   runner.hearts -= n;
   runner.damageFlashTimer = 10;
   deathReason = sourceTile.deathMessage;
+  savePersistentGameState();
   if (runner.hearts <= 0) {
       setMessage(deathReason);
       endGame();
@@ -1538,7 +2024,7 @@ function checkAdjacentMonsterAttacks() {
 function handlePickupsAtCurrent() {
   const ch = tileAt(runner.x, runner.y);
   const data = tileData(ch);
-  if (!data.pickupType) return;
+  if (!data.pickupType && data.effects.length === 0) return;
 
   const def = TILE?.[ch] || {};
   
@@ -1575,7 +2061,52 @@ function handlePickupsAtCurrent() {
     if (msg) setMessage(msg, { tileChar: ch, kind: "dead", html: !!def.logHtml });
   }
 
+  applyPickupEffects(data.effects, { tileChar: ch, def });
+
+  runTutorialNarrative({
+    type: "pickup",
+    level: currentLevelKey,
+    tile: ch,
+    variant: signVariantAt(runner.x, runner.y),
+    pickupType: data.pickupType
+  });
+  checkStatAchievements();
+
   grid[runner.y][runner.x] = ".";
+  savePersistentGameState();
+}
+
+function applyPickupEffects(effects, { tileChar, def } = {}) {
+  if (!Array.isArray(effects)) return;
+
+  for (const effect of effects) {
+    if (!effect || typeof effect !== "object") continue;
+    const amount = Number(effect.amount ?? 1);
+
+    if (effect.type === "counter" && effect.stat) {
+      addRunnerCounter(effect.stat, Number.isFinite(amount) ? amount : 1);
+    } else if (effect.type === "xp") {
+      runner.xp = Math.max(0, (runner.xp || 0) + (Number.isFinite(amount) ? amount : 0));
+      checkStatAchievements();
+    } else if (effect.type === "score") {
+      runner.score = Math.max(0, (runner.score || 0) + (Number.isFinite(amount) ? amount : 0));
+      checkStatAchievements();
+    } else if (effect.type === "heart") {
+      runner.hearts = Math.max(0, (runner.hearts || 0) + (Number.isFinite(amount) ? amount : 0));
+      runner.heartFlashTimer = 10;
+    } else if (effect.type === "setFlag" && effect.flag) {
+      runner.storyFlags = {
+        ...(runner.storyFlags || {}),
+        [effect.flag]: effect.value ?? true
+      };
+    } else if (effect.type === "message" && effect.text) {
+      setMessage(effect.text, {
+        tileChar,
+        kind: effect.kind || def?.logKind || "message",
+        html: effect.html === true
+      });
+    }
+  }
 }
 
 
@@ -1653,6 +2184,7 @@ function applyFullGravity() {
     // If we just entered fluid, do NOT accumulate fall distance.
     if (thisTile.gravity === false) {
       runner.fallDistance = 0;
+      addRunnerCounter("fall_in_water");
       setMessage("Fall was broken.");
       applyInsideDamage(thisTile);
       if (gameOver) return;
@@ -1661,6 +2193,7 @@ function applyFullGravity() {
 
     logMessage("Falling", { type: "move" });
     runner.fallDistance++;
+    addRunnerCounter("fall");
 
     // FIX: apply inside damage to the tile we are now standing in
     applyInsideDamage(thisTile);
@@ -1727,9 +2260,11 @@ function applyGravityAfterMove() {
     // If we stepped into a no-gravity tile (water), fall distance should not accumulate.
     if (nowHere.gravity === false) {
       runner.fallDistance = 0;
+      addRunnerCounter("fall_in_water");
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
+      addRunnerCounter("fall");
     }
 
     // Apply INSIDE damage for the tile we are now in
@@ -1975,6 +2510,7 @@ if (target.solid) {
   if (dy === 0 && dx !== 0) {
     logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
   }
+  recordMovementStats(dx, dy);
 
   checkLanding(prevX, prevY, runner.x, runner.y);
 
@@ -1992,10 +2528,10 @@ function handleExit(tile) {
   // find the exit key (variant) at runner position
   const destKey = exitIdAt(runner.x, runner.y) || "default";
 
-  const mapString = TILE?.E?.[destKey];
+  const mapString = getLevelMap(destKey);
 
   if (typeof mapString !== "string" || !mapString.trim()) {
-    setMessage(`Exit ${destKey} is not wired (no TILE.E.${destKey} map found).`, {
+    setMessage(`Exit ${destKey} is not wired (no level map found).`, {
       tileChar: "E",
       kind: "message"
     });
@@ -2010,10 +2546,18 @@ function handleExit(tile) {
   updateInfo(`Entering ${destKey}...`);
   draw();
 
-  const st = encodeCarryStatsFromRunner(runner);
-  window.location.hash =
-    "#map=" + encodeURIComponent(mapString) +
-    "&st=" + encodeURIComponent(st);
+  if (ResumeLinksModule) {
+    window.location.hash = ResumeLinksModule.createResumeHash({
+      map: mapString,
+      runner,
+      level: destKey
+    });
+  } else {
+    const st = encodeCarryStatsFromRunner(runner);
+    window.location.hash =
+      "#map=" + encodeURIComponent(mapString) +
+      "&st=" + encodeURIComponent(st);
+  }
 
   setTimeout(() => window.location.reload(), 0);
 }
@@ -2228,6 +2772,7 @@ if (dy === -1 && !isFluidTile(target)) {
   if (isDiagonalJump) logMessage(dx < 0 ? "Jump ↖" : "Jump ↗", { type: "move" });
   else logMessage("Jump", { type: "move" });
 }
+recordMovementStats(dx, dy, { diagonal: isDiagonalJump });
 // If we were falling and are now supported, resolve landing effects
 const belowNow = tileData(tileAt(runner.x, runner.y + 1));
 if (runner.fallDistance > 0 && belowNow.solid) {
@@ -2492,6 +3037,7 @@ if (inWater()) {
   dieValue1 = a;
   dieValue2 = b;
   updateDiceDisplay(a, b, true);
+  addRunnerCounter("dice_roll");
   runner.jumpCredits = 2;
   runner.movementLeft = totalMovementPoints();
 
@@ -2504,6 +3050,7 @@ if (inWater()) {
   }
   const rollText = `Rolled ${a}+${b} = ${a + b}`;
 logMessage(rollText, { type: "roll" });
+savePersistentGameState();
 
 }
 

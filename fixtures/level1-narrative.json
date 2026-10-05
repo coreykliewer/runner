@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "events": [
+    {
+      "id": "level1_intro",
+      "once": true,
+      "trigger": {
+        "type": "level_start",
+        "level": "default"
+      },
+      "actions": [
+        {
+          "type": "message",
+          "text": "The dungeon breathes around you. Find the exits, keep your dice close, and do not trust quiet water."
+        },
+        {
+          "type": "story_flag",
+          "flag": "entered_dungeon",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "first_diamond",
+      "once": true,
+      "trigger": {
+        "type": "pickup",
+        "pickupType": "diamond"
+      },
+      "actions": [
+        {
+          "type": "xp",
+          "amount": 5
+        }
+      ]
+    }
+  ]
+}

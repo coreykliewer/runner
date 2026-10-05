@@ -1,4 +1,11 @@
-// EDIT NOTE: Added hash-param parsing for `map` via getHashParamRaw() and switched URL auto-load to decode only the `map` value, improving multi-param hash handling.
+// EDIT NOTE: Editor now uses shared v2 map codec and variant helpers.
+import {
+  decodeRowToTilesAndVariants,
+  encodeRowWithVariants as encodeSharedRowWithVariants,
+  splitRowsFlexible
+} from "./src/shared/mapCodec.js";
+import { sanitizeVariant } from "./src/shared/variants.js";
+
 // ---------------------------------------------------------
 // Global tile metadata (loaded from tiles2.json)
 // ---------------------------------------------------------
@@ -16,19 +23,6 @@ const variantMap = Array.from({ length: ROWS }, () => Array(COLS).fill(""));
 
 const grid = document.getElementById("grid");
 const variantBox = document.getElementById("variantBox");
-
-// ---------------------------------------------------------
-// Variant sanitization (safe URL + safe keys)
-// Adjust allowed chars/len as you like
-// ---------------------------------------------------------
-function sanitizeVariant(raw) {
-  if (!raw) return "";
-  const v = String(raw).trim();
-  if (!v) return "";
-  // allow a-z, 0-9, underscore, dash only
-  const cleaned = v.toLowerCase().replace(/[^a-z0-9_-]/g, "");
-  return cleaned.slice(0, 12);
-}
 
 function getBrushVariant() {
   return sanitizeVariant(variantBox ? variantBox.value : "");
@@ -125,26 +119,6 @@ function highlightPaletteTile(code) {
   });
 }
 
-
-function splitRowsFlexible(raw) {
-  const s = (raw || "").trim();
-  if (!s) return [];
-
-  // Prefer ~ first (your canonical row separator), then legacy '.', then newlines
-  const delim = s.includes("~") ? "~" : (s.includes(".") ? "." : null);
-
-  if (delim) {
-    return s
-      .split(delim)
-      .map(r => r.trim())
-      .filter(r => r.length > 0);
-  }
-
-  return s
-    .split(/\r?\n/)
-    .map(r => r.trim())
-    .filter(r => r.length > 0);
-}
 
 function getHashParamRaw(name) {
   const hash = (window.location.hash || "").replace(/^#/, "");
@@ -261,78 +235,8 @@ function buildTileSelector() {
   console.log("[EDITOR] Tile palette built.");
 }
 
-// ---------------------------------------------------------
-// ENCODING / DECODING (tile + optional {variant} + count)
-// "." is encoded as "A" (air alias) for backward compatibility
-// ---------------------------------------------------------
-function encodeChar(c) {
-  return (c === "." ? "A" : c);
-}
-
 function encodeRowWithVariants(y) {
-  let result = "";
-  let count = 1;
-
-  const rowTiles = map[y];
-  const rowVars = variantMap[y];
-
-  const normVar = (t, v) => {
-    // air never carries variant
-    if (t === "." || t === "A") return "";
-    return sanitizeVariant(v || "");
-  };
-
-  for (let x = 1; x <= COLS; x++) {
-    const prevT = rowTiles[x - 1];
-    const prevV = normVar(prevT, rowVars[x - 1]);
-
-    const curT = rowTiles[x];
-    const curV = normVar(curT, rowVars[x]);
-
-    if (x < COLS && curT === prevT && curV === prevV) {
-      count++;
-    } else {
-      const t = encodeChar(prevT);
-      if (prevV) result += `${t}{${prevV}}${count}`;
-      else result += `${t}${count}`;
-      count = 1;
-    }
-  }
-
-  return result;
-}
-
-function decodeRowToTilesAndVariants(encoded) {
-  // Supports both:
-  // - old: P12A3W1
-  // - new: I{aa}1P12
-  const regex = /([A-Za-z])(?:\{([^}]*)\})?(\d+)/g;
-
-  const tiles = [];
-  const vars = [];
-
-  let match;
-  while ((match = regex.exec(encoded)) !== null) {
-    let char = match[1];
-    const rawVar = match[2]; // may be undefined
-    const count = parseInt(match[3], 10);
-
-    if (char === "A") char = ".";
-
-    const v = sanitizeVariant(rawVar || "");
-    for (let i = 0; i < count; i++) {
-      tiles.push(char);
-      // store no variant for air
-      vars.push(char === "." ? "" : v);
-    }
-  }
-
-  // Pad/truncate to COLS defensively
-  while (tiles.length < COLS) { tiles.push("."); vars.push(""); }
-  tiles.length = COLS;
-  vars.length = COLS;
-
-  return { tiles, vars };
+  return encodeSharedRowWithVariants(map[y], variantMap[y], COLS);
 }
 
 // ---------------------------------------------------------
@@ -367,7 +271,7 @@ document.getElementById("loadMap").addEventListener("click", () => {
   const code = document.getElementById("mapBox").value.trim();
   if (!code) return alert("Paste a map code first.");
 
-const rows = splitRowsFlexible(code);
+  const rows = splitRowsFlexible(code);
   if (rows.length !== ROWS) {
     return alert("Incorrect number of rows.");
   }
@@ -377,7 +281,7 @@ const rows = splitRowsFlexible(code);
 
     for (let x = 0; x < COLS; x++) {
       map[y][x] = decoded.tiles[x];
-      variantMap[y][x] = decoded.vars[x];
+      variantMap[y][x] = decoded.variants[x];
 
       drawTileToContext(
         grid.children[y * COLS + x].getContext("2d"),
@@ -501,7 +405,7 @@ document.getElementById("dynamicMap").addEventListener("click", () => {
   const code = decodeURIComponent(rawMap);
   if (!code) return;
 
-const rows = splitRowsFlexible(code);
+  const rows = splitRowsFlexible(code);
   if (rows.length !== ROWS) {
     alert("Map code in URL is invalid (wrong row count).");
     return;
@@ -512,7 +416,7 @@ const rows = splitRowsFlexible(code);
 
     for (let x = 0; x < COLS; x++) {
       map[y][x] = decoded.tiles[x];
-      variantMap[y][x] = decoded.vars[x];
+      variantMap[y][x] = decoded.variants[x];
 
       drawTileToContext(
         grid.children[y * COLS + x].getContext("2d"),
