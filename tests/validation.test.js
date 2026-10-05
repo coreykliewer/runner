@@ -53,14 +53,19 @@ describe("validation", () => {
         when: {
           all: [
             {
-              left: "pickup.type",
+              left: "movement.attempted",
               operator: "equals",
-              right: { literal: "turbo" }
+              right: { literal: true }
             },
             {
               left: "movementPoints",
               operator: "lessThan",
-              right: { literal: 1 }
+              right: "target.moveCost"
+            },
+            {
+              left: "dice.rollCount",
+              operator: "equals",
+              right: { literal: 0 }
             }
           ]
         }

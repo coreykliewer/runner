@@ -782,6 +782,12 @@ function buildNarrativeState() {
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
     },
+    dice: {
+      dieValue1,
+      dieValue2,
+      selectedDie,
+      rollCount
+    },
     world: {
       mapHash: currentMapString || "",
       narrativeEventsSeen: runner.narrativeEventsSeen || []
@@ -902,12 +908,19 @@ function buildMovementAchievementContext({
   return {
     movementPoints: totalMovementPoints(),
     movement: {
+      attempted: true,
       dx,
       dy,
       from: { x: fromX, y: fromY },
       to: { x: toX, y: toY },
       moveCost,
       diagonal: isDiagonalJump === true
+    },
+    dice: {
+      dieValue1,
+      dieValue2,
+      selectedDie,
+      rollCount
     },
     current: tileAchievementContext(here),
     target: {
@@ -2795,7 +2808,10 @@ function diagonalJump(dx) {
     isDiagonalJump
   });
 
-  if (totalMovementPoints() <= 0 && !turboExecuting) return;
+  if (totalMovementPoints() <= 0 && !turboExecuting) {
+    checkStatAchievements(movementAchievementContext);
+    return;
+  }
 
 if (target.solid && !target.slope) {
 

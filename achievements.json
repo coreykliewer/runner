@@ -134,23 +134,28 @@
       }
     },
     {
-      "id": "turbo_without_movement",
-      "title": "Optimistic.",
-      "body": "You picked up turbo with no movement points left.",
+      "id": "roll_before_moving",
+      "title": "Roll before you move.",
+      "body": "Movement comes from the dice. Roll first, then spend those points to move.",
       "when": {
         "all": [
           {
-            "left": "pickup.type",
+            "left": "movement.attempted",
             "operator": "equals",
             "right": {
-              "literal": "turbo"
+              "literal": true
             }
           },
           {
             "left": "movementPoints",
             "operator": "lessThan",
+            "right": "target.moveCost"
+          },
+          {
+            "left": "dice.rollCount",
+            "operator": "equals",
             "right": {
-              "literal": 1
+              "literal": 0
             }
           }
         ]

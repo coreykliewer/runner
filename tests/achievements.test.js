@@ -174,19 +174,24 @@ describe("achievement rules", () => {
 
   it("supports compound achievement conditions", () => {
     const rules = [{
-      id: "turbo_without_movement",
-      title: "Optimistic.",
+      id: "roll_before_moving",
+      title: "Roll before you move.",
       when: {
         all: [
           {
-            left: "pickup.type",
+            left: "movement.attempted",
             operator: "equals",
-            right: { literal: "turbo" }
+            right: { literal: true }
           },
           {
             left: "movementPoints",
             operator: "lessThan",
-            right: { literal: 1 }
+            right: "target.moveCost"
+          },
+          {
+            left: "dice.rollCount",
+            operator: "equals",
+            right: { literal: 0 }
           }
         ]
       }
@@ -195,56 +200,34 @@ describe("achievement rules", () => {
       runner: { achievements: [] }
     }), rules, {
       movementPoints: 0,
-      pickup: { type: "turbo" }
+      movement: { attempted: true },
+      target: { moveCost: 1 },
+      dice: { rollCount: 0 }
     });
 
-    assert.deepEqual(result.unlocked.map(item => item.id), ["turbo_without_movement"]);
+    assert.deepEqual(result.unlocked.map(item => item.id), ["roll_before_moving"]);
   });
 
-  it("does not unlock turbo-without-movement for other pickups", () => {
+  it("unlocks roll-before-moving for higher cost target tiles without naming the tile", () => {
     const rules = [{
-      id: "turbo_without_movement",
-      title: "Optimistic.",
+      id: "roll_before_moving",
+      title: "Roll before you move.",
       when: {
         all: [
           {
-            left: "pickup.type",
+            left: "movement.attempted",
             operator: "equals",
-            right: { literal: "turbo" }
+            right: { literal: true }
           },
           {
             left: "movementPoints",
             operator: "lessThan",
-            right: { literal: 1 }
-          }
-        ]
-      }
-    }];
-    const result = checkAchievementRules(createInitialState({
-      runner: { achievements: [] }
-    }), rules, {
-      movementPoints: 0,
-      pickup: { type: "diamond" }
-    });
-
-    assert.deepEqual(result.unlocked, []);
-  });
-
-  it("does not unlock turbo-without-movement when movement remains", () => {
-    const rules = [{
-      id: "turbo_without_movement",
-      title: "Optimistic.",
-      when: {
-        all: [
-          {
-            left: "pickup.type",
-            operator: "equals",
-            right: { literal: "turbo" }
+            right: "target.moveCost"
           },
           {
-            left: "movementPoints",
-            operator: "lessThan",
-            right: { literal: 1 }
+            left: "dice.rollCount",
+            operator: "equals",
+            right: { literal: 0 }
           }
         ]
       }
@@ -253,7 +236,81 @@ describe("achievement rules", () => {
       runner: { achievements: [] }
     }), rules, {
       movementPoints: 1,
-      pickup: { type: "turbo" }
+      movement: { attempted: true },
+      target: { moveCost: 2 },
+      dice: { rollCount: 0 }
+    });
+
+    assert.deepEqual(result.unlocked.map(item => item.id), ["roll_before_moving"]);
+  });
+
+  it("does not unlock roll-before-moving after the player has rolled", () => {
+    const rules = [{
+      id: "roll_before_moving",
+      title: "Roll before you move.",
+      when: {
+        all: [
+          {
+            left: "movement.attempted",
+            operator: "equals",
+            right: { literal: true }
+          },
+          {
+            left: "movementPoints",
+            operator: "lessThan",
+            right: "target.moveCost"
+          },
+          {
+            left: "dice.rollCount",
+            operator: "equals",
+            right: { literal: 0 }
+          }
+        ]
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      movementPoints: 0,
+      movement: { attempted: true },
+      target: { moveCost: 1 },
+      dice: { rollCount: 1 }
+    });
+
+    assert.deepEqual(result.unlocked, []);
+  });
+
+  it("does not unlock roll-before-moving when enough movement is available", () => {
+    const rules = [{
+      id: "roll_before_moving",
+      title: "Roll before you move.",
+      when: {
+        all: [
+          {
+            left: "movement.attempted",
+            operator: "equals",
+            right: { literal: true }
+          },
+          {
+            left: "movementPoints",
+            operator: "lessThan",
+            right: "target.moveCost"
+          },
+          {
+            left: "dice.rollCount",
+            operator: "equals",
+            right: { literal: 0 }
+          }
+        ]
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      movementPoints: 2,
+      movement: { attempted: true },
+      target: { moveCost: 2 },
+      dice: { rollCount: 0 }
     });
 
     assert.deepEqual(result.unlocked, []);
