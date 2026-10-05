@@ -30,7 +30,8 @@
       "actions": [
         {
           "type": "message",
-          "text": "You found your first diamond. The dungeon notices shiny habits."
+          "text": "<b>ACHIEVEMENT: You found your first diamond.</b><br>The dungeon notices shiny habits.",
+          "html": true
         },
         {
           "type": "xp",
