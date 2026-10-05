@@ -47,8 +47,8 @@ describe("progression and narrative events", () => {
 
     assert.equal(result.state.runner.xp, 5);
     assert.equal(result.state.runner.achievements[0].id, "shiny_start");
-    assert.equal(result.actions[0].type, "message");
-    assert.equal(result.actions[0].html, true);
-    assert.match(result.actions[0].text, /<b>ACHIEVEMENT:/);
+    assert.equal(result.actions[0].type, "achievement");
+    assert.equal(result.actions[0].title, "You found your first diamond.");
+    assert.equal(result.actions[0].body, "The dungeon notices shiny habits.");
   });
 });

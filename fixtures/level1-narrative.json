@@ -29,18 +29,14 @@
       },
       "actions": [
         {
-          "type": "message",
-          "text": "<b>ACHIEVEMENT: You found your first diamond.</b><br>The dungeon notices shiny habits.",
-          "html": true
-        },
-        {
           "type": "xp",
           "amount": 5
         },
         {
           "type": "achievement",
           "id": "shiny_start",
-          "title": "Shiny Start"
+          "title": "You found your first diamond.",
+          "body": "The dungeon notices shiny habits."
         }
       ]
     }

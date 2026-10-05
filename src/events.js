@@ -59,7 +59,14 @@ export function applyNarrativeAction(action, state) {
   }
 
   if (action.type === "achievement") {
-    return { state: unlockAchievement(state, action) };
+    return {
+      state: unlockAchievement(state, action),
+      output: {
+        type: "achievement",
+        title: action.title || action.id || "Achievement unlocked",
+        body: action.body || action.message || ""
+      }
+    };
   }
 
   if (action.type === "story_flag") {

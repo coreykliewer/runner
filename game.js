@@ -775,6 +775,11 @@ function runTutorialNarrative(context) {
         kind: "tutorial",
         html: action.html === true
       });
+    } else if (action.type === "achievement" && action.title) {
+      setMessage(formatAchievementMessage(action), {
+        kind: "achievement",
+        html: true
+      });
     }
   }
 
@@ -782,6 +787,12 @@ function runTutorialNarrative(context) {
     updateInfo();
     savePersistentGameState();
   }
+}
+
+function formatAchievementMessage(action) {
+  const title = action.title || "Achievement unlocked";
+  const body = action.body ? `<br>${action.body}` : "";
+  return `<b>ACHIEVEMENT: ${title}</b>${body}`;
 }
 
 // ============================================================
