@@ -22,8 +22,22 @@ export function validateTiles(tiles) {
     if (def.gravity != null && typeof def.gravity !== "boolean") {
       issues.push(issue("error", `tiles.${code}.gravity`, "gravity must be boolean."));
     }
+    if (def.tags != null) {
+      if (!Array.isArray(def.tags)) {
+        issues.push(issue("error", `tiles.${code}.tags`, "tags must be an array."));
+      } else {
+        for (const [index, tag] of def.tags.entries()) {
+          if (typeof tag !== "string" || sanitizeVariant(tag) !== tag) {
+            issues.push(issue("error", `tiles.${code}.tags[${index}]`, "Tile tags must be sanitized strings."));
+          }
+        }
+      }
+    }
     if (def.effects != null) {
       issues.push(...validateEffects(def.effects, `tiles.${code}.effects`));
+    }
+    if (def.grantStats != null) {
+      issues.push(...validateStatGrants(def.grantStats, `tiles.${code}.grantStats`, "Tile stat grants"));
     }
     for (const bucket of VARIANT_BUCKETS) {
       const group = def[bucket];
@@ -75,6 +89,24 @@ function validateEffects(effects, path) {
     }
     if (effect.amount != null && !Number.isFinite(Number(effect.amount))) {
       issues.push(issue("error", `${effectPath}.amount`, "Effect amount must be numeric."));
+    }
+  }
+
+  return issues;
+}
+
+function validateStatGrants(grants, path, label) {
+  const issues = [];
+  if (typeof grants !== "object" || Array.isArray(grants)) {
+    return [issue("error", path, `${label} must be an object.`)];
+  }
+
+  for (const [stat, value] of Object.entries(grants)) {
+    if (!stat) {
+      issues.push(issue("error", path, `${label} names are required.`));
+    }
+    if (!Number.isFinite(Number(value))) {
+      issues.push(issue("error", `${path}.${stat}`, `${label} values must be numeric.`));
     }
   }
 
@@ -149,18 +181,7 @@ export function validateAchievements(achievementFile) {
     }
 
     if (achievement.grantStats != null) {
-      if (typeof achievement.grantStats !== "object" || Array.isArray(achievement.grantStats)) {
-        issues.push(issue("error", `${path}.grantStats`, "Achievement stat grants must be an object."));
-      } else {
-        for (const [stat, value] of Object.entries(achievement.grantStats)) {
-          if (!stat) {
-            issues.push(issue("error", `${path}.grantStats`, "Achievement stat grant names are required."));
-          }
-          if (!Number.isFinite(Number(value))) {
-            issues.push(issue("error", `${path}.grantStats.${stat}`, "Achievement stat grant values must be numeric."));
-          }
-        }
-      }
+      issues.push(...validateStatGrants(achievement.grantStats, `${path}.grantStats`, "Achievement stat grants"));
     }
   }
 

@@ -42,4 +42,17 @@ describe("validation", () => {
 
     assert.equal(errors.length, 3);
   });
+
+  it("validates tile stat grants", () => {
+    const errors = validateTiles({
+      W: {
+        tags: ["water"],
+        grantStats: {
+          in_water: 1
+        }
+      }
+    }).filter(item => item.severity === "error");
+
+    assert.deepEqual(errors, []);
+  });
 });

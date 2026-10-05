@@ -874,11 +874,15 @@ function addRunnerCounter(name, amount = 1) {
 }
 
 function recordMovementStats(dx, dy, options = {}) {
+  addRunnerCounter("move");
   if (dy === 0 && dx < 0) addRunnerCounter("left");
   if (dy === 0 && dx > 0) addRunnerCounter("right");
   if (dy === -1) {
     addRunnerCounter("jump");
     if (options.diagonal === true) addRunnerCounter("double_jump");
+  }
+  for (const tag of options.tile?.tags || []) {
+    addRunnerCounter(`move_in_${tag}`);
   }
 }
 
@@ -1417,6 +1421,8 @@ function tileData(ch) {
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
     effects: Array.isArray(def.effects) ? def.effects : [],
+    grantStats: (def.grantStats && typeof def.grantStats === "object" && !Array.isArray(def.grantStats)) ? def.grantStats : null,
+    tags: Array.isArray(def.tags) ? def.tags : [],
     exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
     slope: def.slope || null,
@@ -2076,6 +2082,20 @@ function handlePickupsAtCurrent() {
   savePersistentGameState();
 }
 
+function applyTileStatGrants(tile) {
+  if (!tile?.grantStats) return;
+
+  const stats = ensureRunnerStats();
+  let changed = false;
+  for (const [name, amount] of Object.entries(tile.grantStats)) {
+    const value = Number(amount);
+    if (!name || !Number.isFinite(value)) continue;
+    stats[name] = Math.max(0, Number(stats[name] || 0) + value);
+    changed = true;
+  }
+  if (changed) checkStatAchievements();
+}
+
 function applyPickupEffects(effects, { tileChar, def } = {}) {
   if (!Array.isArray(effects)) return;
 
@@ -2185,6 +2205,7 @@ function applyFullGravity() {
     if (thisTile.gravity === false) {
       runner.fallDistance = 0;
       addRunnerCounter("fall_in_water");
+      applyTileStatGrants(thisTile);
       setMessage("Fall was broken.");
       applyInsideDamage(thisTile);
       if (gameOver) return;
@@ -2261,6 +2282,7 @@ function applyGravityAfterMove() {
     if (nowHere.gravity === false) {
       runner.fallDistance = 0;
       addRunnerCounter("fall_in_water");
+      applyTileStatGrants(nowHere);
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
@@ -2510,11 +2532,12 @@ if (target.solid) {
   if (dy === 0 && dx !== 0) {
     logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
   }
-  recordMovementStats(dx, dy);
 
   checkLanding(prevX, prevY, runner.x, runner.y);
 
   const tile = tileData(tileAt(runner.x, runner.y));
+  recordMovementStats(dx, dy, { tile });
+  applyTileStatGrants(tile);
   if (tile.exit) {
     handleExit(tile);
     return false; // stop further movement
@@ -2772,7 +2795,6 @@ if (dy === -1 && !isFluidTile(target)) {
   if (isDiagonalJump) logMessage(dx < 0 ? "Jump ↖" : "Jump ↗", { type: "move" });
   else logMessage("Jump", { type: "move" });
 }
-recordMovementStats(dx, dy, { diagonal: isDiagonalJump });
 // If we were falling and are now supported, resolve landing effects
 const belowNow = tileData(tileAt(runner.x, runner.y + 1));
 if (runner.fallDistance > 0 && belowNow.solid) {
@@ -2794,6 +2816,8 @@ handlePickupsAtCurrent();
 
 // Re-read tile after pickups (pickups can change the tile underfoot)
 const tileAfterPickups = tileData(tileAt(runner.x, runner.y));
+recordMovementStats(dx, dy, { diagonal: isDiagonalJump, tile: tileAfterPickups });
+applyTileStatGrants(tileAfterPickups);
 if (tileAfterPickups.exit) {
   handleExit(tileAfterPickups);
   return;

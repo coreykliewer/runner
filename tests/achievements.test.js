@@ -138,4 +138,18 @@ describe("achievement rules", () => {
     assert.equal(tenth.state.runner.stats.dice_master, 1);
   });
 
+  it("unlocks a swimming stat after enough water movement", async () => {
+    const rules = await loadRules();
+    const result = checkAchievementRules(createInitialState({
+      runner: {
+        counters: { move_in_water: 100 },
+        stats: {},
+        achievements: []
+      }
+    }), rules);
+
+    assert.deepEqual(result.unlocked.map(item => item.id), ["hundred_water_moves"]);
+    assert.equal(result.state.runner.stats.swimming, 1);
+  });
+
 });
