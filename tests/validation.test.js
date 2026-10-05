@@ -34,12 +34,13 @@ describe("validation", () => {
       ".": {
         effects: [
           { type: "counter" },
+          { type: "stat" },
           { type: "message" },
           { type: "xp", amount: "many" }
         ]
       }
     }).filter(item => item.severity === "error");
 
-    assert.equal(errors.length, 3);
+    assert.equal(errors.length, 4);
   });
 });

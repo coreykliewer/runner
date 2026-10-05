@@ -2090,6 +2090,10 @@ function applyPickupEffects(effects, { tileChar, def } = {}) {
 
     if (effect.type === "counter" && effect.stat) {
       addRunnerCounter(effect.stat, Number.isFinite(amount) ? amount : 1);
+    } else if (effect.type === "stat" && effect.stat) {
+      const stats = ensureRunnerStats();
+      stats[effect.stat] = Math.max(0, Number(stats[effect.stat] || 0) + (Number.isFinite(amount) ? amount : 1));
+      checkStatAchievements();
     } else if (effect.type === "xp") {
       runner.xp = Math.max(0, (runner.xp || 0) + (Number.isFinite(amount) ? amount : 0));
       checkStatAchievements();
