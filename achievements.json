@@ -96,6 +96,18 @@
       "grantStats": {
         "fall": 1
       }
+    },
+    {
+      "id": "first_dice_roll",
+      "title": "You rolled the dice.",
+      "body": "Chance has entered the room.",
+      "when": {
+        "stat": "dice_roll",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "dice_roll": 1
+      }
     }
   ]
 }

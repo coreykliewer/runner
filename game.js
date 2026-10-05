@@ -2999,6 +2999,7 @@ if (inWater()) {
   dieValue1 = a;
   dieValue2 = b;
   updateDiceDisplay(a, b, true);
+  addRunnerCounter("dice_roll");
   runner.jumpCredits = 2;
   runner.movementLeft = totalMovementPoints();
 

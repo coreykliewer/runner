@@ -73,7 +73,8 @@ describe("achievement rules", () => {
           left: 1,
           jump: 1,
           double_jump: 1,
-          fall: 1
+          fall: 1,
+          dice_roll: 1
         },
         stats: {},
         achievements: []
@@ -85,14 +86,16 @@ describe("achievement rules", () => {
       "first_left",
       "first_jump",
       "first_double_jump",
-      "first_fall"
+      "first_fall",
+      "first_dice_roll"
     ]);
     assert.deepEqual(result.state.runner.stats, {
       right: 1,
       left: 1,
       jump: 1,
       double_jump: 1,
-      fall: 1
+      fall: 1,
+      dice_roll: 1
     });
   });
 });
