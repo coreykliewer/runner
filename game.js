@@ -200,6 +200,7 @@ const TILE_URLS = [
 
 const LEVEL_URL = "levels.json";
 let LEVELS = null;
+let StateModule = null;
 
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
@@ -278,6 +279,20 @@ function getDefaultLevelKey() {
   return LEVELS?.defaultLevel || "default";
 }
 
+function loadStateModule() {
+  return import("./src/state.js")
+    .then(module => {
+      StateModule = module;
+      console.log("[Runner] state.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      StateModule = null;
+      console.warn("[Runner] Failed to load state.js; local persistence disabled.", err);
+      return null;
+    });
+}
+
 tryFetch([...TILE_URLS])
   .then(res => {
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -333,11 +348,11 @@ for (const bucket of VARIANT_BUCKETS) {
 
     }
     // FIX: Initialize game ONLY after tiles and optional levels are loaded
-    return loadLevels().then(() => initGame());
+    return Promise.all([loadLevels(), loadStateModule()]).then(() => initGame());
   })
   .catch(err => {
     console.error("[Runner] Failed to load tiles2.json, using fallback only:", err);
-    loadLevels().then(() => initGame()); 
+    Promise.all([loadLevels(), loadStateModule()]).then(() => initGame()); 
   });
   
   
@@ -546,6 +561,53 @@ function decodeCarryStats(str) {
   out.turboMultiplier = Math.max(1, out.turboMultiplier);
 
   return out;
+}
+
+function buildPersistentGameState() {
+  if (!StateModule || !runner) return null;
+
+  return StateModule.createInitialState({
+    levelKey: currentLevelKey || "default",
+    exitIndex: currentExitIndex || 0,
+    runner: {
+      x: runner.x,
+      y: runner.y,
+      hearts: runner.hearts,
+      score: runner.score,
+      kills: runner.kills,
+      jumpCredits: runner.jumpCredits || 0,
+      turbo: runner.turbo === true,
+      turboMultiplier: runner.turboMultiplier || 2,
+      fallDistance: runner.fallDistance || 0,
+      xp: runner.xp || 0,
+      achievements: runner.achievements || [],
+      storyFlags: runner.storyFlags || {}
+    },
+    dice: {
+      dieValue1,
+      dieValue2,
+      selectedDie,
+      rollCount
+    },
+    world: {
+      mapHash: window.location.hash || "",
+      fogRevealed: [],
+      pickupsCollected: [],
+      monstersDefeated: [],
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
+function savePersistentGameState() {
+  if (!StateModule || !runner) return;
+
+  try {
+    const state = buildPersistentGameState();
+    if (state) StateModule.saveState(state);
+  } catch (err) {
+    console.warn("[Runner] Failed to save local game state.", err);
+  }
 }
 
 // ============================================================
@@ -860,11 +922,17 @@ runner = {
   heartFlashTimer: 0,
   bouncePending: false,
   bounceHeightRemaining: 0,
+  xp: 0,
+  achievements: [],
+  storyFlags: {},
+  narrativeEventsSeen: [],
   dead: false
 };
   
 if (isFogEnabled()) initFogForCurrentGrid();
 else fog = null;
+
+savePersistentGameState();
 
 
     // Start the game loop now that everything is ready
@@ -1299,6 +1367,7 @@ function updateInfo(label = "") {
   ].filter(Boolean);
 
   el.innerHTML = lines.join("<br>");
+  savePersistentGameState();
 }
 
 
@@ -1325,6 +1394,7 @@ function takeDamage(n, sourceTile) {
   runner.hearts -= n;
   runner.damageFlashTimer = 10;
   deathReason = sourceTile.deathMessage;
+  savePersistentGameState();
   if (runner.hearts <= 0) {
       setMessage(deathReason);
       endGame();
@@ -1619,6 +1689,7 @@ function handlePickupsAtCurrent() {
   }
 
   grid[runner.y][runner.x] = ".";
+  savePersistentGameState();
 }
 
 
@@ -2547,6 +2618,7 @@ if (inWater()) {
   }
   const rollText = `Rolled ${a}+${b} = ${a + b}`;
 logMessage(rollText, { type: "roll" });
+savePersistentGameState();
 
 }
 
