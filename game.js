@@ -1421,7 +1421,7 @@ function tileData(ch) {
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
     effects: Array.isArray(def.effects) ? def.effects : [],
-    enterEffects: Array.isArray(def.enterEffects) ? def.enterEffects : [],
+    grantStats: (def.grantStats && typeof def.grantStats === "object" && !Array.isArray(def.grantStats)) ? def.grantStats : null,
     tags: Array.isArray(def.tags) ? def.tags : [],
     exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
@@ -2082,9 +2082,18 @@ function handlePickupsAtCurrent() {
   savePersistentGameState();
 }
 
-function applyEnterEffects(tile, tileChar) {
-  if (!tile?.enterEffects?.length) return;
-  applyPickupEffects(tile.enterEffects, { tileChar, def: TILE?.[tileChar] || {} });
+function applyTileStatGrants(tile) {
+  if (!tile?.grantStats) return;
+
+  const stats = ensureRunnerStats();
+  let changed = false;
+  for (const [name, amount] of Object.entries(tile.grantStats)) {
+    const value = Number(amount);
+    if (!name || !Number.isFinite(value)) continue;
+    stats[name] = Math.max(0, Number(stats[name] || 0) + value);
+    changed = true;
+  }
+  if (changed) checkStatAchievements();
 }
 
 function applyPickupEffects(effects, { tileChar, def } = {}) {
@@ -2096,10 +2105,6 @@ function applyPickupEffects(effects, { tileChar, def } = {}) {
 
     if (effect.type === "counter" && effect.stat) {
       addRunnerCounter(effect.stat, Number.isFinite(amount) ? amount : 1);
-    } else if (effect.type === "stat" && effect.stat) {
-      const stats = ensureRunnerStats();
-      stats[effect.stat] = Math.max(0, Number(stats[effect.stat] || 0) + (Number.isFinite(amount) ? amount : 1));
-      checkStatAchievements();
     } else if (effect.type === "xp") {
       runner.xp = Math.max(0, (runner.xp || 0) + (Number.isFinite(amount) ? amount : 0));
       checkStatAchievements();
@@ -2200,7 +2205,7 @@ function applyFullGravity() {
     if (thisTile.gravity === false) {
       runner.fallDistance = 0;
       addRunnerCounter("fall_in_water");
-      applyEnterEffects(thisTile, tileAt(runner.x, runner.y));
+      applyTileStatGrants(thisTile);
       setMessage("Fall was broken.");
       applyInsideDamage(thisTile);
       if (gameOver) return;
@@ -2277,7 +2282,7 @@ function applyGravityAfterMove() {
     if (nowHere.gravity === false) {
       runner.fallDistance = 0;
       addRunnerCounter("fall_in_water");
-      applyEnterEffects(nowHere, tileAt(runner.x, runner.y));
+      applyTileStatGrants(nowHere);
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
@@ -2532,7 +2537,7 @@ if (target.solid) {
 
   const tile = tileData(tileAt(runner.x, runner.y));
   recordMovementStats(dx, dy, { tile });
-  applyEnterEffects(tile, tileAt(runner.x, runner.y));
+  applyTileStatGrants(tile);
   if (tile.exit) {
     handleExit(tile);
     return false; // stop further movement
@@ -2812,7 +2817,7 @@ handlePickupsAtCurrent();
 // Re-read tile after pickups (pickups can change the tile underfoot)
 const tileAfterPickups = tileData(tileAt(runner.x, runner.y));
 recordMovementStats(dx, dy, { diagonal: isDiagonalJump, tile: tileAfterPickups });
-applyEnterEffects(tileAfterPickups, tileAt(runner.x, runner.y));
+applyTileStatGrants(tileAfterPickups);
 if (tileAfterPickups.exit) {
   handleExit(tileAfterPickups);
   return;

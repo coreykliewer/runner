@@ -34,23 +34,22 @@ describe("validation", () => {
       ".": {
         effects: [
           { type: "counter" },
-          { type: "stat" },
           { type: "message" },
           { type: "xp", amount: "many" }
         ]
       }
     }).filter(item => item.severity === "error");
 
-    assert.equal(errors.length, 4);
+    assert.equal(errors.length, 3);
   });
 
-  it("validates tile enter effects", () => {
+  it("validates tile stat grants", () => {
     const errors = validateTiles({
       W: {
         tags: ["water"],
-        enterEffects: [
-          { type: "stat", stat: "in_water", amount: 1 }
-        ]
+        grantStats: {
+          in_water: 1
+        }
       }
     }).filter(item => item.severity === "error");
 

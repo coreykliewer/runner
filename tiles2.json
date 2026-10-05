@@ -35,13 +35,9 @@
     "solid": false,
     "gravity": false,
     "tags": ["water"],
-    "enterEffects": [
-      {
-        "type": "stat",
-        "stat": "in_water",
-        "amount": 1
-      }
-    ],
+    "grantStats": {
+      "in_water": 1
+    },
     "sinkSpeed": 1,
     "riseSpeed": 1,
     "moveCost": 1,
