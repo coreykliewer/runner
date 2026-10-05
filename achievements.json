@@ -120,6 +120,18 @@
       "grantStats": {
         "fall_in_water": 1
       }
+    },
+    {
+      "id": "first_yoyo",
+      "title": "You found your first yoyo.",
+      "body": "It hums like it has been waiting.",
+      "when": {
+        "stat": "found_yoyo",
+        "atLeast": 1
+      },
+      "grantStats": {
+        "yoyo": 1
+      }
     }
   ]
 }

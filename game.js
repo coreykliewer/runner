@@ -1416,6 +1416,7 @@ function tileData(ch) {
     bounce: typeof def.bounce === "number" ? def.bounce : 0,
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
+    effects: Array.isArray(def.effects) ? def.effects : [],
     exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
     slope: def.slope || null,
@@ -2023,7 +2024,7 @@ function checkAdjacentMonsterAttacks() {
 function handlePickupsAtCurrent() {
   const ch = tileAt(runner.x, runner.y);
   const data = tileData(ch);
-  if (!data.pickupType) return;
+  if (!data.pickupType && data.effects.length === 0) return;
 
   const def = TILE?.[ch] || {};
   
@@ -2060,6 +2061,8 @@ function handlePickupsAtCurrent() {
     if (msg) setMessage(msg, { tileChar: ch, kind: "dead", html: !!def.logHtml });
   }
 
+  applyPickupEffects(data.effects, { tileChar: ch, def });
+
   runTutorialNarrative({
     type: "pickup",
     level: currentLevelKey,
@@ -2071,6 +2074,43 @@ function handlePickupsAtCurrent() {
 
   grid[runner.y][runner.x] = ".";
   savePersistentGameState();
+}
+
+function applyPickupEffects(effects, { tileChar, def } = {}) {
+  if (!Array.isArray(effects)) return;
+
+  for (const effect of effects) {
+    if (!effect || typeof effect !== "object") continue;
+    const amount = Number(effect.amount ?? 1);
+
+    if (effect.type === "counter" && effect.stat) {
+      addRunnerCounter(effect.stat, Number.isFinite(amount) ? amount : 1);
+    } else if (effect.type === "stat" && effect.stat) {
+      const stats = ensureRunnerStats();
+      stats[effect.stat] = Math.max(0, Number(stats[effect.stat] || 0) + (Number.isFinite(amount) ? amount : 1));
+      checkStatAchievements();
+    } else if (effect.type === "xp") {
+      runner.xp = Math.max(0, (runner.xp || 0) + (Number.isFinite(amount) ? amount : 0));
+      checkStatAchievements();
+    } else if (effect.type === "score") {
+      runner.score = Math.max(0, (runner.score || 0) + (Number.isFinite(amount) ? amount : 0));
+      checkStatAchievements();
+    } else if (effect.type === "heart") {
+      runner.hearts = Math.max(0, (runner.hearts || 0) + (Number.isFinite(amount) ? amount : 0));
+      runner.heartFlashTimer = 10;
+    } else if (effect.type === "setFlag" && effect.flag) {
+      runner.storyFlags = {
+        ...(runner.storyFlags || {}),
+        [effect.flag]: effect.value ?? true
+      };
+    } else if (effect.type === "message" && effect.text) {
+      setMessage(effect.text, {
+        tileChar,
+        kind: effect.kind || def?.logKind || "message",
+        html: effect.html === true
+      });
+    }
+  }
 }
 
 

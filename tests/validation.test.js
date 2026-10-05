@@ -28,4 +28,18 @@ describe("validation", () => {
     const errors = validateAchievements(achievements).filter(item => item.severity === "error");
     assert.deepEqual(errors, []);
   });
+
+  it("reports invalid tile effects", () => {
+    const errors = validateTiles({
+      ".": {
+        effects: [
+          { type: "counter" },
+          { type: "message" },
+          { type: "xp", amount: "many" }
+        ]
+      }
+    }).filter(item => item.severity === "error");
+
+    assert.equal(errors.length, 3);
+  });
 });

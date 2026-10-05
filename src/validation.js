@@ -22,6 +22,9 @@ export function validateTiles(tiles) {
     if (def.gravity != null && typeof def.gravity !== "boolean") {
       issues.push(issue("error", `tiles.${code}.gravity`, "gravity must be boolean."));
     }
+    if (def.effects != null) {
+      issues.push(...validateEffects(def.effects, `tiles.${code}.effects`));
+    }
     for (const bucket of VARIANT_BUCKETS) {
       const group = def[bucket];
       if (!group) continue;
@@ -35,6 +38,43 @@ export function validateTiles(tiles) {
           issues.push(issue("error", `tiles.${code}.${bucket}.${key}`, "Variant key is not sanitized."));
         }
       }
+    }
+  }
+
+  return issues;
+}
+
+function validateEffects(effects, path) {
+  const issues = [];
+  const allowed = new Set(["counter", "stat", "xp", "heart", "score", "message", "setFlag"]);
+
+  if (!Array.isArray(effects)) {
+    return [issue("error", path, "effects must be an array.")];
+  }
+
+  for (const [index, effect] of effects.entries()) {
+    const effectPath = `${path}[${index}]`;
+    if (!effect || typeof effect !== "object" || Array.isArray(effect)) {
+      issues.push(issue("error", effectPath, "Effect must be an object."));
+      continue;
+    }
+
+    if (!allowed.has(effect.type)) {
+      issues.push(issue("error", `${effectPath}.type`, "Effect type is not supported."));
+      continue;
+    }
+
+    if ((effect.type === "counter" || effect.type === "stat") && !effect.stat) {
+      issues.push(issue("error", `${effectPath}.stat`, "Effect stat is required."));
+    }
+    if (effect.type === "message" && !effect.text) {
+      issues.push(issue("error", `${effectPath}.text`, "Message effect text is required."));
+    }
+    if (effect.type === "setFlag" && !effect.flag) {
+      issues.push(issue("error", `${effectPath}.flag`, "Flag effect name is required."));
+    }
+    if (effect.amount != null && !Number.isFinite(Number(effect.amount))) {
+      issues.push(issue("error", `${effectPath}.amount`, "Effect amount must be numeric."));
     }
   }
 
