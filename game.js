@@ -2116,7 +2116,18 @@ function handlePickupsAtCurrent() {
     variant: signVariantAt(runner.x, runner.y),
     pickupType: data.pickupType
   });
-  checkStatAchievements();
+  checkStatAchievements({
+    movementPoints: totalMovementPoints(),
+    pickup: {
+      type: data.pickupType || null,
+      tile: ch,
+      variant: signVariantAt(runner.x, runner.y)
+    },
+    current: {
+      ...tileAchievementContext(data),
+      ch
+    }
+  });
 
   grid[runner.y][runner.x] = ".";
   savePersistentGameState();
@@ -2784,10 +2795,7 @@ function diagonalJump(dx) {
     isDiagonalJump
   });
 
-  if (totalMovementPoints() <= 0 && !turboExecuting) {
-    checkStatAchievements(movementAchievementContext);
-    return;
-  }
+  if (totalMovementPoints() <= 0 && !turboExecuting) return;
 
 if (target.solid && !target.slope) {
 
@@ -2832,8 +2840,8 @@ if (target.solid && !target.slope) {
   let moveCost = attemptedMoveCost;
 
   if (!turboExecuting) {
-    checkStatAchievements(movementAchievementContext);
     if (!spendMovement(moveCost)) return;
+    checkStatAchievements(movementAchievementContext);
   }
 
   const hadJumpCredit = (dy === -1 && !isFluidTile(target) && runner.jumpCredits > 0);

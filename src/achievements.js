@@ -64,6 +64,20 @@ function ruleMatches(state, rule, context = {}) {
   if (!rule?.id || !condition) return false;
   if (hasAchievement(state, rule.id)) return false;
 
+  return conditionMatches(state, condition, context);
+}
+
+function conditionMatches(state, condition, context = {}) {
+  if (!condition || typeof condition !== "object") return false;
+
+  if (Array.isArray(condition.all)) {
+    return condition.all.every(item => conditionMatches(state, item, context));
+  }
+
+  if (Array.isArray(condition.any)) {
+    return condition.any.some(item => conditionMatches(state, item, context));
+  }
+
   if (condition.left != null && condition.operator && condition.right != null) {
     return compareValues(
       resolveValue(condition.left, state, context),

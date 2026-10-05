@@ -172,61 +172,88 @@ describe("achievement rules", () => {
     assert.deepEqual(result.unlocked.map(item => item.id), ["low_resource"]);
   });
 
-  it("unlocks insufficient movement for moveCost 1 when player has 0 points", () => {
+  it("supports compound achievement conditions", () => {
     const rules = [{
-      id: "first_insufficient_movement",
+      id: "turbo_without_movement",
       title: "Optimistic.",
       when: {
-        left: "movementPoints",
-        operator: "lessThan",
-        right: "target.moveCost"
+        all: [
+          {
+            left: "pickup.type",
+            operator: "equals",
+            right: { literal: "turbo" }
+          },
+          {
+            left: "movementPoints",
+            operator: "lessThan",
+            right: { literal: 1 }
+          }
+        ]
       }
     }];
     const result = checkAchievementRules(createInitialState({
       runner: { achievements: [] }
     }), rules, {
       movementPoints: 0,
-      target: { moveCost: 1 }
+      pickup: { type: "turbo" }
     });
 
-    assert.deepEqual(result.unlocked.map(item => item.id), ["first_insufficient_movement"]);
+    assert.deepEqual(result.unlocked.map(item => item.id), ["turbo_without_movement"]);
   });
 
-  it("unlocks insufficient movement for moveCost 2 when player has 1 point", () => {
+  it("does not unlock turbo-without-movement for other pickups", () => {
     const rules = [{
-      id: "first_insufficient_movement",
+      id: "turbo_without_movement",
       title: "Optimistic.",
       when: {
-        left: "movementPoints",
-        operator: "lessThan",
-        right: "target.moveCost"
+        all: [
+          {
+            left: "pickup.type",
+            operator: "equals",
+            right: { literal: "turbo" }
+          },
+          {
+            left: "movementPoints",
+            operator: "lessThan",
+            right: { literal: 1 }
+          }
+        ]
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      movementPoints: 0,
+      pickup: { type: "diamond" }
+    });
+
+    assert.deepEqual(result.unlocked, []);
+  });
+
+  it("does not unlock turbo-without-movement when movement remains", () => {
+    const rules = [{
+      id: "turbo_without_movement",
+      title: "Optimistic.",
+      when: {
+        all: [
+          {
+            left: "pickup.type",
+            operator: "equals",
+            right: { literal: "turbo" }
+          },
+          {
+            left: "movementPoints",
+            operator: "lessThan",
+            right: { literal: 1 }
+          }
+        ]
       }
     }];
     const result = checkAchievementRules(createInitialState({
       runner: { achievements: [] }
     }), rules, {
       movementPoints: 1,
-      target: { moveCost: 2 }
-    });
-
-    assert.deepEqual(result.unlocked.map(item => item.id), ["first_insufficient_movement"]);
-  });
-
-  it("does not unlock insufficient movement when points equal target moveCost", () => {
-    const rules = [{
-      id: "first_insufficient_movement",
-      title: "Optimistic.",
-      when: {
-        left: "movementPoints",
-        operator: "lessThan",
-        right: "target.moveCost"
-      }
-    }];
-    const result = checkAchievementRules(createInitialState({
-      runner: { achievements: [] }
-    }), rules, {
-      movementPoints: 2,
-      target: { moveCost: 2 }
+      pickup: { type: "turbo" }
     });
 
     assert.deepEqual(result.unlocked, []);

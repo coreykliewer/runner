@@ -134,13 +134,26 @@
       }
     },
     {
-      "id": "first_insufficient_movement",
+      "id": "turbo_without_movement",
       "title": "Optimistic.",
-      "body": "You tried to move without enough points.",
+      "body": "You picked up turbo with no movement points left.",
       "when": {
-        "left": "movementPoints",
-        "operator": "lessThan",
-        "right": "target.moveCost"
+        "all": [
+          {
+            "left": "pickup.type",
+            "operator": "equals",
+            "right": {
+              "literal": "turbo"
+            }
+          },
+          {
+            "left": "movementPoints",
+            "operator": "lessThan",
+            "right": {
+              "literal": 1
+            }
+          }
+        ]
       }
     }
   ]

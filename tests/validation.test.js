@@ -45,6 +45,31 @@ describe("validation", () => {
     assert.deepEqual(errors, []);
   });
 
+  it("validates compound achievement conditions", () => {
+    const errors = validateAchievements({
+      achievements: [{
+        id: "compound",
+        title: "Compound",
+        when: {
+          all: [
+            {
+              left: "pickup.type",
+              operator: "equals",
+              right: { literal: "turbo" }
+            },
+            {
+              left: "movementPoints",
+              operator: "lessThan",
+              right: { literal: 1 }
+            }
+          ]
+        }
+      }]
+    }).filter(item => item.severity === "error");
+
+    assert.deepEqual(errors, []);
+  });
+
   it("reports invalid achievement value comparisons", () => {
     const errors = validateAchievements({
       achievements: [{
