@@ -881,7 +881,9 @@ function recordMovementStats(dx, dy, options = {}) {
     addRunnerCounter("jump");
     if (options.diagonal === true) addRunnerCounter("double_jump");
   }
-  if (options.inWater === true) addRunnerCounter("move_in_water");
+  for (const tag of options.tile?.tags || []) {
+    addRunnerCounter(`move_in_${tag}`);
+  }
 }
 
 function runTutorialNarrative(context) {
@@ -1419,6 +1421,7 @@ function tileData(ch) {
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
     effects: Array.isArray(def.effects) ? def.effects : [],
+    tags: Array.isArray(def.tags) ? def.tags : [],
     exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
     slope: def.slope || null,
@@ -2516,7 +2519,7 @@ if (target.solid) {
   checkLanding(prevX, prevY, runner.x, runner.y);
 
   const tile = tileData(tileAt(runner.x, runner.y));
-  recordMovementStats(dx, dy, { inWater: isFluidTile(tile) });
+  recordMovementStats(dx, dy, { tile });
   if (tile.exit) {
     handleExit(tile);
     return false; // stop further movement
@@ -2774,7 +2777,6 @@ if (dy === -1 && !isFluidTile(target)) {
   if (isDiagonalJump) logMessage(dx < 0 ? "Jump ↖" : "Jump ↗", { type: "move" });
   else logMessage("Jump", { type: "move" });
 }
-recordMovementStats(dx, dy, { diagonal: isDiagonalJump });
 // If we were falling and are now supported, resolve landing effects
 const belowNow = tileData(tileAt(runner.x, runner.y + 1));
 if (runner.fallDistance > 0 && belowNow.solid) {
@@ -2796,6 +2798,7 @@ handlePickupsAtCurrent();
 
 // Re-read tile after pickups (pickups can change the tile underfoot)
 const tileAfterPickups = tileData(tileAt(runner.x, runner.y));
+recordMovementStats(dx, dy, { diagonal: isDiagonalJump, tile: tileAfterPickups });
 if (tileAfterPickups.exit) {
   handleExit(tileAfterPickups);
   return;
@@ -2806,7 +2809,6 @@ runAttributeCheck();
 // Gravity / swim resolution
 // Gravity / swim resolution
 if (isFluidTile(tileAfterPickups)) {
-  addRunnerCounter("move_in_water");
   runner.fallDistance = 0;
   logMessage("Swim", { type: "move" });
 } else {

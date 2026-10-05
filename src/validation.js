@@ -22,6 +22,17 @@ export function validateTiles(tiles) {
     if (def.gravity != null && typeof def.gravity !== "boolean") {
       issues.push(issue("error", `tiles.${code}.gravity`, "gravity must be boolean."));
     }
+    if (def.tags != null) {
+      if (!Array.isArray(def.tags)) {
+        issues.push(issue("error", `tiles.${code}.tags`, "tags must be an array."));
+      } else {
+        for (const [index, tag] of def.tags.entries()) {
+          if (typeof tag !== "string" || sanitizeVariant(tag) !== tag) {
+            issues.push(issue("error", `tiles.${code}.tags[${index}]`, "Tile tags must be sanitized strings."));
+          }
+        }
+      }
+    }
     if (def.effects != null) {
       issues.push(...validateEffects(def.effects, `tiles.${code}.effects`));
     }
