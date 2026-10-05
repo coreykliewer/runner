@@ -122,6 +122,39 @@
       }
     },
     {
+      "id": "first_fall_damage",
+      "title": "That landing hurt.",
+      "body": "You fell far enough to take damage when you landed.",
+      "when": {
+        "all": [
+          {
+            "left": "landing.type",
+            "operator": "equals",
+            "right": {
+              "literal": "fall"
+            }
+          },
+          {
+            "left": "damage.source",
+            "operator": "equals",
+            "right": {
+              "literal": "fall"
+            }
+          },
+          {
+            "left": "damage.amount",
+            "operator": "greaterThan",
+            "right": {
+              "literal": 0
+            }
+          }
+        ]
+      },
+      "grantStats": {
+        "fall_damage": 1
+      }
+    },
+    {
       "id": "hundred_water_moves",
       "title": "You moved through water 100 times.",
       "body": "You are starting to understand the current.",

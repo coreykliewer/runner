@@ -2209,15 +2209,27 @@ function startBounce(height) {
 function resolveFallLanding() {
   const below = tileData(tileAt(runner.x, runner.y + 1));
   const bVal = getBounceHeightAt(runner.x, runner.y + 1);
+  const fallDistance = runner.fallDistance || 0;
 
   // Case 1: Not a bounce tile
   if (bVal === null) {
     if (!below.fallDamageCancel &&
         !inWater() &&
-        runner.fallDistance >= below.fallDamageThreshold &&
+        fallDistance >= below.fallDamageThreshold &&
         below.fallDamageMultiplier > 0) {
         const amt = below.fallDamageMultiplier;
         takeDamage(amt, below);
+        checkStatAchievements({
+          landing: {
+            type: "fall",
+            fallDistance,
+            tile: tileAchievementContext(below)
+          },
+          damage: {
+            amount: amt,
+            source: "fall"
+          }
+        });
        setMessage(`Ouch that was a hard fall. Fall damage -${amt}`);
     }
     applyTopDamage(below);
@@ -2227,7 +2239,7 @@ function resolveFallLanding() {
 
   // Case 2: Dynamic bounce
   if (bVal === 0) {
-    const dyn = Math.max(0, runner.fallDistance - 1);
+    const dyn = Math.max(0, fallDistance - 1);
     if (dyn > 0) startBounce(dyn);
     runner.fallDistance = 0;
     return;

@@ -152,6 +152,71 @@ describe("achievement rules", () => {
     assert.equal(result.state.runner.stats.swimming, 1);
   });
 
+  it("unlocks fall damage achievement from landing damage context", async () => {
+    const rules = await loadRules();
+    const result = checkAchievementRules(createInitialState({
+      runner: {
+        stats: {},
+        achievements: []
+      }
+    }), rules, {
+      landing: {
+        type: "fall",
+        fallDistance: 4,
+        tile: { fallDamageThreshold: 3 }
+      },
+      damage: {
+        source: "fall",
+        amount: 1
+      }
+    });
+
+    assert.deepEqual(result.unlocked.map(item => item.id), ["first_fall_damage"]);
+    assert.equal(result.state.runner.stats.fall_damage, 1);
+  });
+
+  it("does not unlock fall damage achievement for harmless landings", async () => {
+    const rules = await loadRules();
+    const result = checkAchievementRules(createInitialState({
+      runner: {
+        stats: {},
+        achievements: []
+      }
+    }), rules, {
+      landing: {
+        type: "fall",
+        fallDistance: 2,
+        tile: { fallDamageThreshold: 3 }
+      },
+      damage: {
+        source: "fall",
+        amount: 0
+      }
+    });
+
+    assert.deepEqual(result.unlocked, []);
+  });
+
+  it("does not unlock fall damage achievement for non-fall damage", async () => {
+    const rules = await loadRules();
+    const result = checkAchievementRules(createInitialState({
+      runner: {
+        stats: {},
+        achievements: []
+      }
+    }), rules, {
+      landing: {
+        type: "stand"
+      },
+      damage: {
+        source: "tile",
+        amount: 1
+      }
+    });
+
+    assert.deepEqual(result.unlocked, []);
+  });
+
   it("supports value-to-value comparison conditions", () => {
     const rules = [{
       id: "low_resource",
