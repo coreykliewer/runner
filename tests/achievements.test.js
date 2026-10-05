@@ -29,6 +29,7 @@ describe("achievement rules", () => {
     assert.equal(result.unlocked.length, 1);
     assert.equal(result.unlocked[0].id, "first_diamond");
     assert.equal(result.state.runner.achievements[0].id, "first_diamond");
+    assert.equal(result.state.runner.stats.diamond, 1);
   });
 
   it("does not emit already unlocked achievements again", async () => {
@@ -63,17 +64,18 @@ describe("achievement rules", () => {
     ]);
   });
 
-  it("can unlock achievements from open-ended runner stats", async () => {
+  it("can unlock achievements from open-ended runner counters and grant stats", async () => {
     const rules = await loadRules();
     const result = checkAchievementRules(createInitialState({
       runner: {
-        stats: {
+        counters: {
           right: 1,
           left: 1,
           jump: 1,
           double_jump: 1,
           fall: 1
         },
+        stats: {},
         achievements: []
       }
     }), rules);
@@ -85,5 +87,12 @@ describe("achievement rules", () => {
       "first_double_jump",
       "first_fall"
     ]);
+    assert.deepEqual(result.state.runner.stats, {
+      right: 1,
+      left: 1,
+      jump: 1,
+      double_jump: 1,
+      fall: 1
+    });
   });
 });

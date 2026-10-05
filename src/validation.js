@@ -107,6 +107,21 @@ export function validateAchievements(achievementFile) {
     ) {
       issues.push(issue("error", `${path}.when`, "Achievement condition needs atLeast, lessThan, or equals."));
     }
+
+    if (achievement.grantStats != null) {
+      if (typeof achievement.grantStats !== "object" || Array.isArray(achievement.grantStats)) {
+        issues.push(issue("error", `${path}.grantStats`, "Achievement stat grants must be an object."));
+      } else {
+        for (const [stat, value] of Object.entries(achievement.grantStats)) {
+          if (!stat) {
+            issues.push(issue("error", `${path}.grantStats`, "Achievement stat grant names are required."));
+          }
+          if (!Number.isFinite(Number(value))) {
+            issues.push(issue("error", `${path}.grantStats.${stat}`, "Achievement stat grant values must be numeric."));
+          }
+        }
+      }
+    }
   }
 
   return issues;

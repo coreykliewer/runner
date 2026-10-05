@@ -705,6 +705,7 @@ function buildPersistentGameState() {
       turboMultiplier: runner.turboMultiplier || 2,
       fallDistance: runner.fallDistance || 0,
       xp: runner.xp || 0,
+      counters: runner.counters || {},
       stats: runner.stats || {},
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
@@ -776,6 +777,7 @@ function buildNarrativeState() {
     runner: {
       ...runner,
       xp: runner.xp || 0,
+      counters: runner.counters || {},
       stats: runner.stats || {},
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
@@ -791,6 +793,7 @@ function applyNarrativeState(state) {
   if (!state?.runner || !runner) return;
 
   runner.xp = state.runner.xp || 0;
+  runner.counters = state.runner.counters || runner.counters || {};
   runner.stats = state.runner.stats || runner.stats || {};
   runner.achievements = state.runner.achievements || [];
   runner.storyFlags = state.runner.storyFlags || {};
@@ -806,6 +809,7 @@ function buildAchievementState() {
     runner: {
       ...runner,
       xp: runner.xp || 0,
+      counters: runner.counters || {},
       stats: runner.stats || {},
       achievements: runner.achievements || [],
       storyFlags: runner.storyFlags || {}
@@ -854,20 +858,27 @@ function ensureRunnerStats() {
   return runner.stats;
 }
 
-function addRunnerStat(name, amount = 1) {
+function ensureRunnerCounters() {
+  if (!runner.counters || typeof runner.counters !== "object" || Array.isArray(runner.counters)) {
+    runner.counters = {};
+  }
+  return runner.counters;
+}
+
+function addRunnerCounter(name, amount = 1) {
   if (!runner || !name) return 0;
-  const stats = ensureRunnerStats();
-  stats[name] = Math.max(0, Number(stats[name] || 0) + amount);
+  const counters = ensureRunnerCounters();
+  counters[name] = Math.max(0, Number(counters[name] || 0) + amount);
   checkStatAchievements();
-  return stats[name];
+  return counters[name];
 }
 
 function recordMovementStats(dx, dy, options = {}) {
-  if (dy === 0 && dx < 0) addRunnerStat("left");
-  if (dy === 0 && dx > 0) addRunnerStat("right");
+  if (dy === 0 && dx < 0) addRunnerCounter("left");
+  if (dy === 0 && dx > 0) addRunnerCounter("right");
   if (dy === -1) {
-    addRunnerStat("jump");
-    if (options.diagonal === true) addRunnerStat("double_jump");
+    addRunnerCounter("jump");
+    if (options.diagonal === true) addRunnerCounter("double_jump");
   }
 }
 
@@ -1250,6 +1261,7 @@ runner = {
   bouncePending: false,
   bounceHeightRemaining: 0,
   xp: 0,
+  counters: {},
   stats: {},
   achievements: [],
   storyFlags: {},
@@ -1272,6 +1284,7 @@ if (savedMap && savedGameState?.runner) {
 }
 
 ensureRunnerStats();
+ensureRunnerCounters();
 
 if (savedMap && savedGameState?.dice) {
   dieValue1 = savedGameState.dice.dieValue1 || 0;
@@ -2143,7 +2156,7 @@ function applyFullGravity() {
 
     logMessage("Falling", { type: "move" });
     runner.fallDistance++;
-    addRunnerStat("fall");
+    addRunnerCounter("fall");
 
     // FIX: apply inside damage to the tile we are now standing in
     applyInsideDamage(thisTile);
@@ -2213,7 +2226,7 @@ function applyGravityAfterMove() {
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
-      addRunnerStat("fall");
+      addRunnerCounter("fall");
     }
 
     // Apply INSIDE damage for the tile we are now in

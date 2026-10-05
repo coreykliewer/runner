@@ -25,6 +25,7 @@ export function createInitialState(overrides = {}) {
       turboMultiplier: DEFAULT_CARRY_STATS.turboMultiplier,
       fallDistance: 0,
       xp: 0,
+      counters: {},
       stats: {},
       achievements: [],
       storyFlags: {}
