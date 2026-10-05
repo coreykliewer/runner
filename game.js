@@ -198,6 +198,9 @@ const TILE_URLS = [
     "https://api.allorigins.win/raw?url=https://clikproductions.com/runner/tiles2.json"
 ];
 
+const LEVEL_URL = "levels.json";
+let LEVELS = null;
+
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
 
@@ -235,6 +238,45 @@ function tryFetch(urls) {
     });
 }
 
+function loadLevels() {
+  return fetch(addCacheBust(LEVEL_URL), { cache: "no-store" })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(json => {
+      LEVELS = normalizeLevels(json);
+      console.log("[Runner] levels.json loaded successfully.");
+      return LEVELS;
+    })
+    .catch(err => {
+      LEVELS = null;
+      console.warn("[Runner] Failed to load levels.json; using tiles2.json embedded maps.", err);
+      return null;
+    });
+}
+
+function normalizeLevels(json) {
+  const levels = json?.levels && typeof json.levels === "object" ? json.levels : {};
+  return {
+    defaultLevel: json?.defaultLevel || "default",
+    levels
+  };
+}
+
+function getLevelMap(levelKey = "default") {
+  const fromLevels = LEVELS?.levels?.[levelKey]?.map;
+  if (typeof fromLevels === "string" && fromLevels.trim()) return fromLevels;
+
+  const fromTileExit = TILE?.E?.[levelKey];
+  if (typeof fromTileExit === "string" && fromTileExit.trim()) return fromTileExit;
+
+  return null;
+}
+
+function getDefaultLevelKey() {
+  return LEVELS?.defaultLevel || "default";
+}
 
 tryFetch([...TILE_URLS])
   .then(res => {
@@ -290,12 +332,12 @@ for (const bucket of VARIANT_BUCKETS) {
 }
 
     }
-    // FIX: Initialize game ONLY after tiles are loaded
-    initGame(); 
+    // FIX: Initialize game ONLY after tiles and optional levels are loaded
+    return loadLevels().then(() => initGame());
   })
   .catch(err => {
     console.error("[Runner] Failed to load tiles2.json, using fallback only:", err);
-    initGame(); 
+    loadLevels().then(() => initGame()); 
   });
   
   
@@ -689,7 +731,7 @@ function decodeMap(encoded) {
 
 
 function hasEDefaultMap() {
-  const s = TILE?.["E"]?.["default"];
+  const s = getLevelMap(getDefaultLevelKey());
   return (typeof s === "string" && s.trim().length > 0);
 }    
 
@@ -747,23 +789,24 @@ if (encodedMap) {
   grid = decodeMap(encodedMap);
 
 } else {
-  console.log("No #map in URL; booting from tiles2.json E.default ONLY");
+  console.log("No #map in URL; booting from levels.json default level or tiles2.json fallback");
   signVariantMap = []; // reset variants for new map
 
-  const mapString = TILE?.E?.default;
+  const levelKey = getDefaultLevelKey();
+  const mapString = getLevelMap(levelKey);
 
   if (typeof mapString !== "string" || !mapString.trim()) {
     // Hard fail: do NOT load factory, do NOT guess.
     gameOver = true;
-    setMessage("BOOT ERROR: tiles2.json is missing E.default, so no level can load.", {
+    setMessage("BOOT ERROR: no default level map could be loaded.", {
       kind: "message"
     });
     draw();
     return;
   }
 
-  currentLevelKey = "default";
-  sessionStorage.setItem("levelKey", "default");
+  currentLevelKey = levelKey;
+  sessionStorage.setItem("levelKey", levelKey);
   grid = decodeMap(mapString);
 }
 
@@ -1992,10 +2035,10 @@ function handleExit(tile) {
   // find the exit key (variant) at runner position
   const destKey = exitIdAt(runner.x, runner.y) || "default";
 
-  const mapString = TILE?.E?.[destKey];
+  const mapString = getLevelMap(destKey);
 
   if (typeof mapString !== "string" || !mapString.trim()) {
-    setMessage(`Exit ${destKey} is not wired (no TILE.E.${destKey} map found).`, {
+    setMessage(`Exit ${destKey} is not wired (no level map found).`, {
       tileChar: "E",
       kind: "message"
     });
