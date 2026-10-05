@@ -202,6 +202,7 @@ const LEVEL_URL = "levels.json";
 let LEVELS = null;
 let StateModule = null;
 let ResumeLinksModule = null;
+let GameMapRuntimeModule = null;
 
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
@@ -308,6 +309,20 @@ function loadResumeLinksModule() {
     });
 }
 
+function loadGameMapRuntimeModule() {
+  return import("./src/gameMapRuntime.js")
+    .then(module => {
+      GameMapRuntimeModule = module;
+      console.log("[Runner] gameMapRuntime.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      GameMapRuntimeModule = null;
+      console.warn("[Runner] Failed to load gameMapRuntime.js; using fallback map decoder.", err);
+      return null;
+    });
+}
+
 tryFetch([...TILE_URLS])
   .then(res => {
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -363,11 +378,21 @@ for (const bucket of VARIANT_BUCKETS) {
 
     }
     // FIX: Initialize game ONLY after tiles and optional levels are loaded
-    return Promise.all([loadLevels(), loadStateModule(), loadResumeLinksModule()]).then(() => initGame());
+    return Promise.all([
+      loadLevels(),
+      loadStateModule(),
+      loadResumeLinksModule(),
+      loadGameMapRuntimeModule()
+    ]).then(() => initGame());
   })
   .catch(err => {
     console.error("[Runner] Failed to load tiles2.json, using fallback only:", err);
-    Promise.all([loadLevels(), loadStateModule(), loadResumeLinksModule()]).then(() => initGame()); 
+    Promise.all([
+      loadLevels(),
+      loadStateModule(),
+      loadResumeLinksModule(),
+      loadGameMapRuntimeModule()
+    ]).then(() => initGame()); 
   });
   
   
@@ -778,6 +803,20 @@ if (savedLevel) {
 }
 
 function decodeMap(encoded) {
+  if (GameMapRuntimeModule) {
+    const runtime = GameMapRuntimeModule.decodeGameMap(encoded, {
+      tiles: TILE,
+      rows: ROWS,
+      cols: COLS
+    });
+
+    signVariantMap = runtime.signVariantMap;
+    monsterStateMap = runtime.monsterStateMap;
+    bounceHeight = runtime.bounceHeight;
+    sinkDelayMap = runtime.sinkDelayMap;
+    return runtime.grid;
+  }
+
   let rowStrings;
 
   if (encoded.includes("~")) rowStrings = encoded.split("~");
