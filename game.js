@@ -1317,12 +1317,12 @@ runner = {
   heartFlashTimer: 0,
   bouncePending: false,
   bounceHeightRemaining: 0,
-  xp: 0,
-  counters: {},
-  stats: {},
-  achievements: [],
-  storyFlags: {},
-  narrativeEventsSeen: [],
+  xp: carried.xp || 0,
+  counters: carried.counters || {},
+  stats: carried.stats || {},
+  achievements: carried.achievements || [],
+  storyFlags: carried.storyFlags || {},
+  narrativeEventsSeen: carried.narrativeEventsSeen || [],
   dead: false
 };
 

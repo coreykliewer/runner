@@ -33,8 +33,43 @@ describe("state", () => {
       score: 12,
       kills: 3,
       turbo: true,
-      turboMultiplier: 2
+      turboMultiplier: 2,
+      xp: 0,
+      counters: {},
+      stats: {},
+      achievements: [],
+      storyFlags: {},
+      narrativeEventsSeen: []
     });
+  });
+
+  it("encodes and decodes carried progression", () => {
+    const encoded = encodeCarryStatsFromRunner({
+      hearts: 4,
+      score: 12,
+      kills: 3,
+      turbo: true,
+      turboMultiplier: 2,
+      xp: 9,
+      counters: { dice_roll: 1, move_in_water: 4 },
+      stats: { swimming: 1 },
+      achievements: [{ id: "first_dice_roll", title: "You rolled the dice." }],
+      storyFlags: { tutorial_intro: true },
+      narrativeEventsSeen: ["level_1_intro"]
+    });
+    const decoded = decodeCarryStats(encoded);
+
+    assert.equal(decoded.hearts, 4);
+    assert.equal(decoded.score, 12);
+    assert.equal(decoded.kills, 3);
+    assert.equal(decoded.turbo, true);
+    assert.equal(decoded.turboMultiplier, 2);
+    assert.equal(decoded.xp, 9);
+    assert.deepEqual(decoded.counters, { dice_roll: 1, move_in_water: 4 });
+    assert.deepEqual(decoded.stats, { swimming: 1 });
+    assert.deepEqual(decoded.achievements, [{ id: "first_dice_roll", title: "You rolled the dice." }]);
+    assert.deepEqual(decoded.storyFlags, { tutorial_intro: true });
+    assert.deepEqual(decoded.narrativeEventsSeen, ["level_1_intro"]);
   });
 
   it("persists state to a localStorage-compatible store", () => {

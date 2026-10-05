@@ -6,6 +6,7 @@ import {
   createResumeHash,
   createResumeUrl
 } from "../src/resumeLinks.js";
+import { decodeCarryStats } from "../src/state.js";
 
 describe("resume links", () => {
   it("creates compact hashes with map and carry stats", () => {
@@ -44,6 +45,33 @@ describe("resume links", () => {
     });
 
     assert.equal(hash, "#map=P25~A1E%7Ba%7D1A23&st=v1.h4.s0.k0.t0.m2&level=a");
+  });
+
+  it("carries progression through portal transition hashes", () => {
+    const hash = createResumeHash({
+      map: "P25",
+      level: "a",
+      runner: {
+        hearts: 4,
+        score: 2,
+        kills: 1,
+        turbo: false,
+        turboMultiplier: 2,
+        xp: 7,
+        counters: { dice_roll: 1 },
+        stats: { diamond: 1 },
+        achievements: [{ id: "first_diamond", title: "You found your first diamond." }],
+        storyFlags: { tutorial_intro: true }
+      }
+    });
+    const rawStats = new URLSearchParams(hash.slice(1)).get("st");
+    const carried = decodeCarryStats(rawStats);
+
+    assert.deepEqual(carried.counters, { dice_roll: 1 });
+    assert.deepEqual(carried.stats, { diamond: 1 });
+    assert.deepEqual(carried.achievements, [{ id: "first_diamond", title: "You found your first diamond." }]);
+    assert.deepEqual(carried.storyFlags, { tutorial_intro: true });
+    assert.equal(carried.xp, 7);
   });
 
   it("creates explicit local resume links", () => {
