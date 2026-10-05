@@ -132,6 +132,16 @@
       "grantStats": {
         "swimming": 1
       }
+    },
+    {
+      "id": "first_insufficient_movement",
+      "title": "Optimistic.",
+      "body": "You tried to move without enough points.",
+      "when": {
+        "left": "movementPoints",
+        "operator": "lessThan",
+        "right": "target.moveCost"
+      }
     }
   ]
 }

@@ -168,16 +168,32 @@ export function validateAchievements(achievementFile) {
       continue;
     }
 
-    if (!condition.stat) {
-      issues.push(issue("error", `${path}.when.stat`, "Achievement condition stat is required."));
-    }
+    const isComparison = condition.left != null || condition.operator != null || condition.right != null;
 
-    if (
-      condition.atLeast == null &&
-      condition.lessThan == null &&
-      condition.equals == null
-    ) {
-      issues.push(issue("error", `${path}.when`, "Achievement condition needs atLeast, lessThan, or equals."));
+    if (isComparison) {
+      if (condition.left == null) {
+        issues.push(issue("error", `${path}.when.left`, "Achievement comparison left value is required."));
+      }
+      if (!condition.operator) {
+        issues.push(issue("error", `${path}.when.operator`, "Achievement comparison operator is required."));
+      } else if (!["lessThan", "atMost", "equals", "notEquals", "greaterThan", "atLeast"].includes(condition.operator)) {
+        issues.push(issue("error", `${path}.when.operator`, "Achievement comparison operator is not supported."));
+      }
+      if (condition.right == null) {
+        issues.push(issue("error", `${path}.when.right`, "Achievement comparison right value is required."));
+      }
+    } else {
+      if (!condition.stat) {
+        issues.push(issue("error", `${path}.when.stat`, "Achievement condition stat is required."));
+      }
+
+      if (
+        condition.atLeast == null &&
+        condition.lessThan == null &&
+        condition.equals == null
+      ) {
+        issues.push(issue("error", `${path}.when`, "Achievement condition needs atLeast, lessThan, or equals."));
+      }
     }
 
     if (achievement.grantStats != null) {

@@ -29,6 +29,37 @@ describe("validation", () => {
     assert.deepEqual(errors, []);
   });
 
+  it("validates achievement value comparisons", () => {
+    const errors = validateAchievements({
+      achievements: [{
+        id: "comparison",
+        title: "Comparison",
+        when: {
+          left: "movementPoints",
+          operator: "lessThan",
+          right: "target.moveCost"
+        }
+      }]
+    }).filter(item => item.severity === "error");
+
+    assert.deepEqual(errors, []);
+  });
+
+  it("reports invalid achievement value comparisons", () => {
+    const errors = validateAchievements({
+      achievements: [{
+        id: "comparison",
+        title: "Comparison",
+        when: {
+          left: "movementPoints",
+          operator: "between"
+        }
+      }]
+    }).filter(item => item.severity === "error");
+
+    assert.equal(errors.length, 2);
+  });
+
   it("reports invalid tile effects", () => {
     const errors = validateTiles({
       ".": {

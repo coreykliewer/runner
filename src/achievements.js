@@ -6,12 +6,12 @@ export function normalizeAchievementRules(raw) {
   return [];
 }
 
-export function checkAchievementRules(state, rules = []) {
+export function checkAchievementRules(state, rules = [], context = {}) {
   let nextState = state;
   const unlocked = [];
 
   for (const rule of normalizeAchievementRules(rules)) {
-    if (!ruleMatches(nextState, rule)) continue;
+    if (!ruleMatches(nextState, rule, context)) continue;
 
     const before = nextState.runner?.achievements || [];
     nextState = unlockAchievement(nextState, rule);
@@ -59,10 +59,20 @@ function applyAchievementStatGrants(state, rule) {
   };
 }
 
-function ruleMatches(state, rule) {
+function ruleMatches(state, rule, context = {}) {
   const condition = rule?.when || rule;
-  if (!rule?.id || !condition?.stat) return false;
+  if (!rule?.id || !condition) return false;
   if (hasAchievement(state, rule.id)) return false;
+
+  if (condition.left != null && condition.operator && condition.right != null) {
+    return compareValues(
+      resolveValue(condition.left, state, context),
+      condition.operator,
+      resolveValue(condition.right, state, context)
+    );
+  }
+
+  if (!condition.stat) return false;
 
   const value = getStateStat(state, condition.stat);
   if (condition.atLeast != null) return value >= condition.atLeast;
@@ -70,6 +80,53 @@ function ruleMatches(state, rule) {
   if (condition.equals != null) return value === condition.equals;
 
   return false;
+}
+
+export function resolveValue(ref, state, context = {}) {
+  if (ref && typeof ref === "object" && !Array.isArray(ref)) {
+    if (Object.hasOwn(ref, "literal")) return ref.literal;
+    if (ref.path) return resolveValue(ref.path, state, context);
+    if (ref.stat) return getStateStat(state, ref.stat);
+  }
+
+  if (typeof ref !== "string") return ref;
+
+  const scoped = {
+    ...context,
+    runner: state.runner || {},
+    counters: state.runner?.counters || {},
+    stats: state.runner?.stats || {},
+    storyFlags: state.runner?.storyFlags || {}
+  };
+  const pathValue = getPath(scoped, ref);
+  if (pathValue !== undefined) return pathValue;
+
+  return getStateStat(state, ref);
+}
+
+function compareValues(left, operator, right) {
+  if (left === undefined || right === undefined) return false;
+
+  if (operator === "equals") return left === right;
+  if (operator === "notEquals") return left !== right;
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (!Number.isFinite(leftNumber) || !Number.isFinite(rightNumber)) return false;
+
+  if (operator === "lessThan") return leftNumber < rightNumber;
+  if (operator === "atMost") return leftNumber <= rightNumber;
+  if (operator === "greaterThan") return leftNumber > rightNumber;
+  if (operator === "atLeast") return leftNumber >= rightNumber;
+
+  return false;
+}
+
+function getPath(source, path) {
+  return path.split(".").reduce((value, key) => {
+    if (value == null || !Object.hasOwn(Object(value), key)) return undefined;
+    return value[key];
+  }, source);
 }
 
 function hasAchievement(state, id) {

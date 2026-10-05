@@ -832,13 +832,13 @@ function renderAchievement(action) {
   });
 }
 
-function checkStatAchievements() {
+function checkStatAchievements(context = {}) {
   if (!AchievementsModule || !ACHIEVEMENT_RULES.length || !runner) return;
 
   const baseState = buildAchievementState();
   if (!baseState) return;
 
-  const result = AchievementsModule.checkAchievementRules(baseState, ACHIEVEMENT_RULES);
+  const result = AchievementsModule.checkAchievementRules(baseState, ACHIEVEMENT_RULES, context);
   applyAchievementState(result.state);
 
   for (const achievement of result.unlocked || []) {
@@ -884,6 +884,46 @@ function recordMovementStats(dx, dy, options = {}) {
   for (const tag of options.tile?.tags || []) {
     addRunnerCounter(`move_in_${tag}`);
   }
+}
+
+function buildMovementAchievementContext({
+  dx,
+  dy,
+  fromX,
+  fromY,
+  toX,
+  toY,
+  here,
+  target,
+  targetChar,
+  moveCost,
+  isDiagonalJump = false
+}) {
+  return {
+    movementPoints: totalMovementPoints(),
+    movement: {
+      dx,
+      dy,
+      from: { x: fromX, y: fromY },
+      to: { x: toX, y: toY },
+      moveCost,
+      diagonal: isDiagonalJump === true
+    },
+    current: tileAchievementContext(here),
+    target: {
+      ...tileAchievementContext(target),
+      ch: targetChar,
+      x: toX,
+      y: toY,
+      moveCost
+    }
+  };
+}
+
+function tileAchievementContext(tile) {
+  if (!tile) return {};
+  const { img, ...rest } = tile;
+  return rest;
 }
 
 function runTutorialNarrative(context) {
@@ -2695,7 +2735,6 @@ function diagonalJump(dx) {
   
 
  if (gameOver) return;
-  if (totalMovementPoints() <= 0 && !turboExecuting) return; // Allow if executing turbo
 
   const fromX = runner.x;
   const fromY = runner.y;
@@ -2728,6 +2767,26 @@ function diagonalJump(dx) {
         } else return;
     }
     else return;
+  }
+
+  const attemptedMoveCost = isDiagonalJump ? 2 : (isFluidTile(here) ? target.moveCostInside : target.moveCostTop);
+  const movementAchievementContext = buildMovementAchievementContext({
+    dx,
+    dy,
+    fromX,
+    fromY,
+    toX,
+    toY,
+    here,
+    target,
+    targetChar,
+    moveCost: attemptedMoveCost,
+    isDiagonalJump
+  });
+
+  if (totalMovementPoints() <= 0 && !turboExecuting) {
+    checkStatAchievements(movementAchievementContext);
+    return;
   }
 
 if (target.solid && !target.slope) {
@@ -2767,12 +2826,13 @@ if (target.solid && !target.slope) {
   }
 
 
-   // ======================================================
+  // ======================================================
   // Movement cost
   // ======================================================
-  let moveCost = isDiagonalJump ? 2 : (isFluidTile(here) ? target.moveCostInside : target.moveCostTop);
+  let moveCost = attemptedMoveCost;
 
   if (!turboExecuting) {
+    checkStatAchievements(movementAchievementContext);
     if (!spendMovement(moveCost)) return;
   }
 

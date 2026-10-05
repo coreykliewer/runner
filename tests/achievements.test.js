@@ -152,4 +152,84 @@ describe("achievement rules", () => {
     assert.equal(result.state.runner.stats.swimming, 1);
   });
 
+  it("supports value-to-value comparison conditions", () => {
+    const rules = [{
+      id: "low_resource",
+      title: "Low resource",
+      when: {
+        left: "runtime.available",
+        operator: "lessThan",
+        right: "target.required"
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      runtime: { available: 2 },
+      target: { required: 3 }
+    });
+
+    assert.deepEqual(result.unlocked.map(item => item.id), ["low_resource"]);
+  });
+
+  it("unlocks insufficient movement for moveCost 1 when player has 0 points", () => {
+    const rules = [{
+      id: "first_insufficient_movement",
+      title: "Optimistic.",
+      when: {
+        left: "movementPoints",
+        operator: "lessThan",
+        right: "target.moveCost"
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      movementPoints: 0,
+      target: { moveCost: 1 }
+    });
+
+    assert.deepEqual(result.unlocked.map(item => item.id), ["first_insufficient_movement"]);
+  });
+
+  it("unlocks insufficient movement for moveCost 2 when player has 1 point", () => {
+    const rules = [{
+      id: "first_insufficient_movement",
+      title: "Optimistic.",
+      when: {
+        left: "movementPoints",
+        operator: "lessThan",
+        right: "target.moveCost"
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      movementPoints: 1,
+      target: { moveCost: 2 }
+    });
+
+    assert.deepEqual(result.unlocked.map(item => item.id), ["first_insufficient_movement"]);
+  });
+
+  it("does not unlock insufficient movement when points equal target moveCost", () => {
+    const rules = [{
+      id: "first_insufficient_movement",
+      title: "Optimistic.",
+      when: {
+        left: "movementPoints",
+        operator: "lessThan",
+        right: "target.moveCost"
+      }
+    }];
+    const result = checkAchievementRules(createInitialState({
+      runner: { achievements: [] }
+    }), rules, {
+      movementPoints: 2,
+      target: { moveCost: 2 }
+    });
+
+    assert.deepEqual(result.unlocked, []);
+  });
+
 });
