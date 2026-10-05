@@ -201,6 +201,7 @@ const TILE_URLS = [
 const LEVEL_URL = "levels.json";
 let LEVELS = null;
 let StateModule = null;
+let ResumeLinksModule = null;
 
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
@@ -293,6 +294,20 @@ function loadStateModule() {
     });
 }
 
+function loadResumeLinksModule() {
+  return import("./src/resumeLinks.js")
+    .then(module => {
+      ResumeLinksModule = module;
+      console.log("[Runner] resumeLinks.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      ResumeLinksModule = null;
+      console.warn("[Runner] Failed to load resumeLinks.js; portal links will use fallback hash generation.", err);
+      return null;
+    });
+}
+
 tryFetch([...TILE_URLS])
   .then(res => {
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -348,11 +363,11 @@ for (const bucket of VARIANT_BUCKETS) {
 
     }
     // FIX: Initialize game ONLY after tiles and optional levels are loaded
-    return Promise.all([loadLevels(), loadStateModule()]).then(() => initGame());
+    return Promise.all([loadLevels(), loadStateModule(), loadResumeLinksModule()]).then(() => initGame());
   })
   .catch(err => {
     console.error("[Runner] Failed to load tiles2.json, using fallback only:", err);
-    Promise.all([loadLevels(), loadStateModule()]).then(() => initGame()); 
+    Promise.all([loadLevels(), loadStateModule(), loadResumeLinksModule()]).then(() => initGame()); 
   });
   
   
@@ -2124,10 +2139,18 @@ function handleExit(tile) {
   updateInfo(`Entering ${destKey}...`);
   draw();
 
-  const st = encodeCarryStatsFromRunner(runner);
-  window.location.hash =
-    "#map=" + encodeURIComponent(mapString) +
-    "&st=" + encodeURIComponent(st);
+  if (ResumeLinksModule) {
+    window.location.hash = ResumeLinksModule.createResumeHash({
+      map: mapString,
+      runner,
+      level: destKey
+    });
+  } else {
+    const st = encodeCarryStatsFromRunner(runner);
+    window.location.hash =
+      "#map=" + encodeURIComponent(mapString) +
+      "&st=" + encodeURIComponent(st);
+  }
 
   setTimeout(() => window.location.reload(), 0);
 }
