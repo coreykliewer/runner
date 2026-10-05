@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "cols": 25,
+  "rows": 15,
+  "maps": [
+    {
+      "id": "empty",
+      "description": "All air, canonical run-length rows.",
+      "encoded": "A25~A25~A25~A25~A25~A25~A25~A25~A25~A25~A25~A25~A25~A25~A25"
+    },
+    {
+      "id": "default-from-tiles2",
+      "description": "Current tiles2.json E.default level as of the v2 branch cut.",
+      "encoded": "P2A1P22~P2A1P22~A2R1A22~A1P3A21~A4P2A19~A6b1A18~A6P2A17~A25~A25~A3E{a}1A9c1A2E{b}1A3a1A4~P8W3P14~P8W3P14~P25~P25~P25"
+    },
+    {
+      "id": "systems-sampler",
+      "description": "Small regression surface for variants, signs, locks, monsters, water, lava, pickups, slopes, and exits.",
+      "encoded": "P25~A1R1A23~A2I{a}1A2K{b}1A2M{a}1A2D1A2H1A2T1A6~A25~A3Y1A2Z1A2B1A2S1A2W3A9~A25~A2E{a}1A22~A25~A25~A5L3A17~A25~A25~A25~A25~P25"
+    }
+  ]
+}
