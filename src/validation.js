@@ -36,6 +36,9 @@ export function validateTiles(tiles) {
     if (def.effects != null) {
       issues.push(...validateEffects(def.effects, `tiles.${code}.effects`));
     }
+    if (def.enterEffects != null) {
+      issues.push(...validateEffects(def.enterEffects, `tiles.${code}.enterEffects`));
+    }
     for (const bucket of VARIANT_BUCKETS) {
       const group = def[bucket];
       if (!group) continue;

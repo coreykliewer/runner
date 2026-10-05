@@ -43,4 +43,17 @@ describe("validation", () => {
 
     assert.equal(errors.length, 4);
   });
+
+  it("validates tile enter effects", () => {
+    const errors = validateTiles({
+      W: {
+        tags: ["water"],
+        enterEffects: [
+          { type: "stat", stat: "in_water", amount: 1 }
+        ]
+      }
+    }).filter(item => item.severity === "error");
+
+    assert.deepEqual(errors, []);
+  });
 });

@@ -1421,6 +1421,7 @@ function tileData(ch) {
     autoPush: def.autoPush || null,
     pickupType: def.pickupType || null,
     effects: Array.isArray(def.effects) ? def.effects : [],
+    enterEffects: Array.isArray(def.enterEffects) ? def.enterEffects : [],
     tags: Array.isArray(def.tags) ? def.tags : [],
     exit,
     levels: Object.keys(def).filter(k => k.startsWith("Level-") || k === "default" || k.startsWith("exit")).sort(),
@@ -2081,6 +2082,11 @@ function handlePickupsAtCurrent() {
   savePersistentGameState();
 }
 
+function applyEnterEffects(tile, tileChar) {
+  if (!tile?.enterEffects?.length) return;
+  applyPickupEffects(tile.enterEffects, { tileChar, def: TILE?.[tileChar] || {} });
+}
+
 function applyPickupEffects(effects, { tileChar, def } = {}) {
   if (!Array.isArray(effects)) return;
 
@@ -2194,6 +2200,7 @@ function applyFullGravity() {
     if (thisTile.gravity === false) {
       runner.fallDistance = 0;
       addRunnerCounter("fall_in_water");
+      applyEnterEffects(thisTile, tileAt(runner.x, runner.y));
       setMessage("Fall was broken.");
       applyInsideDamage(thisTile);
       if (gameOver) return;
@@ -2270,6 +2277,7 @@ function applyGravityAfterMove() {
     if (nowHere.gravity === false) {
       runner.fallDistance = 0;
       addRunnerCounter("fall_in_water");
+      applyEnterEffects(nowHere, tileAt(runner.x, runner.y));
     } else {
       runner.fallDistance++;
       logMessage("Falling", { type: "move" });
@@ -2524,6 +2532,7 @@ if (target.solid) {
 
   const tile = tileData(tileAt(runner.x, runner.y));
   recordMovementStats(dx, dy, { tile });
+  applyEnterEffects(tile, tileAt(runner.x, runner.y));
   if (tile.exit) {
     handleExit(tile);
     return false; // stop further movement
@@ -2803,6 +2812,7 @@ handlePickupsAtCurrent();
 // Re-read tile after pickups (pickups can change the tile underfoot)
 const tileAfterPickups = tileData(tileAt(runner.x, runner.y));
 recordMovementStats(dx, dy, { diagonal: isDiagonalJump, tile: tileAfterPickups });
+applyEnterEffects(tileAfterPickups, tileAt(runner.x, runner.y));
 if (tileAfterPickups.exit) {
   handleExit(tileAfterPickups);
   return;
