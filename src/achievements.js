@@ -32,11 +32,11 @@ export function checkAchievementRules(state, rules = []) {
 }
 
 export function getStateStat(state, stat) {
-  const statBagValue = state.runner?.stats?.[stat];
-  if (statBagValue != null) return Number(statBagValue) || 0;
-  const counterValue = state.runner?.counters?.[stat];
-  if (counterValue != null) return Number(counterValue) || 0;
-  return Number(state.runner?.[stat] || 0);
+  return Math.max(
+    Number(state.runner?.[stat] || 0),
+    Number(state.runner?.counters?.[stat] || 0),
+    Number(state.runner?.stats?.[stat] || 0)
+  );
 }
 
 function applyAchievementStatGrants(state, rule) {

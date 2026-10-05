@@ -104,4 +104,40 @@ describe("achievement rules", () => {
       yoyo: 1
     });
   });
+
+  it("keeps counters driving later achievements after a stat has been granted", () => {
+    const rules = [
+      {
+        id: "first_roll",
+        title: "First roll",
+        when: { stat: "dice_roll", atLeast: 1 },
+        grantStats: { dice_roll: 1 }
+      },
+      {
+        id: "ten_rolls",
+        title: "Ten rolls",
+        when: { stat: "dice_roll", atLeast: 10 },
+        grantStats: { dice_master: 1 }
+      }
+    ];
+
+    const first = checkAchievementRules(createInitialState({
+      runner: {
+        counters: { dice_roll: 1 },
+        stats: {},
+        achievements: []
+      }
+    }), rules);
+    const tenth = checkAchievementRules({
+      ...first.state,
+      runner: {
+        ...first.state.runner,
+        counters: { dice_roll: 10 }
+      }
+    }, rules);
+
+    assert.deepEqual(tenth.unlocked.map(item => item.id), ["ten_rolls"]);
+    assert.equal(tenth.state.runner.stats.dice_roll, 1);
+    assert.equal(tenth.state.runner.stats.dice_master, 1);
+  });
 });

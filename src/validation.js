@@ -46,7 +46,7 @@ export function validateTiles(tiles) {
 
 function validateEffects(effects, path) {
   const issues = [];
-  const allowed = new Set(["counter", "stat", "xp", "heart", "score", "message", "setFlag"]);
+  const allowed = new Set(["counter", "xp", "heart", "score", "message", "setFlag"]);
 
   if (!Array.isArray(effects)) {
     return [issue("error", path, "effects must be an array.")];
@@ -64,7 +64,7 @@ function validateEffects(effects, path) {
       continue;
     }
 
-    if ((effect.type === "counter" || effect.type === "stat") && !effect.stat) {
+    if (effect.type === "counter" && !effect.stat) {
       issues.push(issue("error", `${effectPath}.stat`, "Effect stat is required."));
     }
     if (effect.type === "message" && !effect.text) {
