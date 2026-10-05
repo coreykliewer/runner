@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "node scripts/dev-server.mjs 8000",
     "test": "node --test",
     "smoke": "node tests/browser-smoke.test.js",
     "check": "npm test && npm run smoke"
