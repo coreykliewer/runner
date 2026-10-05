@@ -62,6 +62,7 @@ let runner = null;
 let monsterStateMap = [];
 let currentLevelKey = "default";
 let currentExitIndex = 0;
+let currentMapString = "";
 let turboGravityUsed = false;
 let kills = 0;
 
@@ -93,6 +94,11 @@ function getHashParamRaw(name) {
 function getStatsFromURL() {
   const raw = getHashParamRaw("st");
   return raw ? safeDecodeURIComponent(raw) : null;
+}
+
+function shouldResumeFromLocalState() {
+  const raw = getHashParamRaw("resume");
+  return raw === "1" || raw === "true";
 }
 
   
@@ -299,6 +305,7 @@ function loadResumeLinksModule() {
   return import("./src/resumeLinks.js")
     .then(module => {
       ResumeLinksModule = module;
+      window.getRunnerResumeLink = () => module.createLocalResumeUrl(window.location.href);
       console.log("[Runner] resumeLinks.js loaded successfully.");
       return module;
     })
@@ -630,7 +637,13 @@ function buildPersistentGameState() {
       rollCount
     },
     world: {
-      mapHash: window.location.hash || "",
+      mapHash: currentMapString && ResumeLinksModule
+        ? ResumeLinksModule.createResumeHash({
+          map: currentMapString,
+          runner,
+          level: currentLevelKey || "default"
+        })
+        : (window.location.hash || ""),
       fogRevealed: [],
       pickupsCollected: [],
       monstersDefeated: [],
@@ -648,6 +661,31 @@ function savePersistentGameState() {
   } catch (err) {
     console.warn("[Runner] Failed to save local game state.", err);
   }
+}
+
+function getSavedGameState() {
+  if (!StateModule) return null;
+
+  try {
+    return StateModule.loadState();
+  } catch (err) {
+    console.warn("[Runner] Failed to load local game state.", err);
+    return null;
+  }
+}
+
+function getMapFromSavedState(state) {
+  const hash = state?.world?.mapHash || "";
+  if (!hash) return null;
+
+  const params = hash.startsWith("#") ? hash.slice(1) : hash;
+  for (const part of params.split("&")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq) === "map") return safeDecodeURIComponent(part.slice(eq + 1));
+  }
+
+  return null;
 }
 
 // ============================================================
@@ -875,6 +913,8 @@ function hasEDefaultMap() {
 
 
     // --- MAP BUILDING ----
+    const savedGameState = shouldResumeFromLocalState() ? getSavedGameState() : null;
+    const savedMap = getMapFromSavedState(savedGameState);
     const encodedMap = getMapFromURL();
   
 
@@ -902,7 +942,17 @@ function hasEDefaultMap() {
 
 if (encodedMap) {
   console.log("Using encoded map:", encodedMap);
+  currentMapString = encodedMap;
   grid = decodeMap(encodedMap);
+
+} else if (savedMap) {
+  console.log("Using saved local game map.");
+  currentLevelKey = savedGameState.levelKey || currentLevelKey || "default";
+  currentExitIndex = savedGameState.exitIndex || 0;
+  currentMapString = savedMap;
+  sessionStorage.setItem("levelKey", currentLevelKey);
+  sessionStorage.setItem("exitIndex", currentExitIndex);
+  grid = decodeMap(savedMap);
 
 } else {
   console.log("No #map in URL; booting from levels.json default level or tiles2.json fallback");
@@ -922,6 +972,7 @@ if (encodedMap) {
   }
 
   currentLevelKey = levelKey;
+  currentMapString = mapString;
   sessionStorage.setItem("levelKey", levelKey);
   grid = decodeMap(mapString);
 }
@@ -982,6 +1033,28 @@ runner = {
   narrativeEventsSeen: [],
   dead: false
 };
+
+if (savedMap && savedGameState?.runner) {
+  runner = {
+    ...runner,
+    ...savedGameState.runner,
+    dead: false,
+    damageFlashTimer: 0,
+    diamondFlashTimer: 0,
+    turboFlashTimer: 0,
+    heartFlashTimer: 0,
+    bouncePending: false,
+    bounceHeightRemaining: 0
+  };
+}
+
+if (savedMap && savedGameState?.dice) {
+  dieValue1 = savedGameState.dice.dieValue1 || 0;
+  dieValue2 = savedGameState.dice.dieValue2 || 0;
+  selectedDie = savedGameState.dice.selectedDie || null;
+  rollCount = savedGameState.dice.rollCount || 0;
+  updateDiceDisplay(dieValue1, dieValue2, false);
+}
   
 if (isFogEnabled()) initFogForCurrentGrid();
 else fog = null;

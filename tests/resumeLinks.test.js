@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createResumeHash, createResumeUrl } from "../src/resumeLinks.js";
+import {
+  createLocalResumeHash,
+  createLocalResumeUrl,
+  createResumeHash,
+  createResumeUrl
+} from "../src/resumeLinks.js";
 
 describe("resume links", () => {
   it("creates compact hashes with map and carry stats", () => {
@@ -39,5 +44,10 @@ describe("resume links", () => {
     });
 
     assert.equal(hash, "#map=P25~A1E%7Ba%7D1A23&st=v1.h4.s0.k0.t0.m2&level=a");
+  });
+
+  it("creates explicit local resume links", () => {
+    assert.equal(createLocalResumeHash(), "#resume=1");
+    assert.equal(createLocalResumeUrl("index.html#old"), "index.html#resume=1");
   });
 });

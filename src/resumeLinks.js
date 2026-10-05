@@ -16,3 +16,12 @@ export function createResumeUrl(baseUrl, options = {}) {
   const cleanBase = String(baseUrl || "index.html").split("#")[0];
   return `${cleanBase}${hash}`;
 }
+
+export function createLocalResumeHash() {
+  return "#resume=1";
+}
+
+export function createLocalResumeUrl(baseUrl = "index.html") {
+  const cleanBase = String(baseUrl || "index.html").split("#")[0];
+  return `${cleanBase}${createLocalResumeHash()}`;
+}
