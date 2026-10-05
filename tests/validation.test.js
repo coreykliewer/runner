@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFile } from "node:fs/promises";
-import { validateLevels, validateMap, validateTiles } from "../src/validation.js";
+import { validateAchievements, validateLevels, validateMap, validateTiles } from "../src/validation.js";
 
 describe("validation", () => {
   it("validates the current tile file shape", async () => {
@@ -21,5 +21,11 @@ describe("validation", () => {
     const issues = validateMap("Q1", { ".": {} }, { rows: 1, cols: 1 });
     assert.equal(issues[0].severity, "error");
     assert.match(issues[0].message, /Unknown tile/);
+  });
+
+  it("validates achievements", async () => {
+    const achievements = JSON.parse(await readFile("achievements.json", "utf8"));
+    const errors = validateAchievements(achievements).filter(item => item.severity === "error");
+    assert.deepEqual(errors, []);
   });
 });

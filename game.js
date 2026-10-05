@@ -206,12 +206,15 @@ const TILE_URLS = [
 
 const LEVEL_URL = "levels.json";
 const NARRATIVE_URL = "fixtures/level1-narrative.json";
+const ACHIEVEMENTS_URL = "achievements.json";
 let LEVELS = null;
 let StateModule = null;
 let ResumeLinksModule = null;
 let GameMapRuntimeModule = null;
 let NarrativeEventsModule = null;
+let AchievementsModule = null;
 let NARRATIVE_EVENTS = [];
+let ACHIEVEMENT_RULES = [];
 
 function addCacheBust(url) {
   const cb = "cb=" + Date.now();
@@ -365,6 +368,40 @@ function loadNarrativeData() {
     });
 }
 
+function loadAchievementsModule() {
+  return import("./src/achievements.js")
+    .then(module => {
+      AchievementsModule = module;
+      console.log("[Runner] achievements.js loaded successfully.");
+      return module;
+    })
+    .catch(err => {
+      AchievementsModule = null;
+      console.warn("[Runner] Failed to load achievements.js; stat achievements disabled.", err);
+      return null;
+    });
+}
+
+function loadAchievementRules() {
+  return fetch(addCacheBust(ACHIEVEMENTS_URL), { cache: "no-store" })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(json => {
+      ACHIEVEMENT_RULES = AchievementsModule
+        ? AchievementsModule.normalizeAchievementRules(json)
+        : (Array.isArray(json?.achievements) ? json.achievements : []);
+      console.log("[Runner] achievements.json loaded successfully.");
+      return ACHIEVEMENT_RULES;
+    })
+    .catch(err => {
+      ACHIEVEMENT_RULES = [];
+      console.warn("[Runner] Failed to load achievements.json; stat achievements disabled.", err);
+      return [];
+    });
+}
+
 tryFetch([...TILE_URLS])
   .then(res => {
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -426,7 +463,8 @@ for (const bucket of VARIANT_BUCKETS) {
       loadResumeLinksModule(),
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
-      loadNarrativeData()
+      loadNarrativeData(),
+      loadAchievementsModule().then(() => loadAchievementRules())
     ]).then(() => initGame());
   })
   .catch(err => {
@@ -437,7 +475,8 @@ for (const bucket of VARIANT_BUCKETS) {
       loadResumeLinksModule(),
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
-      loadNarrativeData()
+      loadNarrativeData(),
+      loadAchievementsModule().then(() => loadAchievementRules())
     ]).then(() => initGame()); 
   });
   
@@ -755,6 +794,55 @@ function applyNarrativeState(state) {
   runner.narrativeEventsSeen = state.world?.narrativeEventsSeen || [];
 }
 
+function buildAchievementState() {
+  if (!StateModule || !runner) return null;
+
+  return StateModule.createInitialState({
+    levelKey: currentLevelKey || "default",
+    exitIndex: currentExitIndex || 0,
+    runner: {
+      ...runner,
+      xp: runner.xp || 0,
+      achievements: runner.achievements || [],
+      storyFlags: runner.storyFlags || {}
+    },
+    world: {
+      mapHash: currentMapString || "",
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
+function applyAchievementState(state) {
+  applyNarrativeState(state);
+}
+
+function renderAchievement(action) {
+  setMessage(formatAchievementMessage(action), {
+    kind: "achievement",
+    html: true
+  });
+}
+
+function checkStatAchievements() {
+  if (!AchievementsModule || !ACHIEVEMENT_RULES.length || !runner) return;
+
+  const baseState = buildAchievementState();
+  if (!baseState) return;
+
+  const result = AchievementsModule.checkAchievementRules(baseState, ACHIEVEMENT_RULES);
+  applyAchievementState(result.state);
+
+  for (const achievement of result.unlocked || []) {
+    renderAchievement(achievement);
+  }
+
+  if ((result.unlocked || []).length > 0) {
+    updateInfo();
+    savePersistentGameState();
+  }
+}
+
 function runTutorialNarrative(context) {
   if (!NarrativeEventsModule || !NARRATIVE_EVENTS.length || !runner) return;
 
@@ -776,12 +864,11 @@ function runTutorialNarrative(context) {
         html: action.html === true
       });
     } else if (action.type === "achievement" && action.title) {
-      setMessage(formatAchievementMessage(action), {
-        kind: "achievement",
-        html: true
-      });
+      renderAchievement(action);
     }
   }
+
+  checkStatAchievements();
 
   if ((result.actions || []).length > 0) {
     updateInfo();
@@ -1936,6 +2023,7 @@ function handlePickupsAtCurrent() {
     variant: signVariantAt(runner.x, runner.y),
     pickupType: data.pickupType
   });
+  checkStatAchievements();
 
   grid[runner.y][runner.x] = ".";
   savePersistentGameState();

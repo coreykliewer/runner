@@ -31,12 +31,6 @@
         {
           "type": "xp",
           "amount": 5
-        },
-        {
-          "type": "achievement",
-          "id": "shiny_start",
-          "title": "You found your first diamond.",
-          "body": "The dungeon notices shiny habits."
         }
       ]
     }

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "achievements": [
+    {
+      "id": "first_diamond",
+      "title": "You found your first diamond.",
+      "body": "The dungeon notices shiny habits.",
+      "when": {
+        "stat": "score",
+        "atLeast": 1
+      }
+    },
+    {
+      "id": "first_kill",
+      "title": "You defeated your first monster.",
+      "body": "Something in the dark learned your name.",
+      "when": {
+        "stat": "kills",
+        "atLeast": 1
+      }
+    },
+    {
+      "id": "first_xp",
+      "title": "You earned your first XP.",
+      "body": "Progress has a taste now.",
+      "when": {
+        "stat": "xp",
+        "atLeast": 1
+      }
+    }
+  ]
+}

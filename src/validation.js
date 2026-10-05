@@ -67,6 +67,51 @@ export function validateLevels(levelFile, tiles, { rows = DEFAULT_ROWS, cols = D
   return issues;
 }
 
+export function validateAchievements(achievementFile) {
+  const issues = [];
+  const achievements = achievementFile?.achievements;
+
+  if (!Array.isArray(achievements)) {
+    return [issue("error", "achievements", "achievements must be an array.")];
+  }
+
+  const seen = new Set();
+  for (const [index, achievement] of achievements.entries()) {
+    const path = `achievements[${index}]`;
+    if (!achievement?.id) {
+      issues.push(issue("error", `${path}.id`, "Achievement id is required."));
+    } else if (seen.has(achievement.id)) {
+      issues.push(issue("error", `${path}.id`, "Achievement id must be unique."));
+    } else {
+      seen.add(achievement.id);
+    }
+
+    if (!achievement?.title) {
+      issues.push(issue("error", `${path}.title`, "Achievement title is required."));
+    }
+
+    const condition = achievement?.when;
+    if (!condition || typeof condition !== "object") {
+      issues.push(issue("error", `${path}.when`, "Achievement condition is required."));
+      continue;
+    }
+
+    if (!condition.stat) {
+      issues.push(issue("error", `${path}.when.stat`, "Achievement condition stat is required."));
+    }
+
+    if (
+      condition.atLeast == null &&
+      condition.lessThan == null &&
+      condition.equals == null
+    ) {
+      issues.push(issue("error", `${path}.when`, "Achievement condition needs atLeast, lessThan, or equals."));
+    }
+  }
+
+  return issues;
+}
+
 export function validateMap(encoded, tiles, { rows = DEFAULT_ROWS, cols = DEFAULT_COLS } = {}, path = "map") {
   const issues = [];
   const decoded = decodeMap(encoded, { rows, cols });
