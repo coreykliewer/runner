@@ -18,6 +18,6 @@ describe("browser smoke fixtures", () => {
     assert.match(html, /id="tilePalette"/);
     assert.match(html, /id="grid"/);
     assert.match(html, /id="mapBox"/);
-    assert.match(html, /src="editor\.js"/);
+    assert.match(html, /<script type="module" src="editor\.js"><\/script>/);
   });
 });
