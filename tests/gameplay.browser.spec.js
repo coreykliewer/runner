@@ -218,86 +218,120 @@ test("reloading during the final roll restores movement points and roll count", 
   await expect(page.locator("#log")).not.toContainText("Game over");
 });
 
-test("desktop side panels fill the viewport and scroll independently without changing the board or mobile layout", async ({ page }) => {
-  await page.setViewportSize({ width: 1600, height: 900 });
+test("responsive layouts keep panels accessible and the board proportional across viewport sizes", async ({ page }) => {
+  const viewports = [
+    { name: "desktop", width: 1920, height: 1080, columns: "three", fullHeightPanels: true },
+    { name: "laptop", width: 1366, height: 768, columns: "three", fullHeightPanels: true },
+    { name: "small laptop", width: 1280, height: 720, columns: "three", fullHeightPanels: true },
+    { name: "tablet", width: 1024, height: 768, columns: "stacked", fullHeightPanels: false },
+    { name: "phone portrait", width: 390, height: 844, columns: "stacked", fullHeightPanels: false },
+    { name: "phone landscape", width: 844, height: 390, columns: "three", fullHeightPanels: true },
+    { name: "short desktop", width: 1366, height: 400, columns: "three", fullHeightPanels: true }
+  ];
+
   await page.goto("/");
 
-  const desktopLayout = await page.evaluate(() => {
-    const rect = selector => document.querySelector(selector).getBoundingClientRect();
-    const frame = document.querySelector("#game-frame");
-    const frameStyle = getComputedStyle(frame);
-    const left = rect("#controlCenter");
-    const right = rect("#log");
-    const board = rect("#game-container");
-    return {
-      viewport: [innerWidth, innerHeight],
-      documentHeight: document.documentElement.scrollHeight,
-      frameHeight: rect("#game-frame").height,
-      frameTop: rect("#game-frame").top,
-      leftHeight: left.height,
-      leftTop: left.top,
-      rightHeight: right.height,
-      rightTop: right.top,
-      board: { width: board.width, height: board.height },
-      overflow: [
-        getComputedStyle(document.querySelector("#controlCenter")).overflowY,
-        getComputedStyle(document.querySelector("#log")).overflowY
-      ]
-    };
-  });
+  for (const viewport of viewports) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.evaluate(() => window.scrollTo(0, 0));
 
-  expect(desktopLayout.viewport).toEqual([1600, 900]);
-  expect(desktopLayout.documentHeight).toBe(900);
-  expect(desktopLayout.frameHeight).toBe(900);
-  expect(desktopLayout.leftTop).toBe(desktopLayout.frameTop);
-  expect(desktopLayout.rightTop).toBe(desktopLayout.frameTop);
-  expect(desktopLayout.leftHeight).toBe(900);
-  expect(desktopLayout.rightHeight).toBe(900);
-  expect(desktopLayout.board).toEqual({ width: 800, height: 510 });
-  expect(desktopLayout.overflow).toEqual(["auto", "auto"]);
+    const layout = await page.evaluate(() => {
+      const rect = selector => {
+        const bounds = document.querySelector(selector).getBoundingClientRect();
+        return {
+          left: bounds.left,
+          top: bounds.top,
+          right: bounds.right,
+          bottom: bounds.bottom,
+          width: bounds.width,
+          height: bounds.height
+        };
+      };
+      const frame = rect("#game-frame");
+      const left = rect("#controlCenter");
+      const board = rect("#game-container");
+      const right = rect("#log");
+      const canvas = rect("#game");
+      return {
+        viewport: [innerWidth, innerHeight],
+        document: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+        frame,
+        display: getComputedStyle(document.querySelector("#game-frame")).display,
+        left,
+        board,
+        canvas,
+        right,
+        overflow: [
+          getComputedStyle(document.querySelector("#controlCenter")).overflowY,
+          getComputedStyle(document.querySelector("#log")).overflowY
+        ]
+      };
+    });
+    const label = viewport.name;
 
-  await page.evaluate(() => {
-    for (const selector of ["#controlCenter", "#log"]) {
-      const panel = document.querySelector(selector);
-      for (let index = 0; index < 12; index++) {
-        const content = document.createElement("div");
-        content.style.cssText = "flex: 0 0 120px; height: 120px";
-        panel.append(content);
+    expect(layout.viewport, `${label}: viewport`).toEqual([viewport.width, viewport.height]);
+    expect(layout.document[0], `${label}: document horizontal overflow`).toBeLessThanOrEqual(viewport.width);
+    expect(layout.frame.left, `${label}: frame left edge`).toBeGreaterThanOrEqual(0);
+    expect(layout.frame.right, `${label}: frame right edge`).toBeLessThanOrEqual(viewport.width);
+    expect(layout.left.width, `${label}: left panel width`).toBeGreaterThan(0);
+    expect(layout.left.height, `${label}: left panel height`).toBeGreaterThan(0);
+    expect(layout.right.width, `${label}: right panel width`).toBeGreaterThan(0);
+    expect(layout.right.height, `${label}: right panel height`).toBeGreaterThan(0);
+    expect(layout.overflow, `${label}: panel overflow behavior`).toEqual(["auto", "auto"]);
+    expect(layout.canvas.width / layout.canvas.height, `${label}: canvas aspect ratio`).toBeCloseTo(800 / 510, 3);
+    expect(layout.board.width, `${label}: board width`).toBeGreaterThan(0);
+    expect(layout.board.height, `${label}: board height`).toBeGreaterThan(0);
+    expect(layout.board.bottom, `${label}: board is visible in or reachable by page scrolling`).toBeLessThanOrEqual(layout.document[1] + 1);
+
+    if (viewport.fullHeightPanels) {
+      expect(layout.left.top, `${label}: left panel top`).toBe(0);
+      expect(layout.right.top, `${label}: right panel top`).toBe(0);
+      expect(layout.left.height, `${label}: left panel height`).toBe(viewport.height);
+      expect(layout.right.height, `${label}: right panel height`).toBe(viewport.height);
+      if (viewport.name === "short desktop") {
+        expect(layout.document[1], `${label}: board remains reachable below the viewport`).toBeGreaterThan(viewport.height);
       }
     }
-  });
-  const panelScroll = await page.evaluate(() => {
-    const left = document.querySelector("#controlCenter");
-    const right = document.querySelector("#log");
-    left.scrollTop = 120;
-    right.scrollTop = 240;
-    return {
-      left: { top: left.scrollTop, overflowing: left.scrollHeight > left.clientHeight },
-      right: { top: right.scrollTop, overflowing: right.scrollHeight > right.clientHeight },
-      documentHeight: document.documentElement.scrollHeight
-    };
-  });
-  expect(panelScroll.left).toEqual({ top: 120, overflowing: true });
-  expect(panelScroll.right).toEqual({ top: 240, overflowing: true });
-  expect(panelScroll.documentHeight).toBe(900);
 
-  await page.setViewportSize({ width: 1600, height: 700 });
-  const resizedPanelHeight = await page.locator("#controlCenter").evaluate(element => element.getBoundingClientRect().height);
-  expect(resizedPanelHeight).toBe(700);
+    if (viewport.columns === "three") {
+      expect(layout.display, `${label}: three-column layout`).toBe("grid");
+      expect(layout.left.right, `${label}: left panel precedes board`).toBeLessThanOrEqual(layout.board.left);
+      expect(layout.board.right, `${label}: board precedes right panel`).toBeLessThanOrEqual(layout.right.left);
+    } else {
+      expect(layout.display, `${label}: stacked layout`).toBe("grid");
+      expect(layout.left.top, `${label}: panels follow board`).toBeGreaterThanOrEqual(layout.board.bottom);
+      expect(layout.right.top, `${label}: panels share a row`).toBe(layout.left.top);
+    }
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  const mobileLayout = await page.evaluate(() => {
-    const game = document.querySelector("#game-container").getBoundingClientRect();
-    const left = document.querySelector("#controlCenter").getBoundingClientRect();
-    const right = document.querySelector("#log").getBoundingClientRect();
-    return {
-      display: getComputedStyle(document.querySelector("#game-frame")).display,
-      gameBottom: game.bottom,
-      leftTop: left.top,
-      rightTop: right.top
-    };
-  });
-  expect(mobileLayout.display).toBe("grid");
-  expect(mobileLayout.leftTop).toBeGreaterThanOrEqual(mobileLayout.gameBottom);
-  expect(mobileLayout.rightTop).toBe(mobileLayout.leftTop);
+    const scrollState = await page.evaluate(() => {
+      for (const selector of ["#controlCenter", "#log"]) {
+        const panel = document.querySelector(selector);
+        for (let index = 0; index < 16; index++) {
+          const content = document.createElement("div");
+          content.dataset.layoutTestContent = "true";
+          content.style.cssText = "flex: 0 0 120px; height: 120px";
+          panel.append(content);
+        }
+      }
+      const left = document.querySelector("#controlCenter");
+      const right = document.querySelector("#log");
+      const documentHeight = document.documentElement.scrollHeight;
+      left.scrollTop = 120;
+      right.scrollTop = 240;
+      return {
+        left: [left.scrollTop, left.scrollHeight > left.clientHeight],
+        right: [right.scrollTop, right.scrollHeight > right.clientHeight],
+        documentHeight,
+        heightAfterPanelContent: document.documentElement.scrollHeight
+      };
+    });
+
+    expect(scrollState.left, `${label}: left panel scrolls independently`).toEqual([120, true]);
+    expect(scrollState.right, `${label}: right panel scrolls independently`).toEqual([240, true]);
+    expect(scrollState.heightAfterPanelContent, `${label}: panel content does not extend the page`).toBe(scrollState.documentHeight);
+    await page.evaluate(() => {
+      document.querySelectorAll("[data-layout-test-content]").forEach(element => element.remove());
+      document.querySelectorAll("#controlCenter, #log").forEach(panel => panel.scrollTop = 0);
+    });
+  }
 });
