@@ -15,26 +15,30 @@
 
 ## Current Game State
 
-Runner is a tile-based canvas game using a 25 x 15 map. The player rolls two dice, spends movement points, jumps, falls with gravity, interacts with hazards, pickups, signs, locks, exits, and monsters, and carries some stats between levels through URL hash state.
+Runner is a tile-based canvas game using a 25 x 15 map. The player rolls two dice, spends movement points, jumps, falls with gravity, interacts with hazards, pickups, signs, locks, exits, and monsters, and carries persistent progress between level-boundary checkpoints through local storage or portable URL state.
 
 Important current features:
 
 - Canvas renderer with tile sprites loaded from `tiles2.json`.
 - URL hash map loading with `#map=...`.
-- URL hash carry-over stats with `#st=...`.
+- URL hash carry-over stats with `#st=...` and portable checkpoint links.
 - Dice rolling and selected-die spending.
 - Movement, jumping, diagonal jumping, gravity, falling, water/fluid behavior, slopes, bounce, hazards, exits, pickups, locks, signs, monsters, fog, and modal text.
 - Separate editor page for painting maps, choosing variants, generating map strings, and opening maps in the game.
+- Exit routing from `levels.json`, with validation for missing destination levels and a legacy variant-ID fallback.
+- Level-boundary local checkpoints; midlevel world mutations are intentionally not persisted.
+- Achievement comparisons reject missing explicit paths while preserving bare named-counter defaults.
+- Playwright browser coverage for movement costs and failed attempts, pickup collection, checkpoint restore, mapped exits, and portable resume in a fresh context.
 
 ## v2 Target Tracks
 
-1. Stabilize and document the prototype.
-2. Extract shared map, variant, tile, level, and state modules.
-3. Add tests and browser smoke checks.
-4. Split gameplay into movement, interactions, rendering, and input modules.
-5. Separate `levels.json` from tile definitions.
-6. Add validation for tiles, levels, and variants.
-7. Add XP, achievements, story flags, narrative events, and resume links.
+1. Continue stabilizing and documenting the prototype.
+2. Continue extracting shared runtime responsibilities from `game.js`.
+3. Maintain module tests, shell smoke checks, and real-browser gameplay tests with `npm run check`.
+4. Split remaining gameplay into movement, interactions, rendering, and input modules.
+5. Keep canonical levels and routing in `levels.json`; legacy embedded maps are fallback-only.
+6. Maintain validation for tiles, levels, exit mappings, and achievement conditions.
+7. Maintain XP, achievements, story flags, narrative events, and portable checkpoint links.
 8. Improve editor authoring for advanced entities and narrative events.
 
 ## First-Pass Module Plan
@@ -58,8 +62,7 @@ Important current features:
 
 ## Next Slice
 
-- Wire `src/state.js` into `game.js` without changing behavior.
-- Move boot levels from `tiles2.json` into `levels.json` at runtime.
-- Replace duplicate in-file map decoders with `src/shared/mapCodec.js`.
-- Replace duplicate variant logic with `src/shared/variants.js`.
-- Add first real browser smoke test with a headless browser once dependency/tooling choice is confirmed.
+- Continue extracting gameplay responsibilities from `game.js` without changing the data-driven tile, level, and achievement contracts.
+- Replace remaining duplicate in-file map decoding and variant logic with the shared modules.
+- Extend editor authoring for level exit mappings and advanced entities.
+- Keep browser coverage focused on player-visible gameplay flows and run `npm run check` before changes are considered complete.

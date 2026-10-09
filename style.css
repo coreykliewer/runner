@@ -279,7 +279,8 @@ canvas{
 }
 
 #controls button,
-#roll{
+#roll,
+#create-resume-link{
   font-size: 16px;
   padding: 10px 18px;
   border-radius: 8px;
@@ -290,6 +291,12 @@ canvas{
 }
 
 #roll{ margin-bottom: 6px; }
+
+#resume-link{
+  width: 100%;
+  max-width: 240px;
+  padding: 6px;
+}
 
 /* =========================================================
    Message + Modal
@@ -388,13 +395,18 @@ canvas{
 
     width: calc(var(--panel-w) + var(--canvas-w) + var(--panel-w) + (var(--gap) * 2) + (var(--pad) * 2));
     max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    box-sizing: border-box;
   }
 
   #controlCenter,
   #log{
     width: var(--panel-w);
-    height: var(--canvas-h);
-    max-height: var(--canvas-h);
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    margin-block: calc(-1 * var(--pad));
   }
 
   #controlCenter, #log{

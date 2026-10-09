@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFile } from "node:fs/promises";
-import { checkAchievementRules, normalizeAchievementRules } from "../src/achievements.js";
+import { checkAchievementRules, normalizeAchievementRules, resolveValue } from "../src/achievements.js";
 import { createInitialState } from "../src/state.js";
 
 describe("achievement rules", () => {
@@ -218,6 +218,20 @@ describe("achievement rules", () => {
     });
 
     assert.deepEqual(result.unlocked, []);
+  });
+
+  it("does not treat missing movement, target, or damage paths as zero", () => {
+    const state = createInitialState({ runner: { achievements: [] } });
+    const rules = [
+      { id: "missing_movement", when: { left: "movement.points", operator: "equals", right: { literal: 0 } } },
+      { id: "missing_target", when: { left: "target.moveCost", operator: "equals", right: { literal: 0 } } },
+      { id: "missing_damage", when: { left: "damage.amount", operator: "equals", right: { literal: 0 } } }
+    ];
+
+    assert.equal(resolveValue("movement.points", state), undefined);
+    assert.equal(resolveValue("target.moveCost", state), undefined);
+    assert.equal(resolveValue("damage.amount", state), undefined);
+    assert.deepEqual(checkAchievementRules(state, rules).unlocked, []);
   });
 
   it("supports value-to-value comparison conditions", () => {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFile } from "node:fs/promises";
 import { validateAchievements, validateLevels, validateMap, validateTiles } from "../src/validation.js";
+import { resolveExitDestination } from "../src/levelRouting.js";
+import { getRollLimitState } from "../src/rollLimit.js";
 
 describe("validation", () => {
   it("validates the current tile file shape", async () => {
@@ -15,6 +17,27 @@ describe("validation", () => {
     const levels = JSON.parse(await readFile("levels.json", "utf8"));
     const errors = validateLevels(levels, tiles).filter(item => item.severity === "error");
     assert.deepEqual(errors, []);
+  });
+
+  it("routes exit variants through the current level mapping", () => {
+    const levels = {
+      levels: {
+        entrance: { exits: { north_gate: "waterworks" } },
+        waterworks: { map: "P1" }
+      }
+    };
+
+    assert.equal(resolveExitDestination(levels, "entrance", "north_gate"), "waterworks");
+    assert.equal(resolveExitDestination(levels, "entrance", "waterworks"), "waterworks");
+  });
+
+  it("rejects exit mappings to levels that do not exist", () => {
+    const errors = validateLevels({ levels: { entrance: { map: "P1", exits: { gate: "missing" } } } }, { P: {} }, {
+      rows: 1,
+      cols: 1
+    }).filter(item => item.severity === "error");
+
+    assert.equal(errors.some(item => item.path === "levels.entrance.exits.gate"), true);
   });
 
   it("reports unknown tiles", () => {
@@ -115,5 +138,47 @@ describe("validation", () => {
     }).filter(item => item.severity === "error");
 
     assert.deepEqual(errors, []);
+  });
+
+  it("accepts positive integer roll limits and rejects invalid values", () => {
+    const valid = validateLevels({
+      levels: {
+        default: {
+          map: "P1",
+          rollLimit: 10
+        }
+      }
+    }, { P: {} }, { rows: 1, cols: 1 }).filter(item => item.severity === "error");
+
+    const invalid = validateLevels({
+      levels: {
+        default: {
+          map: "P1",
+          rollLimit: 0
+        }
+      }
+    }, { P: {} }, { rows: 1, cols: 1 }).filter(item => item.severity === "error");
+
+    const nested = validateLevels({
+      levels: {
+        default: {
+          map: "P1",
+          rollLimit: "abc"
+        }
+      }
+    }, { P: {} }, { rows: 1, cols: 1 }).filter(item => item.severity === "error");
+
+    assert.equal(valid.length, 0);
+    assert.equal(invalid.some(item => item.path === "levels.default.rollLimit"), true);
+    assert.equal(nested.some(item => item.path === "levels.default.rollLimit"), true);
+  });
+
+  it("computes roll-limit state without a configured limit", () => {
+    assert.deepEqual(getRollLimitState({ rollLimit: null, rollsUsed: 3 }), {
+      rollLimit: null,
+      rollsUsed: 3,
+      rollsRemaining: null,
+      percentConsumed: 0
+    });
   });
 });

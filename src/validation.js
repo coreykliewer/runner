@@ -1,5 +1,6 @@
 import { decodeMap, DEFAULT_COLS, DEFAULT_ROWS } from "./shared/mapCodec.js";
 import { sanitizeVariant, VARIANT_BUCKETS } from "./shared/variants.js";
+import { normalizeRollLimit } from "./rollLimit.js";
 
 export function validateTiles(tiles) {
   const issues = [];
@@ -128,6 +129,22 @@ export function validateLevels(levelFile, tiles, { rows = DEFAULT_ROWS, cols = D
     }
     if (level.id && level.id !== id) {
       issues.push(issue("warning", `levels.${id}.id`, "Level id does not match its object key."));
+    }
+    if (level.exits != null) {
+      if (!level.exits || typeof level.exits !== "object" || Array.isArray(level.exits)) {
+        issues.push(issue("error", `levels.${id}.exits`, "exits must be an object mapping variants to level ids."));
+      } else {
+        for (const [variant, destination] of Object.entries(level.exits)) {
+          if (typeof destination !== "string" || !levels[destination]) {
+            issues.push(issue("error", `levels.${id}.exits.${variant}`, "Exit destination must name an existing level."));
+          }
+        }
+      }
+    }
+    if (level.rollLimit != null) {
+      if (normalizeRollLimit(level.rollLimit) === null) {
+        issues.push(issue("error", `levels.${id}.rollLimit`, "rollLimit must be a positive integer."));
+      }
     }
     if (typeof level.map !== "string" || !level.map.trim()) {
       issues.push(issue("error", `levels.${id}.map`, "Level map is required."));

@@ -6,9 +6,19 @@ The current app is served as static files:
 
 - `index.html` loads `style.css` and `game.js`.
 - `editor.html` loads `editor.css` and `editor.js`.
-- `tiles2.json` contains tile metadata, sprites, variants, and currently embedded level maps.
+- `tiles2.json` contains tile metadata, sprites, and variants.
+- `levels.json` contains canonical level maps and exit-variant-to-level mappings. Embedded maps in `tiles2.json` remain a legacy fallback.
 
-There is no bundler, package install, build step, or test step in the prototype.
+There is no bundler or build step. Run `npm test` for module tests, `npm run smoke` for HTML wiring checks, `npm run test:browser` for Playwright gameplay tests, or `npm run check` for all checks.
+
+## Checkpoints and Resume
+
+- Local saves preserve level-boundary checkpoints and the current dice state during an active roll. Starting a level records its persistent Runner progress; taking an exit records the destination level and the carried progress together.
+- A checkpoint restores the destination level's canonical map and spawn, plus saved die values and roll count. Midlevel map mutations and positions are not saved, so a pickup collected before reaching the next checkpoint can reappear after a reload.
+- **Create Resume Link** serializes the checkpoint level and persistent Runner progress into the URL. It works in a fresh browser without local storage. `#resume=1` remains available for resuming a checkpoint in the same browser.
+- Exits use the current level's `exits` mapping in `levels.json`. For older data without a mapping, the exit variant is treated as a destination level ID.
+- Achievement comparisons with missing dotted paths (for example `damage.amount`) fail. Bare stat names retain their existing counter lookup behavior.
+- Movement-attempt achievements are evaluated before movement points are spent, using the same calculated target cost as movement.
 
 ## Controls
 
@@ -69,5 +79,5 @@ Common tile fields:
 - `slope`: `left` or `right`.
 - `lock`, `monster`, `sign`, `exit`, `platform`, `pickup`, `decor`: variant buckets.
 
-Current embedded level maps live under the `E` tile object as `default`, `a`, and `b`. v2 should move these to `levels.json`.
+Movement behavior and costs remain data-driven in `tiles2.json`; level routing belongs in `levels.json`; achievement conditions belong in `achievements.json`.
 

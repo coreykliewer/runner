@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createInitialState,
+  createCheckpointState,
   decodeCarryStats,
   encodeCarryStatsFromRunner,
   loadState,
@@ -72,6 +73,19 @@ describe("state", () => {
     assert.deepEqual(decoded.narrativeEventsSeen, ["level_1_intro"]);
   });
 
+  it("preserves valid zero carry values and defaults malformed fields", () => {
+    const decoded = decodeCarryStats("v1.h0.s0.k0.t0.m0.p%%%bad");
+
+    assert.equal(decoded.hearts, 0);
+    assert.equal(decoded.score, 0);
+    assert.equal(decoded.kills, 0);
+    assert.equal(decoded.turbo, false);
+    assert.equal(decoded.turboMultiplier, 1);
+    assert.equal(decoded.xp, 0);
+    assert.deepEqual(decoded.counters, {});
+    assert.deepEqual(decoded.stats, {});
+  });
+
   it("persists state to a localStorage-compatible store", () => {
     const storage = memoryStorage();
     const saved = saveState(createInitialState({ levelKey: "a" }), storage);
@@ -80,5 +94,24 @@ describe("state", () => {
     assert.equal(saved.levelKey, "a");
     assert.equal(loaded.levelKey, "a");
     assert.equal(loaded.version, 2);
+  });
+
+  it("stores level-boundary progress without midlevel world changes", () => {
+    const checkpoint = createCheckpointState("waterworks", {
+      x: 12,
+      y: 6,
+      hearts: 0,
+      score: 3,
+      achievements: [{ id: "first_diamond" }],
+      narrativeEventsSeen: ["level1_intro"]
+    });
+
+    assert.equal(checkpoint.levelKey, "waterworks");
+    assert.equal(checkpoint.runner.hearts, 0);
+    assert.equal(checkpoint.runner.score, 3);
+    assert.equal(checkpoint.runner.achievements[0].id, "first_diamond");
+    assert.deepEqual(checkpoint.world.pickupsCollected, []);
+    assert.deepEqual(checkpoint.world.monstersDefeated, []);
+    assert.equal(checkpoint.world.mapHash, "");
   });
 });

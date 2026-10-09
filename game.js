@@ -66,6 +66,29 @@ let currentMapString = "";
 let turboGravityUsed = false;
 let kills = 0;
 
+function getLevelRollLimit(levelKey = currentLevelKey) {
+  const level = LEVELS?.levels?.[levelKey];
+  if (!level || typeof level !== "object") return null;
+  const raw = level.rollLimit;
+  if (raw === undefined || raw === null || raw === "") return null;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function calculateCurrentRollLimitState() {
+  const limit = getLevelRollLimit(currentLevelKey);
+  const used = Number.isFinite(Number(rollCount)) ? Math.max(0, Number(rollCount)) : 0;
+  return {
+    rollLimit: limit,
+    rollsUsed: used,
+    rollsRemaining: limit === null ? null : Math.max(0, limit - used),
+    percentConsumed: limit === null ? 0 : Math.min(100, Math.max(0, (used / limit) * 100))
+  };
+}
+
+window.getCurrentRollLimitState = function() {
+  return calculateCurrentRollLimitState();
+};
 
 function safeDecodeURIComponent(s) {
   try { return decodeURIComponent(s); }
@@ -105,12 +128,12 @@ function shouldResumeFromLocalState() {
 function getMapFromURL() {
   const raw = getHashParamRaw("map");
   if (raw != null && raw !== "") return safeDecodeURIComponent(raw);
-
-  sessionStorage.removeItem("exitIndex");
-  sessionStorage.removeItem("levelKey");
-  currentExitIndex = 0;
-  currentLevelKey = "default";
   return null;
+}
+
+function getLevelFromURL() {
+  const raw = getHashParamRaw("level");
+  return raw ? safeDecodeURIComponent(raw) : null;
 }
 
 
@@ -210,6 +233,7 @@ const ACHIEVEMENTS_URL = "achievements.json";
 let LEVELS = null;
 let StateModule = null;
 let ResumeLinksModule = null;
+let LevelRoutingModule = null;
 let GameMapRuntimeModule = null;
 let NarrativeEventsModule = null;
 let AchievementsModule = null;
@@ -311,13 +335,33 @@ function loadResumeLinksModule() {
   return import("./src/resumeLinks.js")
     .then(module => {
       ResumeLinksModule = module;
-      window.getRunnerResumeLink = () => module.createLocalResumeUrl(window.location.href);
+      window.getRunnerResumeLink = () => {
+        const hasCheckpoint = !!StateModule && !!window.localStorage?.getItem(StateModule.STORAGE_KEY);
+        const checkpoint = hasCheckpoint ? StateModule.loadState() : null;
+        return module.createResumeUrl(window.location.href, {
+          level: checkpoint?.levelKey || currentLevelKey || "default",
+          runner: checkpoint?.runner || runner
+        });
+      };
       console.log("[Runner] resumeLinks.js loaded successfully.");
       return module;
     })
     .catch(err => {
       ResumeLinksModule = null;
       console.warn("[Runner] Failed to load resumeLinks.js; portal links will use fallback hash generation.", err);
+      return null;
+    });
+}
+
+function loadLevelRoutingModule() {
+  return import("./src/levelRouting.js")
+    .then(module => {
+      LevelRoutingModule = module;
+      return module;
+    })
+    .catch(err => {
+      LevelRoutingModule = null;
+      console.warn("[Runner] Failed to load level routing module.", err);
       return null;
     });
 }
@@ -461,6 +505,7 @@ for (const bucket of VARIANT_BUCKETS) {
       loadLevels(),
       loadStateModule(),
       loadResumeLinksModule(),
+      loadLevelRoutingModule(),
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
       loadNarrativeData(),
@@ -473,6 +518,7 @@ for (const bucket of VARIANT_BUCKETS) {
       loadLevels(),
       loadStateModule(),
       loadResumeLinksModule(),
+      loadLevelRoutingModule(),
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
       loadNarrativeData(),
@@ -680,11 +726,15 @@ function decodeCarryStats(str) {
 
   for (let i = 1; i < parts.length; i++) {
     const t = parts[i];
-    if (t.startsWith("h")) out.hearts = parseInt(t.slice(1), 36) || out.hearts;
-    else if (t.startsWith("s")) out.score = parseInt(t.slice(1), 36) || out.score;
-    else if (t.startsWith("k")) out.kills = parseInt(t.slice(1), 36) || out.kills;
-    else if (t.startsWith("t")) out.turbo = (parseInt(t.slice(1), 36) || 0) === 1;
-    else if (t.startsWith("m")) out.turboMultiplier = parseInt(t.slice(1), 36) || out.turboMultiplier;
+    if (t.startsWith("h")) out.hearts = parseCarryNumber(t.slice(1), out.hearts);
+    else if (t.startsWith("s")) out.score = parseCarryNumber(t.slice(1), out.score);
+    else if (t.startsWith("k")) out.kills = parseCarryNumber(t.slice(1), out.kills);
+    else if (t.startsWith("t")) {
+      const turbo = parseCarryNumber(t.slice(1), null);
+      if (turbo !== null) out.turbo = turbo === 1;
+    } else if (t.startsWith("m")) {
+      out.turboMultiplier = parseCarryNumber(t.slice(1), out.turboMultiplier);
+    }
   }
 
   // sanity clamps
@@ -696,52 +746,26 @@ function decodeCarryStats(str) {
   return out;
 }
 
-function buildPersistentGameState() {
-  if (!StateModule || !runner) return null;
+function parseCarryNumber(value, fallback) {
+  if (!/^-?[0-9a-z]+$/i.test(value)) return fallback;
+  const parsed = Number.parseInt(value, 36);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
-  return StateModule.createInitialState({
-    levelKey: currentLevelKey || "default",
-    exitIndex: currentExitIndex || 0,
-    runner: {
-      x: runner.x,
-      y: runner.y,
-      hearts: runner.hearts,
-      score: runner.score,
-      kills: runner.kills,
-      jumpCredits: runner.jumpCredits || 0,
-      turbo: runner.turbo === true,
-      turboMultiplier: runner.turboMultiplier || 2,
-      fallDistance: runner.fallDistance || 0,
-      xp: runner.xp || 0,
-      counters: runner.counters || {},
-      stats: runner.stats || {},
-      achievements: runner.achievements || [],
-      storyFlags: runner.storyFlags || {}
-    },
-    dice: {
-      dieValue1,
-      dieValue2,
-      selectedDie,
-      rollCount
-    },
-    world: {
-      mapHash: currentMapString && ResumeLinksModule
-        ? ResumeLinksModule.createResumeHash({
-          map: currentMapString,
-          runner,
-          level: currentLevelKey || "default"
-        })
-        : (window.location.hash || ""),
-      fogRevealed: [],
-      pickupsCollected: [],
-      monstersDefeated: [],
-      narrativeEventsSeen: runner.narrativeEventsSeen || []
-    }
+function buildPersistentGameState() {
+  if (!StateModule?.createCheckpointState || !runner) return null;
+  return StateModule.createCheckpointState(currentLevelKey || "default", runner, {
+    dieValue1,
+    dieValue2,
+    selectedDie,
+    rollCount
   });
 }
 
-function savePersistentGameState() {
+function savePersistentGameState({ checkpoint = false } = {}) {
+  if (!checkpoint) return;
   if (!StateModule || !runner) return;
+  if (getLevelMap(currentLevelKey) !== currentMapString) return;
 
   try {
     const state = buildPersistentGameState();
@@ -762,23 +786,10 @@ function getSavedGameState() {
   }
 }
 
-function getMapFromSavedState(state) {
-  const hash = state?.world?.mapHash || "";
-  if (!hash) return null;
-
-  const params = hash.startsWith("#") ? hash.slice(1) : hash;
-  for (const part of params.split("&")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    if (part.slice(0, eq) === "map") return safeDecodeURIComponent(part.slice(eq + 1));
-  }
-
-  return null;
-}
-
 function buildNarrativeState() {
   if (!StateModule || !runner) return null;
 
+  const rollLimitState = calculateCurrentRollLimitState();
   return StateModule.createInitialState({
     levelKey: currentLevelKey || "default",
     exitIndex: currentExitIndex || 0,
@@ -794,7 +805,9 @@ function buildNarrativeState() {
       dieValue1,
       dieValue2,
       selectedDie,
-      rollCount
+      rollCount,
+      rollLimit: rollLimitState.rollLimit,
+      rollsRemaining: rollLimitState.rollsRemaining
     },
     world: {
       mapHash: currentMapString || "",
@@ -914,6 +927,7 @@ function buildMovementAchievementContext({
   moveCost,
   isDiagonalJump = false
 }) {
+  const rollLimitState = calculateCurrentRollLimitState();
   return {
     movementPoints: totalMovementPoints(),
     movement: {
@@ -929,7 +943,9 @@ function buildMovementAchievementContext({
       dieValue1,
       dieValue2,
       selectedDie,
-      rollCount
+      rollCount,
+      rollLimit: rollLimitState.rollLimit,
+      rollsRemaining: rollLimitState.rollsRemaining
     },
     current: tileAchievementContext(here),
     target: {
@@ -1213,7 +1229,7 @@ function hasEDefaultMap() {
 
     // --- MAP BUILDING ----
     const savedGameState = shouldResumeFromLocalState() ? getSavedGameState() : null;
-    const savedMap = getMapFromSavedState(savedGameState);
+    const requestedLevelKey = getLevelFromURL();
     const encodedMap = getMapFromURL();
   
 
@@ -1241,17 +1257,35 @@ function hasEDefaultMap() {
 
 if (encodedMap) {
   console.log("Using encoded map:", encodedMap);
+  currentLevelKey = requestedLevelKey || "default";
   currentMapString = encodedMap;
   grid = decodeMap(encodedMap);
 
-} else if (savedMap) {
-  console.log("Using saved local game map.");
-  currentLevelKey = savedGameState.levelKey || currentLevelKey || "default";
+} else if (savedGameState) {
+  console.log("Using saved level-boundary checkpoint.");
+  currentLevelKey = savedGameState.levelKey || "default";
   currentExitIndex = savedGameState.exitIndex || 0;
-  currentMapString = savedMap;
+  currentMapString = getLevelMap(currentLevelKey);
+  if (typeof currentMapString !== "string" || !currentMapString.trim()) {
+    currentLevelKey = getDefaultLevelKey();
+    currentMapString = getLevelMap(currentLevelKey);
+  }
   sessionStorage.setItem("levelKey", currentLevelKey);
   sessionStorage.setItem("exitIndex", currentExitIndex);
-  grid = decodeMap(savedMap);
+  grid = decodeMap(currentMapString);
+
+} else if (requestedLevelKey) {
+  console.log("Using portable checkpoint level.");
+  currentLevelKey = requestedLevelKey;
+  currentMapString = getLevelMap(currentLevelKey);
+  if (typeof currentMapString !== "string" || !currentMapString.trim()) {
+    gameOver = true;
+    setMessage(`BOOT ERROR: no map found for level '${currentLevelKey}'.`, { kind: "message" });
+    draw();
+    return;
+  }
+  sessionStorage.setItem("levelKey", currentLevelKey);
+  grid = decodeMap(currentMapString);
 
 } else {
   console.log("No #map in URL; booting from levels.json default level or tiles2.json fallback");
@@ -1335,10 +1369,12 @@ runner = {
   dead: false
 };
 
-if (savedMap && savedGameState?.runner) {
+if (savedGameState?.runner) {
   runner = {
     ...runner,
     ...savedGameState.runner,
+    x: startX,
+    y: startY,
     dead: false,
     damageFlashTimer: 0,
     diamondFlashTimer: 0,
@@ -1352,7 +1388,7 @@ if (savedMap && savedGameState?.runner) {
 ensureRunnerStats();
 ensureRunnerCounters();
 
-if (savedMap && savedGameState?.dice) {
+if (savedGameState?.dice) {
   dieValue1 = savedGameState.dice.dieValue1 || 0;
   dieValue2 = savedGameState.dice.dieValue2 || 0;
   selectedDie = savedGameState.dice.selectedDie || null;
@@ -1368,7 +1404,10 @@ runTutorialNarrative({
 if (isFogEnabled()) initFogForCurrentGrid();
 else fog = null;
 
-savePersistentGameState();
+updateInfo();
+savePersistentGameState({ checkpoint: true });
+const resumeLinkButton = document.getElementById("create-resume-link");
+if (resumeLinkButton) resumeLinkButton.disabled = false;
 
 
     // Start the game loop now that everything is ready
@@ -1795,6 +1834,7 @@ function updateInfo(label = "") {
   const killCount = runner.kills;
   const xp = runner.xp || 0;
 
+  const rollLimitState = calculateCurrentRollLimitState();
   const lines = [
     label ? `${label}` : null,
     `Moves: ${moves}`,
@@ -1805,7 +1845,14 @@ function updateInfo(label = "") {
     `Kills: ${killCount}`,
     `XP: ${xp}`,
     `Times rolled: ${rolls}`
-  ].filter(Boolean);
+  ];
+
+  if (rollLimitState.rollLimit !== null) {
+    lines.push(`Roll limit: ${rollLimitState.rollsRemaining}/${rollLimitState.rollLimit}`);
+    lines.push(`Rolls used: ${rollLimitState.rollsUsed} (${rollLimitState.percentConsumed.toFixed(0)}%)`);
+  }
+
+  el.innerHTML = lines.filter(Boolean).join("<br>");
 
   el.innerHTML = lines.join("<br>");
   savePersistentGameState();
@@ -1900,6 +1947,7 @@ function spendMovement(cost) {
     if (totalMovementPoints() <= 0 && remaining > 0) return false;
   }
   runner.movementLeft = totalMovementPoints();
+  savePersistentGameState({ checkpoint: true });
   return true;
 }
 
@@ -2633,10 +2681,12 @@ if (target.solid) {
 }
 
 function handleExit(tile) {
-  // find the exit key (variant) at runner position
-  const destKey = exitIdAt(runner.x, runner.y) || "default";
-
-  const mapString = getLevelMap(destKey);
+  const exitVariant = exitIdAt(runner.x, runner.y);
+  const configuredExits = LEVELS?.levels?.[currentLevelKey]?.exits;
+  const hasConfiguredDestination = !!configuredExits && Object.hasOwn(configuredExits, exitVariant);
+  const destKey = LevelRoutingModule?.resolveExitDestination(LEVELS, currentLevelKey, exitVariant) ||
+    (!hasConfiguredDestination ? (exitVariant || "default") : null);
+  const mapString = destKey ? getLevelMap(destKey) : null;
 
   if (typeof mapString !== "string" || !mapString.trim()) {
     setMessage(`Exit ${destKey} is not wired (no level map found).`, {
@@ -2648,15 +2698,16 @@ function handleExit(tile) {
   }
 
   currentLevelKey = destKey;
+  currentMapString = mapString;
   sessionStorage.setItem("levelKey", currentLevelKey);
   sessionStorage.removeItem("exitIndex"); // optional cleanup
+  savePersistentGameState({ checkpoint: true });
 
   updateInfo(`Entering ${destKey}...`);
   draw();
 
   if (ResumeLinksModule) {
     window.location.hash = ResumeLinksModule.createResumeHash({
-      map: mapString,
       runner,
       level: destKey
     });
@@ -2829,9 +2880,9 @@ function diagonalJump(dx) {
     isDiagonalJump
   });
 
-  if (totalMovementPoints() <= 0 && !turboExecuting) {
+  if (!turboExecuting) {
     checkStatAchievements(movementAchievementContext);
-    return;
+    if (totalMovementPoints() < attemptedMoveCost) return;
   }
 
 if (target.solid && !target.slope) {
@@ -2878,7 +2929,6 @@ if (target.solid && !target.slope) {
 
   if (!turboExecuting) {
     if (!spendMovement(moveCost)) return;
-    checkStatAchievements(movementAchievementContext);
   }
 
   // ======================================================
@@ -3152,21 +3202,55 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-up-right").onclick = () => diagonalJump(1);
 
   document.getElementById("roll").onclick = () => rollDice();
+  document.getElementById("create-resume-link").onclick = async () => {
+    const linkInput = document.getElementById("resume-link");
+    const resumeLink = window.getRunnerResumeLink?.();
+    if (!resumeLink || !linkInput) return;
+
+    linkInput.value = resumeLink;
+    linkInput.hidden = false;
+    linkInput.focus();
+    linkInput.select();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(resumeLink);
+      setMessage("Portable resume link copied.");
+    } catch {
+      setMessage("Portable resume link ready to copy.");
+    }
+  };
 });
 // ============================================================
 // Dice roll
 // ============================================================
+function isLevelObjectiveComplete() {
+  const here = tileData(tileAt(runner.x, runner.y));
+  const exitVariant = exitIdAt(runner.x, runner.y);
+  return !!(here?.exit || exitVariant);
+}
+
+function enforceRollLimitBeforeNextRoll() {
+  const rollLimitState = calculateCurrentRollLimitState();
+  if (rollLimitState.rollLimit === null) return false;
+  if (rollLimitState.rollsRemaining > 0) return false;
+  if (isLevelObjectiveComplete()) return false;
+  if (totalMovementPoints() > 0) return true;
+
+  deathReason = `Out of rolls: you used all ${rollLimitState.rollLimit} rolls without finishing the level.`;
+  endGame();
+  return true;
+}
+
 function rollDice() {
   if (gameOver) return;
+  if (enforceRollLimitBeforeNextRoll()) return;
+
   runner.turbo = false;
-if (inWater()) {
-  const tile = tileData(tileAt(runner.x, runner.y));
-  takeDamage(1, tile);
-
-  // what you asked for:
-  setMessage("Drowning, took damage");
-
-}
+  if (inWater()) {
+    const tile = tileData(tileAt(runner.x, runner.y));
+    takeDamage(1, tile);
+    setMessage("Drowning, took damage");
+  }
 
   const a = Math.floor(Math.random() * 6) + 1;
   const b = Math.floor(Math.random() * 6) + 1;
@@ -3186,10 +3270,14 @@ if (inWater()) {
       applyFullGravity();
     }
   }
-  const rollText = `Rolled ${a}+${b} = ${a + b}`;
-logMessage(rollText, { type: "roll" });
-savePersistentGameState();
 
+  const rollText = `Rolled ${a}+${b} = ${a + b}`;
+  logMessage(rollText, { type: "roll" });
+  const rollLimitState = calculateCurrentRollLimitState();
+  if (rollLimitState.rollLimit !== null && rollLimitState.rollsRemaining === 0 && !isLevelObjectiveComplete()) {
+    setMessage("Final roll! No rolls remaining after this one.", { kind: "message" });
+  }
+  savePersistentGameState({ checkpoint: true });
 }
 
 function setupDieSelection() {

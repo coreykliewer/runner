@@ -57,6 +57,45 @@ export function createInitialState(overrides = {}) {
   };
 }
 
+export function createCheckpointState(levelKey, runner = {}, dice = {}) {
+  const persistentRunner = {};
+  for (const key of [
+    "hearts",
+    "score",
+    "kills",
+    "turbo",
+    "turboMultiplier",
+    "xp",
+    "counters",
+    "stats",
+    "achievements",
+    "storyFlags",
+    "narrativeEventsSeen"
+  ]) {
+    if (runner[key] !== undefined) persistentRunner[key] = runner[key];
+  }
+
+  const persistedDice = {
+    dieValue1: Number(dice.dieValue1 ?? 0),
+    dieValue2: Number(dice.dieValue2 ?? 0),
+    selectedDie: dice.selectedDie ?? null,
+    rollCount: Number.isFinite(Number(dice.rollCount)) ? Number(dice.rollCount) : 0
+  };
+
+  return createInitialState({
+    levelKey: levelKey || "default",
+    runner: persistentRunner,
+    dice: persistedDice,
+    world: {
+      mapHash: "",
+      fogRevealed: [],
+      pickupsCollected: [],
+      monstersDefeated: [],
+      narrativeEventsSeen: runner.narrativeEventsSeen || []
+    }
+  });
+}
+
 export function encodeCarryStatsFromRunner(runner) {
   const parts = [
     "v1",
@@ -82,11 +121,15 @@ export function decodeCarryStats(value) {
   if (parts[0] !== "v1") return out;
 
   for (const token of parts.slice(1)) {
-    if (token.startsWith("h")) out.hearts = parseInt(token.slice(1), 36) || out.hearts;
-    else if (token.startsWith("s")) out.score = parseInt(token.slice(1), 36) || out.score;
-    else if (token.startsWith("k")) out.kills = parseInt(token.slice(1), 36) || out.kills;
-    else if (token.startsWith("t")) out.turbo = (parseInt(token.slice(1), 36) || 0) === 1;
-    else if (token.startsWith("m")) out.turboMultiplier = parseInt(token.slice(1), 36) || out.turboMultiplier;
+    if (token.startsWith("h")) out.hearts = parseBase36(token.slice(1), out.hearts);
+    else if (token.startsWith("s")) out.score = parseBase36(token.slice(1), out.score);
+    else if (token.startsWith("k")) out.kills = parseBase36(token.slice(1), out.kills);
+    else if (token.startsWith("t")) {
+      const turbo = parseBase36(token.slice(1), null);
+      if (turbo !== null) out.turbo = turbo === 1;
+    } else if (token.startsWith("m")) {
+      out.turboMultiplier = parseBase36(token.slice(1), out.turboMultiplier);
+    }
     else if (token.startsWith("p")) {
       Object.assign(out, decodeCarryProgress(token.slice(1)));
     }
@@ -121,14 +164,22 @@ function decodeCarryProgress(value) {
     return structuredCloneFallback(DEFAULT_CARRY_PROGRESS);
   }
 
+  const xp = Number(payload.xp);
+
   return {
-    xp: Number(payload.xp || 0),
+    xp: Number.isFinite(xp) && xp >= 0 ? xp : 0,
     counters: plainObjectOrEmpty(payload.counters),
     stats: plainObjectOrEmpty(payload.stats),
     achievements: Array.isArray(payload.achievements) ? payload.achievements : [],
     storyFlags: plainObjectOrEmpty(payload.storyFlags),
     narrativeEventsSeen: Array.isArray(payload.narrativeEventsSeen) ? payload.narrativeEventsSeen : []
   };
+}
+
+function parseBase36(value, fallback) {
+  if (!/^-?[0-9a-z]+$/i.test(value)) return fallback;
+  const parsed = Number.parseInt(value, 36);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function hasObjectEntries(value) {

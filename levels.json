@@ -12,6 +12,12 @@
       },
       "narrative": ["level1_intro"]
     },
+    "roll-limit-test": {
+      "id": "roll-limit-test",
+      "name": "Roll Limit Test",
+      "map": "P1R1A23",
+      "rollLimit": 1
+    },
     "a": {
       "id": "a",
       "name": "Waterworks",

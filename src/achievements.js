@@ -115,6 +115,8 @@ export function resolveValue(ref, state, context = {}) {
   const pathValue = getPath(scoped, ref);
   if (pathValue !== undefined) return pathValue;
 
+  if (ref.includes(".")) return undefined;
+
   return getStateStat(state, ref);
 }
 
