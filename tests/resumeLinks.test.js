@@ -7,6 +7,7 @@ import {
   createResumeUrl
 } from "../src/resumeLinks.js";
 import { decodeCarryStats } from "../src/state.js";
+import { createNumericMap } from "../src/numericMapCodec.js";
 
 describe("resume links", () => {
   it("creates compact hashes with map and carry stats", () => {
@@ -28,6 +29,16 @@ describe("resume links", () => {
 
   it("appends resume hashes to clean base URLs", () => {
     assert.equal(createResumeUrl("index.html#old", { map: "A1" }), "index.html#map=A1");
+  });
+
+  it("versions numeric maps in resume URLs without changing legacy map hashes", () => {
+    const map = createNumericMap({ width: 2, height: 1, cells: [[12, 104]], variants: [[null, "snake"]] });
+    const hash = createResumeHash({ map });
+    const params = new URLSearchParams(hash.slice(1));
+
+    assert.equal(params.get("mapv"), "1");
+    assert.deepEqual(JSON.parse(params.get("map")), map);
+    assert.equal(createResumeHash({ map: "A1" }), "#map=A1");
   });
 
   it("creates portal transition hashes with destination level metadata", () => {

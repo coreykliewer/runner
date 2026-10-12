@@ -28,7 +28,8 @@ export function eventMatches(event, context, state) {
   const trigger = event.trigger;
   if (trigger.type && trigger.type !== context.type) return false;
   if (trigger.level && trigger.level !== context.level) return false;
-  if (trigger.tile && trigger.tile !== context.tile) return false;
+  if (trigger.tileId != null && trigger.tileId !== context.tileId) return false;
+  if (trigger.tile && trigger.tile !== context.tile && trigger.tile !== context.legacyTile) return false;
   if (trigger.variant && trigger.variant !== context.variant) return false;
   if (trigger.pickupType && trigger.pickupType !== context.pickupType) return false;
 

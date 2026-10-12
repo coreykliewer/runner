@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFile } from "node:fs/promises";
-import { runNarrativeEvents } from "../src/events.js";
+import { eventMatches, runNarrativeEvents } from "../src/events.js";
 import { addXp, setStoryFlag, unlockAchievement } from "../src/progression.js";
 import { createInitialState } from "../src/state.js";
 
@@ -48,5 +48,15 @@ describe("progression and narrative events", () => {
     assert.equal(result.state.runner.xp, 5);
     assert.equal(result.state.runner.achievements.length, 0);
     assert.equal(result.actions.length, 0);
+  });
+
+  it("matches numeric tile IDs while preserving legacy letter tile triggers", () => {
+    const state = createInitialState();
+    const numericEvent = { id: "numeric", trigger: { type: "pickup", tileId: 104 } };
+    const legacyEvent = { id: "legacy", trigger: { type: "pickup", tile: "D" } };
+
+    assert.equal(eventMatches(numericEvent, { type: "pickup", tileId: 104 }, state), true);
+    assert.equal(eventMatches(numericEvent, { type: "pickup", tileId: 105 }, state), false);
+    assert.equal(eventMatches(legacyEvent, { type: "pickup", tile: "D", tileId: 104 }, state), true);
   });
 });

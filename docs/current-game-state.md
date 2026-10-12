@@ -5,11 +5,20 @@
 The current app is served as static files:
 
 - `index.html` loads `style.css` and `game.js`.
-- `editor.html` loads `editor.css` and `editor.js`.
-- `tiles2.json` contains tile metadata, sprites, and variants.
-- `levels.json` contains canonical level maps and exit-variant-to-level mappings. Embedded maps in `tiles2.json` remain a legacy fallback.
+- `editor.html` loads `editor.css` and the Runner Studio controller in `src/editor/studio.js`.
+- Runner Studio manages `levels.json`, the single numeric tile catalog in `tiles2.json`, `fixtures/level1-narrative.json`, and `achievements.json` as separate editable documents. It uses the shared codecs and content validators; browser file pickers are used when available, with JSON import/download fallbacks.
+- `tiles2.json` is the canonical `runner.numeric-tile-registry` document used by gameplay and Studio. The original letter-keyed catalog and maps are retained in `tiles2.legacy.json` and `levels.legacy.json` as recovery/import sources.
+- `levels.json` contains canonical numeric JSON-grid maps and exit-variant-to-level mappings. Embedded maps in the legacy catalog remain a fallback.
+- Every current level map uses stable numeric tile IDs and explicit spawn data; no second active tile catalog is loaded.
 
-There is no bundler or build step. Run `npm test` for module tests, `npm run smoke` for HTML wiring checks, `npm run test:browser` for Playwright gameplay tests, or `npm run check` for all checks.
+There is no bundler or build step. Run `npm test` for module tests, `npm run smoke` for HTML wiring checks, `npm run test:browser` for Playwright browser tests, or `npm run check` for all checks.
+
+## Responsive Layout
+
+- Wide screens place the controls and event log on either side of the game board. Both panels fill the viewport height and scroll independently when their contents overflow.
+- At widths up to 1200px, the board sits above the controls and log in a two-column panel row. The panels remain independently scrollable.
+- At widths up to 810px, the board scales to fit the viewport while preserving its 800:510 aspect ratio. Phone landscape between 600px and 900px returns to a three-column layout with a proportionally scaled board and compact panels.
+- Short tablet-height viewports reserve a 240px panel row below the board; the page can scroll to keep the full board reachable.
 
 ## Checkpoints and Resume
 

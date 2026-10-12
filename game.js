@@ -63,6 +63,7 @@ let monsterStateMap = [];
 let currentLevelKey = "default";
 let currentExitIndex = 0;
 let currentMapString = "";
+let runnerArtTileId = null;
 let turboGravityUsed = false;
 let kills = 0;
 
@@ -127,7 +128,17 @@ function shouldResumeFromLocalState() {
   
 function getMapFromURL() {
   const raw = getHashParamRaw("map");
-  if (raw != null && raw !== "") return safeDecodeURIComponent(raw);
+  if (raw != null && raw !== "") {
+    const encoded = safeDecodeURIComponent(raw);
+    const mapVersion = getHashParamRaw("mapv");
+    if (mapVersion == null) return encoded;
+    if (mapVersion !== "1") throw new Error(`Unsupported URL map version '${mapVersion}'.`);
+    const map = JSON.parse(encoded);
+    if (!TileCompatibilityModule?.isNumericMapDocument(map)) {
+      throw new Error("URL map version does not match its numeric map document.");
+    }
+    return map;
+  }
   return null;
 }
 
@@ -197,20 +208,34 @@ window.addEventListener("resize", updateGridScale);
 // ============================================================
 // TILE metadata (attribute-based) + load tiles2.json
 // ============================================================
-let TILE = {
-  "X": { solid: true, gravity: true },
-  ".": { solid: false, gravity: true }
-};
-
-const TILE_FALLBACK_IMG = {
-  "E": null,
-  "X": null
-};
+let AIR_TILE_ID = null;
+let PLAYER_ART_TILE_ID = null;
+let currentMapSpawn = null;
 
 function svgToImg(svg) {
   const img = new Image();
   img.src = "data:image/svg+xml;base64," + btoa(svg);
   return img;
+}
+
+function getTileVariantGroup(definition, bucket) {
+  const nested = definition?.variants?.[bucket];
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) return nested;
+  const legacy = definition?.[bucket];
+  return legacy && typeof legacy === "object" && !Array.isArray(legacy) ? legacy : null;
+}
+
+function prepareNumericTileImages() {
+  for (const tile of NormalizedTileRegistry?.registry?.tiles || []) {
+    const definition = tile.definition;
+    if (typeof definition.svg === "string" && definition.svg.trim()) definition.img = svgToImg(definition.svg);
+    for (const bucket of GAME_VARIANT_BUCKETS) {
+      const group = getTileVariantGroup(definition, bucket);
+      for (const variant of Object.values(group || {})) {
+        if (typeof variant?.svg === "string" && variant.svg.trim()) variant.img = svgToImg(variant.svg);
+      }
+    }
+  }
 }
 
 function startGameLoop() {
@@ -230,11 +255,14 @@ const TILE_URLS = [
 const LEVEL_URL = "levels.json";
 const NARRATIVE_URL = "fixtures/level1-narrative.json";
 const ACHIEVEMENTS_URL = "achievements.json";
+const GAME_VARIANT_BUCKETS = ["monster", "lock", "sign", "exit", "platform", "pickup", "decor"];
 let LEVELS = null;
 let StateModule = null;
 let ResumeLinksModule = null;
 let LevelRoutingModule = null;
 let GameMapRuntimeModule = null;
+let TileCompatibilityModule = null;
+let NormalizedTileRegistry = null;
 let NarrativeEventsModule = null;
 let AchievementsModule = null;
 let NARRATIVE_EVENTS = [];
@@ -305,12 +333,27 @@ function normalizeLevels(json) {
 
 function getLevelMap(levelKey = "default") {
   const fromLevels = LEVELS?.levels?.[levelKey]?.map;
-  if (typeof fromLevels === "string" && fromLevels.trim()) return fromLevels;
+  if (isMapDocument(fromLevels)) return fromLevels;
 
-  const fromTileExit = TILE?.E?.[levelKey];
+  const fromTileExit = getLegacyEmbeddedLevelMap(levelKey);
   if (typeof fromTileExit === "string" && fromTileExit.trim()) return fromTileExit;
 
   return null;
+}
+
+function getLegacyEmbeddedLevelMap(levelKey) {
+  for (const tile of NormalizedTileRegistry?.registry?.tiles || []) {
+    const definition = tile.definition;
+    if (definition?.exit === true && typeof definition[levelKey] === "string" && definition[levelKey].trim()) {
+      return definition[levelKey];
+    }
+  }
+  return null;
+}
+
+function isMapDocument(value) {
+  return (typeof value === "string" && value.trim().length > 0) ||
+    !!TileCompatibilityModule?.isNumericMapDocument(value);
 }
 
 function getDefaultLevelKey() {
@@ -451,55 +494,13 @@ tryFetch([...TILE_URLS])
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   })
-  .then(json => {
+  .then(async json => {
     console.log("[Runner] tiles2.json loaded successfully.");
-    for (const key in json) {
-      if (!TILE[key]) TILE[key] = {};
-      TILE[key] = { ...TILE[key], ...json[key] };
-    }
-    for (const key in TILE) {
-      const def = TILE[key];
-      if (!def) continue;
-      
-      // Base tile svg
-      if (typeof def.svg === "string" && def.svg.trim().length > 0) {
-        def.img = svgToImg(def.svg);
-      }
-      
-     // Monster variant SVGs
-  if (def.monster) {
-    for (const v in def.monster) {
-      const m = def.monster[v];
-      if (typeof m.svg === "string" && m.svg.trim()) {
-        m.img = svgToImg(m.svg);
-      }
-    }
-  } 
-      // Lock variant SVGs (K.a, K.b, etc.)
-if (key === "K" && def.lock) {
-  for (const v in def.lock) {
-    const l = def.lock[v];
-    if (typeof l.svg === "string" && l.svg.trim()) {
-      l.img = svgToImg(l.svg);
-    }
-  }
-}
-// Generic variant SVG loaders (optional but recommended)
-const VARIANT_BUCKETS = ["sign", "exit", "platform", "pickup", "decor"];
-
-for (const bucket of VARIANT_BUCKETS) {
-  const obj = def[bucket];
-  if (!obj || typeof obj !== "object") continue;
-
-  for (const v in obj) {
-    const entry = obj[v];
-    if (entry && typeof entry.svg === "string" && entry.svg.trim()) {
-      entry.img = svgToImg(entry.svg);
-    }
-  }
-}
-
-    }
+    TileCompatibilityModule = await import("./src/tileCompatibility.js");
+    NormalizedTileRegistry = TileCompatibilityModule.normalizeTileDefinitions(json);
+    AIR_TILE_ID = TileCompatibilityModule.getAirTileId(NormalizedTileRegistry);
+    PLAYER_ART_TILE_ID = NormalizedTileRegistry.playerArtTileId ?? null;
+    prepareNumericTileImages();
     // FIX: Initialize game ONLY after tiles and optional levels are loaded
     return Promise.all([
       loadLevels(),
@@ -512,9 +513,18 @@ for (const bucket of VARIANT_BUCKETS) {
       loadAchievementsModule().then(() => loadAchievementRules())
     ]).then(() => initGame());
   })
-  .catch(err => {
+  .catch(async err => {
     console.error("[Runner] Failed to load tiles2.json, using fallback only:", err);
-    Promise.all([
+    TileCompatibilityModule ||= await import("./src/tileCompatibility.js");
+    if (!NormalizedTileRegistry) {
+      NormalizedTileRegistry = TileCompatibilityModule.normalizeTileDefinitions({
+        "X": { solid: true, gravity: true },
+        ".": { solid: false, gravity: true, air: true },
+        "R": { playerArt: true }
+      });
+      AIR_TILE_ID = TileCompatibilityModule.getAirTileId(NormalizedTileRegistry);
+    }
+    await Promise.all([
       loadLevels(),
       loadStateModule(),
       loadResumeLinksModule(),
@@ -523,7 +533,8 @@ for (const bucket of VARIANT_BUCKETS) {
       loadNarrativeEventsModule(),
       loadNarrativeData(),
       loadAchievementsModule().then(() => loadAchievementRules())
-    ]).then(() => initGame()); 
+    ]);
+    initGame();
   });
   
   
@@ -544,10 +555,8 @@ function sanitizeVariant(raw) {
 function getVariantBucketEntry(baseDef, variant) {
   if (!baseDef || !variant) return null;
 
-  const bucketOrder = ["monster", "lock", "sign", "exit", "platform", "pickup", "decor"];
-
-  for (const bucket of bucketOrder) {
-    const group = baseDef[bucket];
+  for (const bucket of [...GAME_VARIANT_BUCKETS, "narrative"]) {
+    const group = getTileVariantGroup(baseDef, bucket);
     if (group && typeof group === "object" && group[variant]) {
       return {
         bucket,
@@ -559,9 +568,16 @@ function getVariantBucketEntry(baseDef, variant) {
   return null;
 }
 
+function getTileVariantEntry(tileId, bucket, variant) {
+  const record = getTileRecord(tileId);
+  if (!record || !variant) return null;
+  return getTileVariantGroup(record.definition, bucket)?.[variant] || null;
+}
+
 function getTileContextAt(x, y) {
-  const ch = tileAt(x, y);
-  const baseDef = TILE[ch] || {};
+  const id = tileAt(x, y);
+  const record = id == null ? null : NormalizedTileRegistry?.definitionsById.get(id);
+  const baseDef = record?.definition || null;
   const variant = signVariantAt(x, y);
 
   const variantInfo = getVariantBucketEntry(baseDef, variant);
@@ -576,13 +592,21 @@ function getTileContextAt(x, y) {
   return {
     x,
     y,
-    ch,
+    id,
+    legacyCode: record?.legacyCode ?? null,
+    ch: record?.legacyCode ?? id,
+    tileId: id,
     variant,
+    record,
     baseDef,
     variantBucket,
     variantDef,
     def: effectiveDef
   };
+}
+
+function tileDataAt(x, y) {
+  return tileData(tileAt(x, y), signVariantAt(x, y));
 }
 
 function getEffectiveTileDefAt(x, y) {
@@ -765,7 +789,7 @@ function buildPersistentGameState() {
 function savePersistentGameState({ checkpoint = false } = {}) {
   if (!checkpoint) return;
   if (!StateModule || !runner) return;
-  if (getLevelMap(currentLevelKey) !== currentMapString) return;
+  if (!sameMapDocument(getLevelMap(currentLevelKey), currentMapString)) return;
 
   try {
     const state = buildPersistentGameState();
@@ -773,6 +797,16 @@ function savePersistentGameState({ checkpoint = false } = {}) {
   } catch (err) {
     console.warn("[Runner] Failed to save local game state.", err);
   }
+}
+
+function sameMapDocument(left, right) {
+  if (typeof left === "string" || typeof right === "string") return left === right;
+  if (left == null || right == null) return left === right;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mapStateHash(map) {
+  return typeof map === "string" ? map : map ? JSON.stringify(map) : "";
 }
 
 function getSavedGameState() {
@@ -810,7 +844,7 @@ function buildNarrativeState() {
       rollsRemaining: rollLimitState.rollsRemaining
     },
     world: {
-      mapHash: currentMapString || "",
+      mapHash: mapStateHash(currentMapString),
       narrativeEventsSeen: runner.narrativeEventsSeen || []
     }
   });
@@ -842,7 +876,7 @@ function buildAchievementState() {
       storyFlags: runner.storyFlags || {}
     },
     world: {
-      mapHash: currentMapString || "",
+      mapHash: mapStateHash(currentMapString),
       narrativeEventsSeen: runner.narrativeEventsSeen || []
     }
   });
@@ -950,7 +984,8 @@ function buildMovementAchievementContext({
     current: tileAchievementContext(here),
     target: {
       ...tileAchievementContext(target),
-      ch: targetChar,
+      ch: target.legacyCode ?? target.id,
+      tileId: target.id,
       x: toX,
       y: toY,
       moveCost
@@ -1032,176 +1067,35 @@ function formatAchievementMessage(action) {
 // CORE INIT FUNCTION (Wrapper to prevent race conditions)
 // ============================================================
 function initGame() {
-
-    // --- DECODER FUNCTIONS ---
-function decodeRow(encoded, rowIndex) {
-  let tiles = [];
-  let variants = [];
-
-  monsterStateMap[rowIndex] = [];
-
-  let i = 0;
-
-  while (i < encoded.length && tiles.length < COLS) {
-    const ch = encoded[i];
-
-    // -------------------------
-    // Literal dot support
-    // -------------------------
-    if (ch === ".") {
-      tiles.push(".");
-      variants.push(null);
-      i++;
-      continue;
-    }
-
-    // Only parse letters as tokens
-    if (!/[A-Za-z]/.test(ch)) {
-      i++;
-      continue;
-    }
-
-    // Base tile char (A is encoded air)
-    let tileChar = (ch === "A") ? "." : ch;
-
-    let variant = null;
-    let count = 1;
-
-    // -------------------------
-    // NEW: brace variant form: T{variant}N
-    // Example: I{aa}1
-    // -------------------------
-    if (encoded[i + 1] === "{") {
-      const end = encoded.indexOf("}", i + 2);
-      if (end !== -1) {
-        variant = sanitizeVariant(encoded.slice(i + 2, end));
-        i = end + 1; // now positioned after }
-      } else {
-        // malformed token; treat as single tile
-        i++;
-      }
-
-      // Read digits after brace (count)
-      let num = "";
-      while (i < encoded.length && /\d/.test(encoded[i])) {
-        num += encoded[i];
-        i++;
-      }
-      if (num) count = parseInt(num, 10) || 1;
-
-    } else if (/[A-Z]/.test(ch) && /[a-z]/.test(encoded[i + 1] || "")) {
-      // -------------------------
-      // LEGACY: single-letter variant: Ia, Ma, Ka
-      // Optional digits after it: Ia3
-      // -------------------------
-      variant = sanitizeVariant(encoded[i + 1]);
-      i += 2;
-
-      let num = "";
-      while (i < encoded.length && /\d/.test(encoded[i])) {
-        num += encoded[i];
-        i++;
-      }
-      if (num) count = parseInt(num, 10) || 1;
-
-    } else {
-      // -------------------------
-      // RUN-LENGTH: TNNN (or bare T meaning 1)
-      // -------------------------
-      i += 1;
-
-      let num = "";
-      while (i < encoded.length && /\d/.test(encoded[i])) {
-        num += encoded[i];
-        i++;
-      }
-      if (num) count = parseInt(num, 10) || 1;
-    }
-
-    // Emit cells
-    for (let k = 0; k < count && tiles.length < COLS; k++) {
-      tiles.push(tileChar);
-
-      // Never store variants on air
-      const v = (tileChar === ".") ? null : (variant || null);
-      variants.push(v);
-
-      // Initialize monster HP at this position
-      if (tileChar === "M") {
-        const xPos = tiles.length - 1;
-        const def = TILE["M"]?.monster?.[v];
-        monsterStateMap[rowIndex][xPos] = def?.hp ?? 1;
-      }
-    }
-  }
-
-  // Pad out the row
-  while (tiles.length < COLS) {
-    tiles.push(".");
-    variants.push(null);
-  }
-
-  // Clamp
-  tiles.length = COLS;
-  variants.length = COLS;
-
-  signVariantMap[rowIndex] = variants;
-  return tiles.join("");
-}
-
-
   const savedLevel = sessionStorage.getItem("levelKey");
 if (savedLevel) {
   currentLevelKey = savedLevel;
 }
 
 function decodeMap(encoded) {
-  if (GameMapRuntimeModule) {
-    const runtime = GameMapRuntimeModule.decodeGameMap(encoded, {
-      tiles: TILE,
-      rows: ROWS,
-      cols: COLS
-    });
-
-    signVariantMap = runtime.signVariantMap;
-    monsterStateMap = runtime.monsterStateMap;
-    bounceHeight = runtime.bounceHeight;
-    sinkDelayMap = runtime.sinkDelayMap;
-    return runtime.grid;
+  if (!TileCompatibilityModule || !NormalizedTileRegistry || !GameMapRuntimeModule) {
+    throw new Error("Map loading requires the numeric tile compatibility modules.");
   }
-
-  let rowStrings;
-
-  if (encoded.includes("~")) rowStrings = encoded.split("~");
-  else if (encoded.includes(".")) rowStrings = encoded.split(".");
-  else rowStrings = [encoded]; // single-row fallback
-
-  const output = [];
-  bounceHeight = [];
-  sinkDelayMap = [];
-
-  for (let r = 0; r < rowStrings.length && output.length < ROWS; r++) {
-    const decoded = decodeRow(rowStrings[r] || "", output.length);
-    output.push(decoded.split(""));
-    bounceHeight.push(Array(COLS).fill(0));
-    sinkDelayMap.push(Array(COLS).fill(null));
+  const normalizedMap = TileCompatibilityModule.decodeMapForRuntime(encoded, NormalizedTileRegistry, {
+    rows: ROWS,
+    cols: COLS
+  });
+  if (typeof encoded !== "string" && !normalizedMap.spawn) {
+    throw new Error("Numeric gameplay maps require explicit spawn coordinates.");
   }
-
-  while (output.length < ROWS) {
-    output.push(Array(COLS).fill("."));
-    bounceHeight.push(Array(COLS).fill(0));
-    sinkDelayMap.push(Array(COLS).fill(null));
-    signVariantMap[output.length - 1] = Array(COLS).fill(null);
-    monsterStateMap[output.length - 1] = Array(COLS).fill(null);
-  }
-
-  return output;
+  currentMapSpawn = normalizedMap.spawn || null;
+  const runtime = GameMapRuntimeModule.buildNumericGameMap(normalizedMap, NormalizedTileRegistry);
+  signVariantMap = runtime.signVariantMap;
+  monsterStateMap = runtime.monsterStateMap;
+  bounceHeight = runtime.bounceHeight;
+  sinkDelayMap = runtime.sinkDelayMap;
+  return runtime.grid;
 }
 
 
 function hasEDefaultMap() {
   const s = getLevelMap(getDefaultLevelKey());
-  return (typeof s === "string" && s.trim().length > 0);
+  return isMapDocument(s);
 }    
 
 
@@ -1234,27 +1128,6 @@ function hasEDefaultMap() {
   
 
 
- /*  if (encodedMap) {
-  console.log("Using encoded map:", encodedMap);
-  grid = decodeMap(encodedMap);
-
-} else {
-  console.log("No #map in URL; using tiles2.json E.default (or fallback)");
-  signVariantMap = []; // reset variants for new map
-
-  if (hasEDefaultMap()) {
-    console.log("[Runner] Boot map from tiles2.json: E.default");
-    currentLevelKey = "default";
-    sessionStorage.setItem("levelKey", "default");
-    grid = decodeMap(TILE["E"]["default"]);
-  } else {
-    console.warn("[Runner] tiles2.json missing E.default; using DEFAULT_ENCODED_MAP");
-    currentLevelKey = "default";
-    sessionStorage.setItem("levelKey", "default");
-    grid = decodeMap(DEFAULT_ENCODED_MAP);
-  } 
-}*/
-
 if (encodedMap) {
   console.log("Using encoded map:", encodedMap);
   currentLevelKey = requestedLevelKey || "default";
@@ -1266,7 +1139,7 @@ if (encodedMap) {
   currentLevelKey = savedGameState.levelKey || "default";
   currentExitIndex = savedGameState.exitIndex || 0;
   currentMapString = getLevelMap(currentLevelKey);
-  if (typeof currentMapString !== "string" || !currentMapString.trim()) {
+  if (!isMapDocument(currentMapString)) {
     currentLevelKey = getDefaultLevelKey();
     currentMapString = getLevelMap(currentLevelKey);
   }
@@ -1278,7 +1151,7 @@ if (encodedMap) {
   console.log("Using portable checkpoint level.");
   currentLevelKey = requestedLevelKey;
   currentMapString = getLevelMap(currentLevelKey);
-  if (typeof currentMapString !== "string" || !currentMapString.trim()) {
+  if (!isMapDocument(currentMapString)) {
     gameOver = true;
     setMessage(`BOOT ERROR: no map found for level '${currentLevelKey}'.`, { kind: "message" });
     draw();
@@ -1294,7 +1167,7 @@ if (encodedMap) {
   const levelKey = getDefaultLevelKey();
   const mapString = getLevelMap(levelKey);
 
-  if (typeof mapString !== "string" || !mapString.trim()) {
+  if (!isMapDocument(mapString)) {
     // Hard fail: do NOT load factory, do NOT guess.
     gameOver = true;
     setMessage("BOOT ERROR: no default level map could be loaded.", {
@@ -1321,18 +1194,9 @@ if (!sessionStorage.getItem("exitIndex")) {
 
 
     // --- RUNNER PLACEMENT (Robust Fallback) ---
-    let startX = 1; 
-    let startY = ROWS - 1; 
-
-    for (let y = 0; y < grid.length; y++) {
-      for (let x = 0; x < grid[0].length; x++) {
-        if (grid[y][x] === "R") {
-          startX = x;
-          startY = y;
-          grid[y][x] = "."; 
-        }
-      }
-    }
+    const startX = currentMapSpawn?.x ?? 1;
+    const startY = currentMapSpawn?.y ?? ROWS - 1;
+    runnerArtTileId = currentMapSpawn?.artTileId ?? PLAYER_ART_TILE_ID;
 
   const carried = decodeCarryStats(getStatsFromURL());
 
@@ -1419,11 +1283,15 @@ if (resumeLinkButton) resumeLinkButton.disabled = false;
 // TILE HELPERS
 // ============================================================
 function tileAt(x, y) {
-  // Guard against grid not being ready
-  if (!grid || !grid.length) return "X";
-  if (x < 0 || y < 0 || y >= grid.length || x >= grid[0].length) return "X";
+  if (!grid || !grid.length) return null;
+  if (x < 0 || y < 0 || y >= grid.length || x >= grid[0].length) return null;
   return grid[y][x];
 }
+
+function getTileRecord(tileId) {
+  return tileId == null ? null : NormalizedTileRegistry?.definitionsById.get(tileId) || null;
+}
+
 function getTileHintAt(x, y) {
   const ctx = getTileContextAt(x, y);
   const def = ctx.def;
@@ -1470,29 +1338,29 @@ function getSignPayloadAt(x, y) {
 
   if (def.signHtml) {
     if (typeof def.signHtml === "string") {
-      return { text: def.signHtml, html: true, tileChar: ctx.ch };
+      return { text: def.signHtml, html: true, tileId: ctx.id };
     }
 
     if (ctx.variant && typeof def.signHtml === "object" && def.signHtml[ctx.variant]) {
-      return { text: def.signHtml[ctx.variant], html: true, tileChar: ctx.ch };
+      return { text: def.signHtml[ctx.variant], html: true, tileId: ctx.id };
     }
 
     if (typeof def.signHtml === "object" && def.signHtml.default) {
-      return { text: def.signHtml.default, html: true, tileChar: ctx.ch };
+      return { text: def.signHtml.default, html: true, tileId: ctx.id };
     }
   }
 
   if (def.signMessage) {
     if (typeof def.signMessage === "string") {
-      return { text: def.signMessage, html: false, tileChar: ctx.ch };
+      return { text: def.signMessage, html: false, tileId: ctx.id };
     }
 
     if (ctx.variant && typeof def.signMessage === "object" && def.signMessage[ctx.variant]) {
-      return { text: def.signMessage[ctx.variant], html: false, tileChar: ctx.ch };
+      return { text: def.signMessage[ctx.variant], html: false, tileId: ctx.id };
     }
 
     if (typeof def.signMessage === "object" && def.signMessage.default) {
-      return { text: def.signMessage.default, html: false, tileChar: ctx.ch };
+      return { text: def.signMessage.default, html: false, tileId: ctx.id };
     }
   }
 
@@ -1501,16 +1369,48 @@ function getSignPayloadAt(x, y) {
 
 
 
-function tileData(ch) {
-  const def = TILE[ch] || {};
-  const exit = !!def.exit;
+function tileData(tileId, variant = null) {
+  if (tileId == null) {
+    return {
+      id: null,
+      legacyCode: null,
+      img: null,
+      solid: true,
+      gravity: true,
+      moveCostTop: 1,
+      moveCostInside: 1,
+      insideDamage: { amount: 0, when: "instant" },
+      topDamage: { amount: 0, when: "stand" },
+      bounce: 0,
+      autoPush: null,
+      pickupType: null,
+      effects: [],
+      grantStats: null,
+      tags: [],
+      exit: false,
+      slope: null,
+      deathMessage: null,
+      fallDamageThreshold: 3,
+      fallDamageMultiplier: 1,
+      fallDamageCancel: false,
+      outOfBounds: true
+    };
+  }
 
-  // Exits must be enterable; treat as non-solid even if tiles2.json accidentally marks solid:true
+  const record = getTileRecord(tileId);
+  const baseDef = record?.definition || {};
+  const def = baseDef;
+  const exit = def.exit === true;
   const solid = exit ? false : (def.solid === true);
-
   const gravity = def.gravity !== undefined ? def.gravity : true;
 
   return {
+    id: tileId,
+    legacyCode: record?.legacyCode ?? null,
+    ch: record?.legacyCode ?? tileId,
+    variant,
+    monster: getTileVariantEntry(tileId, "monster", variant),
+    lock: getTileVariantEntry(tileId, "lock", variant),
     img: def.img || null,
     solid,
     gravity,
@@ -1536,22 +1436,22 @@ function tileData(ch) {
 
 
 function exitIdAt(x, y) {
-  if (tileAt(x, y) !== "E") return null;
+  if (!tileDataAt(x, y).exit) return null;
   return signVariantAt(x, y) || "default";
 }
 
 
 
-function TIP(tileChar) { return tileData(tileChar); }
+function TIP(tileId) { return tileData(tileId); }
 function isFluidTile(tile) { return (!tile.solid && tile.gravity === false); }
 
 function inWater() {
-  const here = tileData(tileAt(runner.x, runner.y));
+  const here = tileDataAt(runner.x, runner.y);
   return isFluidTile(here);
 }
 
 function resetFallDistanceIfNoGravityHere() {
-  const here = tileData(tileAt(runner.x, runner.y));
+  const here = tileDataAt(runner.x, runner.y);
   if (here.gravity === false) {
     runner.fallDistance = 0;
     return true;
@@ -1561,8 +1461,8 @@ function resetFallDistanceIfNoGravityHere() {
 
 
 function checkLanding(prevX, prevY, newX, newY) {
-  const wasSupported = tileData(tileAt(prevX, prevY + 1)).solid;
-  const isSupported  = tileData(tileAt(newX,  newY  + 1)).solid;
+  const wasSupported = tileDataAt(prevX, prevY + 1).solid;
+  const isSupported  = tileDataAt(newX,  newY  + 1).solid;
 
   if (!wasSupported && isSupported && runner.fallDistance > 0) {
     runner.fallDistance = 0;
@@ -1599,8 +1499,8 @@ function applyTopDamage(tile) {
 }
 
 function runAttributeCheck() {
-  const here = tileData(tileAt(runner.x, runner.y));
-  const below = tileData(tileAt(runner.x, runner.y + 1));
+  const here = tileDataAt(runner.x, runner.y);
+  const below = tileDataAt(runner.x, runner.y + 1);
   applyInsideDamage(here);
   if (below.solid) {
     applyTopDamage(below);
@@ -1608,10 +1508,10 @@ function runAttributeCheck() {
 }
 
 function getBounceHeightAt(x, y) {
-  const ch = tileAt(x, y);
-  const def = TILE[ch];
-  if (!def || def.bounce === undefined || def.bounce === null) return null; 
-  return def.bounce;
+  const tile = tileDataAt(x, y);
+  if (tile.outOfBounds || tile.bounce === undefined || tile.bounce === null) return null;
+  const record = getTileRecord(tile.id);
+  return record?.definition?.bounce == null ? null : tile.bounce;
 }
 
 // ============================================================
@@ -1683,9 +1583,11 @@ function logTileText(text, {
   kind = null,          // NOTE: null, not "tile"
   html = null,          // NOTE: null, not false
   tileChar = null,
+  tileId = null,
   scroll = true
 } = {}) {
-  const def = tileChar && TILE?.[tileChar] ? TILE[tileChar] : null;
+  const id = tileId ?? (tileChar == null ? null : NormalizedTileRegistry?.idsByLegacyCode.get(tileChar));
+  const def = getTileRecord(id)?.definition || null;
 
   // Only apply tile defaults if caller didn't specify them
   if (def) {
@@ -1719,7 +1621,7 @@ function handleBlockedTile(x, y, label = "Blocked") {
   if (p) {
   const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(p.text) || /<br\s*\/?>/i.test(p.text);
   setMessage(p.text, {
-    tileChar: p.tileChar,
+    tileId: p.tileId,
     kind: "sign",
     html: p.html || looksLikeHtml
   });
@@ -1751,9 +1653,9 @@ function resolveSolidInteractionAt(x, y, options = {}) {
   } = options;
 
   const ctx = getTileContextAt(x, y);
-  const ch = ctx.ch;
+  const tile = tileDataAt(x, y);
 
-  if (!tileData(ch).solid) {
+  if (!tile.solid) {
     return {
       handled: false,
       blocked: false,
@@ -1762,7 +1664,7 @@ function resolveSolidInteractionAt(x, y, options = {}) {
     };
   }
 
-  if (allowLock && ch === "K") {
+  if (allowLock && tile.lock) {
     const opened = tryUnlockLockAt(x, y);
 
     if (drawAfter) draw();
@@ -1776,7 +1678,7 @@ function resolveSolidInteractionAt(x, y, options = {}) {
     };
   }
 
-  if (allowMonster && ch === "M") {
+  if (allowMonster && tile.monster) {
     const defeated = tryFightMonsterAt(x, y);
 
     if (drawAfter) draw();
@@ -1861,11 +1763,11 @@ function updateInfo(label = "") {
 
 
 
-function setMessage(msg, { tileChar = null, kind = "message", html = false, scroll = true } = {}) {
+function setMessage(msg, { tileChar = null, tileId = null, kind = "message", html = false, scroll = true } = {}) {
   if (!msg || !msg.trim()) return;
 
   // Use tile-aware logger so tiles can override kind/html via tiles2.json
-  logTileText(msg, { tileChar, kind, html, scroll });
+  logTileText(msg, { tileChar, tileId, kind, html, scroll });
 }
 
 
@@ -1980,59 +1882,41 @@ function evaluateDiceRule(rule) {
 }
 
 function tryUnlockLockAt(x, y) {
-  const ch = tileAt(x, y);
-  const def = TILE[ch];
-
-  if (!def || !def.lock) return false;
-
-  const variant = signVariantAt(x, y);
-  if (!variant) return false;
-
-  const rule = def.lock[variant];
+  const tile = tileDataAt(x, y);
+  const rule = tile.lock;
   if (!rule) return false;
 
   // Debug (optional)
   console.log("LOCK DEBUG", {
     x, y,
-    variant,
+    variant: tile.variant,
     die1: dieValue1,
     die2: dieValue2
   });
 
   if (evaluateDiceRule(rule)) {
-    grid[y][x] = ".";
+    grid[y][x] = AIR_TILE_ID;
     signVariantMap[y][x] = null;
 
-    setMessage("The lock clicks open.", { tileChar: "K", kind: "lock" });
+    setMessage("The lock clicks open.", { tileId: tile.id, kind: "lock" });
 
     
     return true;
   }
 
-  setMessage(rule.messageFail || "The lock will not open.", { tileChar: "K", kind: "lock" });
+  setMessage(rule.messageFail || "The lock will not open.", { tileId: tile.id, kind: "lock" });
   return false;
 }
 
 
 function tryFightMonsterAt(x, y) {
-
-  const ch = tileAt(x, y);
-
-  const def = TILE[ch];
-
-  if (!def || !def.monster) {
-    return false;
-  }
-
-  const variant = signVariantAt(x, y);
-
-  const monster = def.monster[variant];
-
+  const tile = tileDataAt(x, y);
+  const monster = tile.monster;
   if (!monster) {
     return false;
   }
 
-  let hp = monsterStateMap[y]?.[x];
+  let hp = monsterStateMap[y]?.[x] ?? monster.hp ?? 1;
 
   // ---------- PLAYER ATTACK ----------
   if (monster.playerHit) {
@@ -2043,9 +1927,9 @@ function tryFightMonsterAt(x, y) {
     if (hitResult) {
       hp -= monster.playerHit.damage;
       monsterStateMap[y][x] = hp;
-      setMessage(monster.playerHit.messageHit || "You hit the monster.", { tileChar: "M", kind: "combat" });
+      setMessage(monster.playerHit.messageHit || "You hit the monster.", { tileId: tile.id, kind: "combat" });
     } else {
-      setMessage(monster.playerHit.messageFail || monster.messageFail || "You cannot hurt the monster.",  { tileChar: "M", kind: "combat" });
+      setMessage(monster.playerHit.messageFail || monster.messageFail || "You cannot hurt the monster.",  { tileId: tile.id, kind: "combat" });
       return false;
     }
   } else {
@@ -2060,21 +1944,19 @@ function tryFightMonsterAt(x, y) {
       takeDamage(monster.monsterHit.damage, {
         deathMessage: monster.monsterHit.messageHit
       });
-      setMessage(monster.monsterHit.messageHit, { tileChar: "M", kind: "combat" });
+      setMessage(monster.monsterHit.messageHit, { tileId: tile.id, kind: "combat" });
     } 
   }
 
   // ---------- DEATH CHECK ----------
   if (hp <= 0) {
-  // Turn monster into skull
- grid[y][x] = "C";
-signVariantMap[y][x] = null;
-monsterStateMap[y][x] = null;
-
-
-  setMessage(`${monster.name} defeated.`, { tileChar: "M", kind: "message" });
-  return true;
-}
+    const replacementId = monster.defeatedTileId ?? NormalizedTileRegistry.registry.defeatedMonsterTileId ?? AIR_TILE_ID;
+    grid[y][x] = replacementId;
+    signVariantMap[y][x] = null;
+    monsterStateMap[y][x] = null;
+    setMessage(`${monster.name} defeated.`, { tileId: tile.id, kind: "message" });
+    return true;
+  }
 
 
   setMessage(monster.messageFail || "The monster blocks you.");
@@ -2095,15 +1977,8 @@ function checkAdjacentMonsterAttacks() {
  
 
   for (const pos of adjacent) {
-    const ch = tileAt(pos.x, pos.y);
-    if (ch !== "M") continue;
-
-    const def = TILE[ch];
-    if (!def?.monster) continue;
-
-    const variant = signVariantAt(pos.x, pos.y);
-    if (variant === "dead") continue;
-    const monster = def.monster[variant];
+    const tile = tileDataAt(pos.x, pos.y);
+    const monster = tile.monster;
     if (!monster?.monsterHit) continue;
 
     // Monster attack roll
@@ -2117,7 +1992,7 @@ function checkAdjacentMonsterAttacks() {
       setMessage(
   monster.monsterHit.messageHit || "The monster strikes you!",
   {
-    tileChar: "M",
+    tileId: tile.id,
     kind: monster.monsterHit.logKind || "combat",
     html: monster.monsterHit.logHtml === true
   }
@@ -2138,11 +2013,12 @@ function checkAdjacentMonsterAttacks() {
 // Pickups
 // ============================================================
 function handlePickupsAtCurrent() {
-  const ch = tileAt(runner.x, runner.y);
-  const data = tileData(ch);
+  const context = getTileContextAt(runner.x, runner.y);
+  const ch = context.legacyCode ?? context.id;
+  const data = tileDataAt(runner.x, runner.y);
   if (!data.pickupType && data.effects.length === 0) return;
 
-  const def = TILE?.[ch] || {};
+  const def = context.def || {};
   
   console.log("[PICKUP DEBUG]", {
   ch,
@@ -2159,30 +2035,31 @@ function handlePickupsAtCurrent() {
   if (data.pickupType === "diamond") {
     runner.score++;
     runner.diamondFlashTimer = 10;
-    if (msg) setMessage(msg, { tileChar: ch, kind: "diamond", html: !!def.logHtml });
+    if (msg) setMessage(msg, { tileId: context.id, kind: "diamond", html: !!def.logHtml });
 
   } else if (data.pickupType === "turbo") {
     runner.turbo = true;
     runner.turboFlashTimer = 10;
     runner.turboMultiplier = 2;
-    if (msg) setMessage(msg, { tileChar: ch, kind: "turbo", html: !!def.logHtml });
+    if (msg) setMessage(msg, { tileId: context.id, kind: "turbo", html: !!def.logHtml });
 
   } else if (data.pickupType === "heart") {
     runner.hearts++;
     runner.heartFlashTimer = 10;
-    if (msg) setMessage(msg, { tileChar: ch, kind: "heart", html: !!def.logHtml });
+    if (msg) setMessage(msg, { tileId: context.id, kind: "heart", html: !!def.logHtml });
 
   } else if (data.pickupType === "dead") {
     runner.kills++;
-    if (msg) setMessage(msg, { tileChar: ch, kind: "dead", html: !!def.logHtml });
+    if (msg) setMessage(msg, { tileId: context.id, kind: "dead", html: !!def.logHtml });
   }
 
-  applyPickupEffects(data.effects, { tileChar: ch, def });
+  applyPickupEffects(data.effects, { tileId: context.id, def });
 
   runTutorialNarrative({
     type: "pickup",
     level: currentLevelKey,
     tile: ch,
+    tileId: context.id,
     variant: signVariantAt(runner.x, runner.y),
     pickupType: data.pickupType
   });
@@ -2191,15 +2068,17 @@ function handlePickupsAtCurrent() {
     pickup: {
       type: data.pickupType || null,
       tile: ch,
+      tileId: context.id,
       variant: signVariantAt(runner.x, runner.y)
     },
     current: {
       ...tileAchievementContext(data),
-      ch
+      ch,
+      tileId: context.id
     }
   });
 
-  grid[runner.y][runner.x] = ".";
+  grid[runner.y][runner.x] = AIR_TILE_ID;
   savePersistentGameState();
 }
 
@@ -2217,7 +2096,7 @@ function applyTileStatGrants(tile) {
   if (changed) checkStatAchievements();
 }
 
-function applyPickupEffects(effects, { tileChar, def } = {}) {
+function applyPickupEffects(effects, { tileId, def } = {}) {
   if (!Array.isArray(effects)) return;
 
   for (const effect of effects) {
@@ -2242,7 +2121,7 @@ function applyPickupEffects(effects, { tileChar, def } = {}) {
       };
     } else if (effect.type === "message" && effect.text) {
       setMessage(effect.text, {
-        tileChar,
+        tileId,
         kind: effect.kind || def?.logKind || "message",
         html: effect.html === true
       });
@@ -2264,7 +2143,7 @@ function startBounce(height) {
 }
 
 function resolveFallLanding() {
-  const below = tileData(tileAt(runner.x, runner.y + 1));
+  const below = tileDataAt(runner.x, runner.y + 1);
   const bVal = getBounceHeightAt(runner.x, runner.y + 1);
   const fallDistance = runner.fallDistance || 0;
 
@@ -2317,9 +2196,8 @@ function applyFullGravity() {
   let fell = false;
 
   while (true) {
-    const here = tileData(tileAt(runner.x, runner.y));
-    const belowChar = tileAt(runner.x, runner.y + 1);
-    const below = tileData(belowChar);
+    const here = tileDataAt(runner.x, runner.y);
+    const below = tileDataAt(runner.x, runner.y + 1);
 
     // If we're in a no-gravity tile, stop gravity and clear fall distance.
     if (isFluidTile(here)) {
@@ -2332,7 +2210,7 @@ function applyFullGravity() {
     runner.y += 1;
     fell = true;
 
-    const thisTile = tileData(tileAt(runner.x, runner.y));
+    const thisTile = tileDataAt(runner.x, runner.y);
 
     // If we just entered fluid, do NOT accumulate fall distance.
     if (thisTile.gravity === false) {
@@ -2362,7 +2240,7 @@ function applyFullGravity() {
 
   if (!fell) return;
 
-  const finalHere = tileData(tileAt(runner.x, runner.y));
+  const finalHere = tileDataAt(runner.x, runner.y);
   if (finalHere.gravity !== false) {
     resolveFallLanding();
   } else {
@@ -2370,13 +2248,13 @@ function applyFullGravity() {
   }
 
   // Exit should trigger before pickups can mutate the tile.
-  const hereNow = tileData(tileAt(runner.x, runner.y));
+  const hereNow = tileDataAt(runner.x, runner.y);
   if (hereNow.exit) { handleExit(hereNow); return; }
 
   handlePickupsAtCurrent();
 
   // Optional: if pickups can reveal/convert into an exit, keep this.
-  const afterPickups = tileData(tileAt(runner.x, runner.y));
+  const afterPickups = tileDataAt(runner.x, runner.y);
   if (afterPickups.exit) { handleExit(afterPickups); return; }
 }
 
@@ -2386,9 +2264,8 @@ function applyFullGravity() {
 function applyGravityAfterMove() {
   if (gameOver) return;
 
-  const here = tileData(tileAt(runner.x, runner.y));
-  const belowChar = tileAt(runner.x, runner.y + 1);
-  const below = tileData(belowChar);
+  const here = tileDataAt(runner.x, runner.y);
+  const below = tileDataAt(runner.x, runner.y + 1);
 
   // If we're in fluid, gravity doesn't apply
   if (isFluidTile(here)) {
@@ -2409,7 +2286,7 @@ function applyGravityAfterMove() {
   if (totalMovementPoints() > 0) {
     runner.y += 1;
 
-    const nowHere = tileData(tileAt(runner.x, runner.y));
+    const nowHere = tileDataAt(runner.x, runner.y);
 
     // If we stepped into a no-gravity tile (water), fall distance should not accumulate.
     if (nowHere.gravity === false) {
@@ -2435,13 +2312,13 @@ function applyGravityAfterMove() {
     handlePickupsAtCurrent();
 
     // Re-check after pickups in case a pickup changes what we're standing on
-    const afterPickups = tileData(tileAt(runner.x, runner.y));
+    const afterPickups = tileDataAt(runner.x, runner.y);
     if (afterPickups.exit) {
       handleExit(afterPickups);
       return;
     }
 
-    const under = tileData(tileAt(runner.x, runner.y + 1));
+    const under = tileDataAt(runner.x, runner.y + 1);
     if (under.solid && nowHere.gravity !== false) resolveFallLanding();
 
     checkStandingHazard();
@@ -2459,7 +2336,7 @@ function applyGravityAfterMove() {
 function checkStandingHazard() {
   if (inWater()) {runner.jumpCredits = 1;}
   if (inWater() || gameOver) return;
-  const below = tileData(tileAt(runner.x, runner.y + 1));
+  const below = tileDataAt(runner.x, runner.y + 1);
   if (below.solid) {
     applyTopDamage(below);
     if (below.topDamage.amount > 0) updateInfo("Hazard underfoot");
@@ -2473,7 +2350,7 @@ function doBounceStep() {
     updateInfo("Bounce end");
     return;
   }
-  const above = tileData(tileAt(runner.x, runner.y - 1));
+  const above = tileDataAt(runner.x, runner.y - 1);
   if (above.solid || above.insideDamage.amount > 0) {
     if (above.insideDamage.amount > 0) {
       takeDamage(above.insideDamage.amount, above);
@@ -2496,7 +2373,7 @@ function doBounceStep() {
 function forceDown() {
   if (gameOver) return;
 
-  const here = tileData(tileAt(runner.x, runner.y));
+  const here = tileDataAt(runner.x, runner.y);
 
   // ---------------------------------------------------
   // ONLY charge movement if gravity is DISABLED (water / fluid)
@@ -2509,19 +2386,17 @@ function forceDown() {
   const tx = runner.x;
   const ty = runner.y + 1;
 
-  let belowChar = tileAt(tx, ty);
-  let below = tileData(belowChar);
+  let below = tileDataAt(tx, ty);
 
   // ---------------------------------------------------
   // SPECIAL: stomp/fight a monster directly below you
   // ---------------------------------------------------
-  if (belowChar === "M") {
+  if (below.monster) {
     // Attempt combat in-place (stomp)
     tryFightMonsterAt(tx, ty);
 
     // Re-check what is now below (monster might have turned into "C" or "." etc.)
-    belowChar = tileAt(tx, ty);
-    below = tileData(belowChar);
+    below = tileDataAt(tx, ty);
 
     // If still solid, you cannot move down into it this press
     if (below.solid && !below.exit) {
@@ -2534,12 +2409,11 @@ function forceDown() {
   // ---------------------------------------------------
   // SPECIAL: try unlock a lock directly below you
   // ---------------------------------------------------
-  if (belowChar === "K") {
+  if (below.lock) {
     const opened = tryUnlockLockAt(tx, ty);
 
     // Re-check after attempt
-    belowChar = tileAt(tx, ty);
-    below = tileData(belowChar);
+    below = tileDataAt(tx, ty);
 
     // If not opened and still solid, stop here
     if (!opened && below.solid && !below.exit) {
@@ -2565,7 +2439,7 @@ function forceDown() {
 
   runner.y += 1;
 
-  const thisTile = tileData(tileAt(runner.x, runner.y));
+  const thisTile = tileDataAt(runner.x, runner.y);
   const nowInWater = (thisTile.gravity === false);
 
   if (nowInWater) {
@@ -2587,7 +2461,7 @@ function forceDown() {
 
   handlePickupsAtCurrent();
 
-  const nextBelow = tileData(tileAt(runner.x, runner.y + 1));
+  const nextBelow = tileDataAt(runner.x, runner.y + 1);
   if (nextBelow.solid && thisTile.gravity !== false) {
     resolveFallLanding();
     applyTopDamage(nextBelow);
@@ -2613,12 +2487,12 @@ function attemptStep(dx, dy) {
   let toY = fromY + dy;
 
   let targetChar = tileAt(toX, toY);
-  let target = tileData(targetChar);
+  let target = tileDataAt(toX, toY);
 
   // --- SLOPE HANDLING (match your standard movement rules) ---
   if (target.solid && target.slope) {
     const upY = toY - 1;
-    const upTile = tileData(tileAt(toX, upY));
+    const upTile = tileDataAt(toX, upY);
 
     if (target.slope === "left") {
       if (dx === -1 && !upTile.solid) {
@@ -2638,7 +2512,7 @@ function attemptStep(dx, dy) {
 
     // Recompute target after slope adjustment
     targetChar = tileAt(toX, toY);
-    target = tileData(targetChar);
+    target = tileDataAt(toX, toY);
   }
 
 // --- SOLID TILE HANDLING (via shared resolver) ---
@@ -2668,7 +2542,7 @@ if (target.solid) {
 
   checkLanding(prevX, prevY, runner.x, runner.y);
 
-  const tile = tileData(tileAt(runner.x, runner.y));
+  const tile = tileDataAt(runner.x, runner.y);
   recordMovementStats(dx, dy, { tile });
   applyTileStatGrants(tile);
   if (tile.exit) {
@@ -2688,9 +2562,9 @@ function handleExit(tile) {
     (!hasConfiguredDestination ? (exitVariant || "default") : null);
   const mapString = destKey ? getLevelMap(destKey) : null;
 
-  if (typeof mapString !== "string" || !mapString.trim()) {
+  if (!isMapDocument(mapString)) {
     setMessage(`Exit ${destKey} is not wired (no level map found).`, {
-      tileChar: "E",
+      tileId: tile.id,
       kind: "message"
     });
     draw();
@@ -2837,20 +2711,20 @@ function diagonalJump(dx) {
   let toX = fromX + dx;
   let toY = fromY + dy;
 
-  let here = tileData(tileAt(fromX, fromY));
+  let here = tileDataAt(fromX, fromY);
   let targetChar = tileAt(toX, toY);
-  let target = tileData(targetChar);
+  let target = tileDataAt(toX, toY);
 
   // --- FIXED SLOPE LOGIC ---
   if (target.solid && target.slope) {
     const upY = toY - 1;
-    const upTile = tileData(tileAt(toX, upY));
+    const upTile = tileDataAt(toX, upY);
     
     if (target.slope === "left") {
         if (dx === -1 && !upTile.solid) {
             toY = upY;
             targetChar = tileAt(toX, toY);
-            target = tileData(targetChar);
+            target = tileDataAt(toX, toY);
           logMessage("On a slope...(left)", { type: "move" });
         } else return;
     }
@@ -2858,7 +2732,7 @@ function diagonalJump(dx) {
         if (dx === 1 && !upTile.solid) {
             toY = upY;
             targetChar = tileAt(toX, toY);
-            target = tileData(targetChar);
+            target = tileDataAt(toX, toY);
           logMessage("On a slope...(right)", { type: "move" }); 
         } else return;
     }
@@ -2875,7 +2749,7 @@ function diagonalJump(dx) {
     toY,
     here,
     target,
-    targetChar,
+    targetChar: target.legacyCode ?? target.id,
     moveCost: attemptedMoveCost,
     isDiagonalJump
   });
@@ -2903,7 +2777,7 @@ if (target.solid && !target.slope) {
 
 
 
-  const below = tileData(tileAt(runner.x, runner.y + 1));
+  const below = tileDataAt(runner.x, runner.y + 1);
   if (below.solid && !isFluidTile(here)) {
     runner.jumpCredits = 2;
   }
@@ -2949,7 +2823,7 @@ if (dy === -1 && !isFluidTile(target)) {
   else logMessage("Jump", { type: "move" });
 }
 // If we were falling and are now supported, resolve landing effects
-const belowNow = tileData(tileAt(runner.x, runner.y + 1));
+const belowNow = tileDataAt(runner.x, runner.y + 1);
 if (runner.fallDistance > 0 && belowNow.solid) {
   resolveFallLanding();
 }
@@ -2975,7 +2849,7 @@ if (dy === -1 && !isFluidTile(target) && !turboExecuting) {
 handlePickupsAtCurrent();
 
 // Re-read tile after pickups (pickups can change the tile underfoot)
-const tileAfterPickups = tileData(tileAt(runner.x, runner.y));
+const tileAfterPickups = tileDataAt(runner.x, runner.y);
 recordMovementStats(dx, dy, {
   diagonalJump: isDiagonalJump,
   doubleJump: usedSecondVerticalJumpCredit,
@@ -3064,8 +2938,7 @@ function drawRunner() {
 
   const px = runner.x * TILE_SIZE;
   const py = runner.y * TILE_SIZE;
-  const runnerTile = TILE["R"];
-  const baseImg = runnerTile?.img;
+  const baseImg = getTileRecord(runnerArtTileId)?.definition?.img;
 
   if (!baseImg) {
     ctx.fillStyle = "white";
@@ -3224,7 +3097,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // Dice roll
 // ============================================================
 function isLevelObjectiveComplete() {
-  const here = tileData(tileAt(runner.x, runner.y));
+  const here = tileDataAt(runner.x, runner.y);
   const exitVariant = exitIdAt(runner.x, runner.y);
   return !!(here?.exit || exitVariant);
 }
@@ -3247,7 +3120,7 @@ function rollDice() {
 
   runner.turbo = false;
   if (inWater()) {
-    const tile = tileData(tileAt(runner.x, runner.y));
+    const tile = tileDataAt(runner.x, runner.y);
     takeDamage(1, tile);
     setMessage("Drowning, took damage");
   }
@@ -3263,9 +3136,9 @@ function rollDice() {
   runner.jumpCredits = 2;
   runner.movementLeft = totalMovementPoints();
 
-  const here = tileData(tileAt(runner.x, runner.y));
+  const here = tileDataAt(runner.x, runner.y);
   if (!isFluidTile(here)) {
-    const below = tileData(tileAt(runner.x, runner.y + 1));
+    const below = tileDataAt(runner.x, runner.y + 1);
     if (!below.solid) {
       applyFullGravity();
     }

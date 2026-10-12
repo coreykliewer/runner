@@ -1,5 +1,7 @@
 # Runner JSON Authoring Guide
 
+> Legacy reference: examples below describe the original letter-keyed catalog and map format. The active `tiles2.json` and `levels.json` now use the numeric registry and numeric map formats. Original files are preserved in `tiles2.legacy.json` and `levels.legacy.json`.
+
 This guide explains the three main JSON files in plain language:
 
 - `tiles2.json` defines what each tile is and what it does.

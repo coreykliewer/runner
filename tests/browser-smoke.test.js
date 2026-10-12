@@ -24,6 +24,11 @@ describe("browser smoke fixtures", () => {
     assert.match(html, /id="tilePalette"/);
     assert.match(html, /id="grid"/);
     assert.match(html, /id="mapBox"/);
-    assert.match(html, /<script type="module" src="editor\.js"><\/script>/);
+    assert.match(html, /id="documentNav"/);
+    assert.match(html, /id="inspectorFields"/);
+    assert.match(html, /id="validationList"/);
+    assert.match(html, /id="openDocs"/);
+    assert.match(html, /id="saveDoc"/);
+    assert.match(html, /<script type="module" src="src\/editor\/studio\.js"><\/script>/);
   });
 });

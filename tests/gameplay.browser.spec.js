@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { decodeCarryStats } from "../src/state.js";
+import { decodeMapToNumeric, normalizeTileDefinitions } from "../src/tileCompatibility.js";
 
 const baseMap = (firstRow) => [firstRow, ...Array(14).fill("P25")].join("~");
 const movementMap = baseMap("P1R1W1A22");
@@ -30,7 +32,12 @@ async function installGameFixtures(page, { routeLevels = false, movementPoints =
   await page.route("**/tiles2.json*", async route => {
     const response = await route.fetch();
     const tiles = await response.json();
-    tiles.W.moveCost = 2;
+    if (tiles.format === "runner.numeric-tile-registry") {
+      const water = tiles.tiles.find(tile => tile.legacyCode === "W");
+      water.definition.moveCost = 2;
+    } else {
+      tiles.W.moveCost = 2;
+    }
     await route.fulfill({ response, json: tiles });
   });
 
@@ -90,6 +97,72 @@ async function openMovementMap(page, movementPoints) {
   await expect(page.locator("#die1")).toHaveText(String(movementPoints));
   await page.locator("#btn-right").click();
 }
+
+test("numeric registry and versioned numeric URL map preserve current movement behavior", async ({ page }) => {
+  const legacyTiles = JSON.parse(await readFile("tiles2.legacy.json", "utf8"));
+  legacyTiles.W.moveCost = 2;
+  const normalized = normalizeTileDefinitions(legacyTiles);
+  const numericMap = decodeMapToNumeric(movementMap, normalized);
+
+  await page.route("**/tiles2.json*", async route => {
+    await route.fulfill({ json: normalized.registry });
+  });
+  await page.addInitScript(points => {
+    Math.random = () => 0;
+    localStorage.setItem("runner:v2:state", JSON.stringify({
+      version: 2,
+      levelKey: "default",
+      runner: {
+        hearts: 5,
+        score: 0,
+        kills: 0,
+        turbo: false,
+        turboMultiplier: 2,
+        xp: 0,
+        counters: {},
+        stats: {},
+        achievements: [],
+        storyFlags: {}
+      },
+      dice: { dieValue1: points, dieValue2: 0, selectedDie: "die1", rollCount: 0 },
+      world: {}
+    }));
+  }, 3);
+
+  const mapParameter = encodeURIComponent(JSON.stringify(numericMap));
+  await page.goto(`/#resume=1&mapv=1&map=${mapParameter}`);
+  await expect(page.locator("#die1")).toHaveText("3");
+  await page.locator("#btn-right").click();
+  await expect(page.locator("#info")).toContainText("Moves: 1");
+  await expect(page.locator("#log")).toContainText("Right");
+});
+
+test("numeric JSON-grid maps in levels.json load through the legacy gameplay adapter", async ({ page }) => {
+  const legacyTiles = JSON.parse(await readFile("tiles2.legacy.json", "utf8"));
+  const normalized = normalizeTileDefinitions(legacyTiles);
+  const numericMap = decodeMapToNumeric(movementMap, normalized);
+
+  await page.route("**/tiles2.json*", async route => {
+    await route.fulfill({ json: normalized.registry });
+  });
+  await page.route("**/levels.json*", async route => {
+    await route.fulfill({
+      json: {
+        schemaVersion: 1,
+        defaultLevel: "default",
+        levels: { default: { id: "default", name: "Numeric map", map: numericMap } }
+      }
+    });
+  });
+  await page.addInitScript(() => { Math.random = () => 0; });
+
+  await page.goto("/");
+  await expect(page.locator("#log")).not.toContainText("BOOT ERROR");
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  await page.locator("#btn-right").click();
+  await expect(page.locator("#log")).toContainText("Right");
+  await expect(page.locator("#info")).toContainText("Moves: 1");
+});
 
 test("movement costs block zero and insufficient points, but allow sufficient points", async ({ browser }) => {
   for (const [points, shouldUnlock, remaining] of [[0, true, "0"], [1, true, "1"], [3, false, "1"]]) {

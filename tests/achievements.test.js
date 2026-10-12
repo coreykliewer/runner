@@ -290,6 +290,25 @@ describe("achievement rules", () => {
     assert.deepEqual(result.unlocked.map(item => item.id), ["roll_before_moving"]);
   });
 
+  it("can compare numeric tile IDs in movement achievement contexts", () => {
+    const state = createInitialState();
+    const rules = [{
+      id: "numeric_tile_test",
+      title: "Numeric tile test",
+      when: {
+        left: "target.tileId",
+        operator: "equals",
+        right: { literal: 104 }
+      }
+    }];
+    const match = checkAchievementRules(state, rules, { target: { tileId: 104, ch: "M" } });
+    const noMatch = checkAchievementRules(state, rules, { target: { tileId: 105, ch: "M" } });
+
+    assert.equal(match.unlocked.length, 1);
+    assert.equal(noMatch.unlocked.length, 0);
+    assert.equal(resolveValue("target.tileId", state, { target: { tileId: 104 } }), 104);
+  });
+
   it("unlocks roll-before-moving for higher cost target tiles without naming the tile", () => {
     const rules = [{
       id: "roll_before_moving",

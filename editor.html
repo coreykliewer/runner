@@ -3,54 +3,177 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Runner Level Editor</title>
+  <title>Runner Studio</title>
   <link rel="stylesheet" href="editor.css" />
 </head>
 <body>
+  <header class="topbar">
+    <a class="brand" href="editor.html" aria-label="Runner Studio home">
+      <span class="brand-mark">R</span>
+      <span>RUNNER <strong>STUDIO</strong></span>
+    </a>
+    <div class="toolbar" role="toolbar" aria-label="Document actions">
+      <button id="openDocs" type="button">Open</button>
+      <button id="validateDocs" type="button">Validate</button>
+      <button id="previewDoc" type="button">Preview</button>
+      <button id="saveDoc" type="button" class="primary-action">Save</button>
+      <button id="exportDoc" type="button">Export</button>
+      <button id="newNumericDoc" type="button" disabled>Numeric authoring</button>
+    </div>
+    <div class="topbar-state">
+      <span class="status-light"></span>
+      <span id="dirtyStatus">Loading content</span>
+    </div>
+  </header>
 
-  <h1>Runner Level Editor</h1>
+  <main class="studio-layout">
+    <aside class="left-panel" aria-label="Content documents">
+      <div class="panel-kicker">Workspace</div>
+      <h1>Content</h1>
+      <nav id="documentNav" class="document-nav" aria-label="Content documents"></nav>
+      <div class="nav-footnote">Four runtime documents</div>
+    </aside>
 
-  <div id="editor">
-
-    <!-- TOOLBOX -->
-    <div id="toolbox">
-      <h3>Tiles</h3>
-
-      <label for="variantBox">Variant (optional)</label>
-      <input
-        id="variantBox"
-        type="text"
-        placeholder="e.g. a, b, aa, exit1"
-        maxlength="12"
-        autocomplete="off"
-        spellcheck="false"
-      />
-
-      <div class="toolbox-help">
-        Paint: click. Pick: Shift-click or right-click.
+    <section class="workspace-panel" aria-label="Content workspace">
+      <div class="workspace-heading">
+        <div>
+          <div class="panel-kicker">Runner / Content</div>
+          <h2 id="workspaceTitle">Loading</h2>
+          <p id="workspaceMeta">Fetching JSON documents</p>
+        </div>
+        <div class="entry-actions">
+          <button id="addEntry" type="button">+ Add</button>
+          <button id="duplicateEntry" type="button" aria-label="Duplicate selected tile" title="Duplicate selected tile" hidden>Duplicate</button>
+          <button id="deleteEntry" type="button" aria-label="Delete selected entry" title="Delete selected entry">Delete</button>
+        </div>
+      </div>
+      <div id="tileWorkspace" class="tile-workspace">
+        <label id="tileSearch" class="tile-search" hidden>
+          <input id="tileSearchInput" type="search" placeholder="Search tiles by name or ID" aria-label="Search tiles by name or ID" />
+        </label>
+        <div id="entryList" class="entry-list" aria-label="Document entries"></div>
+        <section id="tilePreview" class="tile-preview" aria-label="Tile artwork preview" hidden>
+          <div class="tile-preview-heading">
+            <div>
+              <div class="panel-kicker">Artwork preview</div>
+              <h3 id="tilePreviewTitle">Select a tile</h3>
+              <p id="tilePreviewId"></p>
+            </div>
+            <div class="tile-preview-controls">
+              <label title="Preview background">
+                <span>Background</span>
+                <input id="tilePreviewBackground" type="color" value="#e8eeea" aria-label="Preview background" />
+              </label>
+              <label title="Preview zoom">
+                <span>Zoom</span>
+                <input id="tilePreviewZoom" type="range" min="1" max="5" value="2" aria-label="Preview zoom" />
+              </label>
+              <label class="tile-grid-toggle"><input id="tilePreviewGrid" type="checkbox" /> Grid</label>
+            </div>
+          </div>
+          <div id="tilePreviewCanvas" class="tile-preview-canvas">
+            <img id="tilePreviewImage" alt="Selected tile artwork" hidden />
+            <p id="tilePreviewError">No SVG artwork</p>
+          </div>
+          <div class="tile-artwork-actions">
+            <button id="discardTileArtwork" type="button">Discard artwork changes</button>
+          </div>
+        </section>
       </div>
 
-      <div id="tilePalette"></div>
+      <section id="mapEditor" class="map-editor" hidden aria-label="Level map editor">
+        <div class="map-toolbar">
+          <div>
+            <h3>Map canvas</h3>
+            <p>Paint with the selected tile. Shift-click or right-click to pick.</p>
+          </div>
+          <label class="variant-control" for="variantBox">
+            <span>Brush variant</span>
+            <input id="variantBox" type="text" maxlength="12" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+        <div id="tilePalette" class="tile-palette" aria-label="Tile palette"></div>
+        <div class="map-scroll"><div id="grid" aria-label="Level grid"></div></div>
+        <div class="map-io">
+          <label for="mapBox">Encoded map</label>
+          <textarea id="mapBox" rows="3" spellcheck="false"></textarea>
+          <div class="map-actions">
+            <button id="loadMap" type="button">Load text</button>
+            <button id="generateMap" type="button">Update text</button>
+            <button id="clearMap" type="button">Clear</button>
+            <button id="dynamicMap" type="button">Generate cave</button>
+            <button id="openMap" type="button">Open in game</button>
+          </div>
+        </div>
+      </section>
+      <div id="statusText" class="status-line" role="status">Starting Runner Studio</div>
+    </section>
+
+    <aside class="inspector-panel" aria-label="Property inspector">
+      <div class="inspector-heading">
+        <div class="panel-kicker">Properties</div>
+        <h2 id="inspectorTitle">Select an entry</h2>
+      </div>
+      <div id="inspectorFields" class="inspector-fields"></div>
+    </aside>
+
+    <section class="validation-panel" aria-label="Validation results">
+      <div class="validation-heading">
+        <div>
+          <div class="panel-kicker">Diagnostics</div>
+          <h2>Validation</h2>
+        </div>
+        <strong id="validationSummary" data-state="valid">Checking</strong>
+      </div>
+      <div id="validationList" class="validation-list"></div>
+    </section>
+  </main>
+
+  <dialog id="identifierDialog" class="identifier-dialog" aria-labelledby="identifierTitle">
+    <form id="identifierForm">
+      <div class="dialog-kicker">New content</div>
+      <h2 id="identifierTitle">Add item</h2>
+      <label id="identifierLabel" for="identifierInput">Identifier</label>
+      <input id="identifierInput" type="text" autocomplete="off" required />
+      <p id="identifierHelp"></p>
+      <p id="identifierError" class="dialog-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button id="cancelIdentifier" type="button">Cancel</button>
+        <button type="submit" class="primary-action">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="numericDocumentDialog" class="identifier-dialog" aria-labelledby="numericDocumentTitle">
+    <div class="dialog-form">
+      <div class="dialog-kicker">Separate numeric files</div>
+      <h2 id="numericDocumentTitle">Numeric authoring</h2>
+      <p>The numeric tile catalog is active. Create a numeric map or convert a legacy level map copy.</p>
+      <div class="numeric-document-actions">
+        <button id="createNumericRegistry" type="button">New numeric registry</button>
+        <button id="convertNumericRegistry" type="button">Copy legacy catalog to numeric</button>
+        <button id="createNumericMap" type="button">New numeric map</button>
+        <button id="convertNumericMap" type="button">Copy selected level map to numeric</button>
+      </div>
+      <div class="dialog-actions"><button id="closeNumericDocument" type="button">Close</button></div>
     </div>
+  </dialog>
 
-    <!-- GRID -->
-    <div id="grid" aria-label="Level grid"></div>
-
-  </div>
-
-  <!-- MAP I/O -->
-  <div id="mapIO">
-    <textarea id="mapBox" rows="4" placeholder="Map code will appear here..."></textarea>
-
-    <div id="mapButtons">
-      <button id="loadMap" type="button">Load Map</button>
-      <button id="generateMap" type="button">Generate Map</button>
-      <button id="clearMap" type="button">Clear Map</button>
-      <button id="dynamicMap" type="button">Dynamic Map</button>
-      <button id="openMap" type="button">Open Map</button>
+  <dialog id="dependencyDialog" class="identifier-dialog" aria-labelledby="dependencyTitle">
+    <div class="dialog-form">
+      <div class="dialog-kicker">Tile references</div>
+      <h2 id="dependencyTitle">Delete tile?</h2>
+      <p id="dependencySummary"></p>
+      <ul id="dependencyList" class="dependency-list"></ul>
+      <p id="dependencyError" class="dialog-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button id="cancelDependencyDelete" type="button">Cancel</button>
+        <button id="confirmDependencyDelete" type="button" class="primary-action">Delete unreferenced tile</button>
+      </div>
     </div>
-  </div>
+  </dialog>
 
-  <script type="module" src="editor.js"></script>
+  <input id="fallbackFileInput" type="file" accept=".json,application/json" multiple hidden />
+  <script type="module" src="src/editor/studio.js"></script>
 </body>
 </html>
