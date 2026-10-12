@@ -11,7 +11,6 @@ import { VARIANT_BUCKETS } from "../shared/variants.js";
 
 const supportedNames = Object.keys(TILE_PROPERTY_DEFINITIONS);
 const variantBucketNames = new Set([...VARIANT_BUCKETS, "variants"]);
-const groupedCapabilityNames = new Set(TILE_CAPABILITY_GROUPS.flatMap(group => group.properties));
 
 export function renderTilePropertyEditor(container, {
   value,
@@ -31,14 +30,16 @@ export function renderTilePropertyEditor(container, {
 } = {}) {
   let definition = cloneJson(value || {});
   const base = cloneJson(baseDefinition || {});
+  const copyPreviewUpdaters = [];
   const commit = (next, rerender) => {
     definition = cloneJson(next);
+    for (const updatePreview of copyPreviewUpdaters) updatePreview();
     onChange(cloneJson(definition), { refresh: Boolean(rerender) });
     for (const row of container.querySelectorAll(".tile-property-row.is-default")) {
       const value = row.querySelector(".tile-property-effective-default");
       const propertyName = row.dataset.property;
       const metadata = TILE_PROPERTY_DEFINITIONS[propertyName];
-      if (value && metadata) value.textContent = `Effective default: ${effectiveDefault(propertyName, metadata, base, definition)}`;
+      if (value && metadata) value.textContent = `Runtime default: ${effectiveDefault(propertyName, metadata, base, definition)}`;
     }
   };
   container.replaceChildren();
@@ -47,7 +48,6 @@ export function renderTilePropertyEditor(container, {
   if (tileId != null) {
     const id = document.createElement("div");
     id.className = "tile-identity-id";
-    id.innerHTML = "";
     const label = document.createElement("span");
     label.className = "field-label";
     label.textContent = "Stable numeric ID";
@@ -96,6 +96,7 @@ export function renderTilePropertyEditor(container, {
     const label = document.createElement("h4");
     label.textContent = capability.label;
     heading.append(label);
+    let copyPreview = null;
     if (sourceChoices.length && capability.id !== "collision") {
       const copyControls = document.createElement("div");
       copyControls.className = "tile-capability-copy";
@@ -108,25 +109,51 @@ export function renderTilePropertyEditor(container, {
       copy.className = "quiet-button";
       copy.textContent = "Copy settings";
       copy.disabled = true;
-      select.addEventListener("change", () => { copy.disabled = !select.value; });
-      copy.addEventListener("click", () => {
-        const source = sourceChoices.find(tile => tile.id === Number(select.value));
-        if (!source) return;
+      copyPreview = document.createElement("div");
+      copyPreview.className = "tile-capability-copy-preview";
+      copyPreview.hidden = true;
+      copyPreview.setAttribute("aria-live", "polite");
+      const copyCapabilitySettings = source => {
         const next = cloneJson(definition);
         for (const propertyName of capability.properties) {
           if (Object.hasOwn(source.definition || {}, propertyName)) next[propertyName] = cloneJson(source.definition[propertyName]);
           else delete next[propertyName];
         }
-        commit(next, true);
+        return next;
+      };
+      const renderCopyPreview = () => {
+        const source = sourceChoices.find(tile => tile.id === Number(select.value));
+        copy.disabled = !source;
+        copyPreview.replaceChildren();
+        copyPreview.hidden = !source;
+        if (!source) return;
+        const proposed = copyCapabilitySettings(source);
+        const title = document.createElement("strong");
+        title.textContent = `Copying ${capability.label} from ${source.name} into ${name || `Tile ${tileId}`}`;
+        const changes = document.createElement("ul");
+        for (const propertyName of capability.properties) {
+          const item = document.createElement("li");
+          item.textContent = `${propertyLabel(propertyName)}: ${describePropertyState(propertyName, definition, isVariant, base)} -> ${describePropertyState(propertyName, proposed, isVariant, base)}`;
+          changes.append(item);
+        }
+        copyPreview.append(title, changes);
+      };
+      copyPreviewUpdaters.push(renderCopyPreview);
+      select.addEventListener("change", renderCopyPreview);
+      copy.addEventListener("click", () => {
+        const source = sourceChoices.find(tile => tile.id === Number(select.value));
+        if (!source) return;
+        commit(copyCapabilitySettings(source), true);
       });
       copyControls.append(select, copy);
       heading.append(copyControls);
     }
     group.append(heading);
+    if (copyPreview) group.append(copyPreview);
     if (sourceChoices.length && capability.id !== "collision") {
       const copyHelp = document.createElement("p");
       copyHelp.className = "tile-editor-only-help";
-      copyHelp.textContent = "Copies only this capability's explicit settings. Omitted source properties return to runtime defaults; other capabilities are unchanged.";
+      copyHelp.textContent = "Preview the proposed changes before applying. Only this capability is copied; missing source values clear the target override, returning base tiles to runtime defaults and variants to inherited values.";
       group.append(copyHelp);
     }
     for (const propertyName of capability.properties) {
@@ -228,9 +255,9 @@ export function renderTilePropertyEditor(container, {
     const head = document.createElement("div");
     head.className = "tile-property-head";
     const title = document.createElement("strong");
-    title.textContent = humanize(propertyName);
+    title.textContent = propertyLabel(propertyName);
     const status = document.createElement("span");
-    status.className = `tile-property-status status-${metadata.status}`;
+    status.className = `tile-property-status status-${metadata.status} state-${explicit ? "explicit" : inherited ? "inherited" : "default"}`;
     status.textContent = explicit ? "Explicit override" : inherited ? "Inherited from base tile" : "Runtime default (not stored)";
     head.append(title, status);
     const description = document.createElement("p");
@@ -244,7 +271,7 @@ export function renderTilePropertyEditor(container, {
       remove.type = "button";
       remove.className = "quiet-button tile-property-remove";
       remove.textContent = "Remove override";
-      remove.setAttribute("aria-label", `Remove ${humanize(propertyName)} override`);
+      remove.setAttribute("aria-label", `Remove ${propertyLabel(propertyName)} override`);
       remove.addEventListener("click", () => {
         const next = cloneJson(definition);
         delete next[propertyName];
@@ -255,14 +282,14 @@ export function renderTilePropertyEditor(container, {
       const preview = document.createElement("div");
       preview.className = "tile-property-effective-default";
       preview.textContent = inherited
-        ? `Effective value: ${formatValue(currentValue)}`
-        : `Effective default: ${effectiveDefault(propertyName, metadata, baseDefinition, definition)}`;
+        ? `Inherited value: ${formatValue(currentValue)}`
+        : `Runtime default: ${effectiveDefault(propertyName, metadata, baseDefinition, definition)}`;
       row.append(preview);
       const add = document.createElement("button");
       add.type = "button";
       add.className = "quiet-button";
       add.textContent = inherited ? "Override inherited value" : "Add override";
-      add.setAttribute("aria-label", `${inherited ? "Override" : "Add"} ${humanize(propertyName)}`);
+      add.setAttribute("aria-label", `${inherited ? "Override" : "Add"} ${propertyLabel(propertyName)}`);
       add.addEventListener("click", () => {
         const next = cloneJson(definition);
         next[propertyName] = cloneJson(inherited ? currentValue : getTilePropertyInitialValue(propertyName, { ...baseDefinition, ...definition }));
@@ -305,7 +332,7 @@ export function renderTilePropertyEditor(container, {
       const control = document.createElement("input");
       control.type = "checkbox";
       control.checked = Boolean(currentValue);
-      control.setAttribute("aria-label", humanize(propertyName));
+      control.setAttribute("aria-label", propertyLabel(propertyName));
       control.addEventListener("change", () => update(control.checked));
       parent.append(control);
     } else if (metadata.type === "number") {
@@ -313,14 +340,14 @@ export function renderTilePropertyEditor(container, {
       control.type = "number";
       control.step = "any";
       control.value = currentValue == null ? "" : String(currentValue);
-      control.setAttribute("aria-label", humanize(propertyName));
+      control.setAttribute("aria-label", propertyLabel(propertyName));
       control.addEventListener("change", () => {
         if (control.value !== "" && Number.isFinite(Number(control.value))) update(Number(control.value));
       });
       parent.append(control);
     } else if (metadata.type === "enum") {
       const control = document.createElement("select");
-      control.setAttribute("aria-label", humanize(propertyName));
+      control.setAttribute("aria-label", propertyLabel(propertyName));
       const choices = [...new Set([...(currentValue == null ? [] : [String(currentValue)]), ...(metadata.choices || [])])];
       for (const choice of choices) control.append(new Option(choice, choice));
       control.value = currentValue == null ? "" : String(currentValue);
@@ -333,7 +360,7 @@ export function renderTilePropertyEditor(container, {
         : document.createElement("input");
       if (control instanceof HTMLInputElement) control.type = "text";
       control.value = typeof currentValue === "string" ? currentValue : "";
-      control.setAttribute("aria-label", humanize(propertyName));
+      control.setAttribute("aria-label", propertyLabel(propertyName));
       if (propertyName === "svg") control.classList.add("field-code", "tile-svg-source");
       control.addEventListener("input", () => update(control.value));
       parent.append(control);
@@ -394,9 +421,10 @@ function renderAddProperty(container, getDefinition, onChange, getAdvancedSectio
         const option = document.createElement("button");
         option.type = "button";
         option.className = "tile-property-option";
+        option.dataset.propertyName = name;
         option.disabled = Object.hasOwn(definition, name);
         const label = document.createElement("strong");
-        label.textContent = humanize(name);
+        label.textContent = propertyLabel(name);
         const type = document.createElement("small");
         type.textContent = `${metadata.type} · ${option.disabled ? "Already present" : getTilePropertyStatusLabel(metadata.status)}`;
         const description = document.createElement("span");
@@ -435,6 +463,16 @@ function renderAddProperty(container, getDefinition, onChange, getAdvancedSectio
 
 function humanize(value) {
   return String(value).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ").replace(/^./, char => char.toUpperCase());
+}
+
+function propertyLabel(name) {
+  return TILE_PROPERTY_DEFINITIONS[name]?.label || humanize(name);
+}
+
+function describePropertyState(name, value, variantMode, baseDefinition) {
+  if (Object.hasOwn(value, name)) return `Explicit: ${formatValue(value[name])}`;
+  if (variantMode && Object.hasOwn(baseDefinition, name)) return `Inherited: ${formatValue(baseDefinition[name])}`;
+  return `Runtime default: ${effectiveDefault(name, TILE_PROPERTY_DEFINITIONS[name], baseDefinition, value)}`;
 }
 
 function effectiveDefault(name, metadata, baseDefinition, definition) {

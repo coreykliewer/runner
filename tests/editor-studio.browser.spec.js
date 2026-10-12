@@ -161,17 +161,56 @@ test("Studio fits a narrow viewport without page-level horizontal overflow", asy
   expect(dimensions.page).toBeLessThanOrEqual(dimensions.viewport);
 });
 
-test("map canvas fits all rows without vertical scrolling", async ({ page }) => {
+test("map canvas stays within container width as viewport changes", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/editor.html");
-  const canvas = await page.locator(".map-scroll").evaluate(element => ({
-    viewportHeight: element.clientHeight,
-    contentHeight: element.scrollHeight,
-    rows: document.querySelectorAll("#grid .map-cell").length / 25
-  }));
-  expect(canvas.rows).toBe(15);
-  expect(canvas.contentHeight).toBeLessThanOrEqual(canvas.viewportHeight + 1);
+  for (const width of [1280, 768, 614, 390, 320]) {
+    await page.setViewportSize({ width, height: 780 });
+    await page.waitForFunction(() => {
+      const scroll = document.querySelector(".map-scroll");
+      const grid = document.querySelector("#grid");
+      return scroll && grid && grid.getBoundingClientRect().width <= scroll.clientWidth + 1;
+    });
+    const canvas = await page.locator(".map-scroll").evaluate(element => ({
+      viewportWidth: element.clientWidth,
+      contentWidth: element.scrollWidth,
+      viewportHeight: element.clientHeight,
+      contentHeight: element.scrollHeight,
+      rows: document.querySelectorAll("#grid .map-cell").length / 25,
+      pageWidth: document.documentElement.scrollWidth,
+      pageViewportWidth: document.documentElement.clientWidth
+    }));
+    expect(canvas.rows).toBe(15);
+    expect(canvas.contentWidth).toBeLessThanOrEqual(canvas.viewportWidth + 1);
+    expect(canvas.pageWidth).toBeLessThanOrEqual(canvas.pageViewportWidth);
+  }
   await expect(page.locator("#validationSummary")).toHaveAttribute("data-state", "valid");
+});
+
+test("map cell sizing remains width-stable after browser refresh", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/editor.html");
+  const measureSettledMap = async () => {
+    await page.waitForFunction(() => document.querySelector("#statusText")?.textContent.includes("Four content documents loaded"));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
+    return page.locator("#grid").evaluate(grid => {
+      const scroll = document.querySelector(".map-scroll");
+      return {
+        cellSize: getComputedStyle(grid).getPropertyValue("--map-cell-size"),
+        width: grid.getBoundingClientRect().width,
+        height: grid.getBoundingClientRect().height,
+        containerWidth: scroll.clientWidth
+      };
+    });
+  };
+  for (const width of [1280, 768, 614, 390]) {
+    await page.setViewportSize({ width, height: 780 });
+    const first = await measureSettledMap();
+    for (let refresh = 0; refresh < 2; refresh++) {
+      await page.reload();
+      expect(await measureSettledMap()).toEqual(first);
+    }
+  }
 });
 
 test("Studio edits converted numeric level maps through the numeric tile palette", async ({ page }) => {
@@ -207,20 +246,23 @@ test("single numeric tile catalog fills the workspace with SVG artwork cards", a
   expect(catalog.contentHeight).toBeGreaterThan(catalog.height);
   expect(catalog.cardHeight).toBeLessThan(120);
   expect(await page.locator(".tile-card").count()).toBeGreaterThan(20);
-  const desktopOverflow = await page.locator(".tile-card").evaluateAll(cards => cards.some(card => {
+  const desktopOverflow = await page.locator(".tile-card").evaluateAll(cards => cards.flatMap(card => {
     const cardBounds = card.getBoundingClientRect();
-    return [...card.querySelectorAll(":scope > span:not(.tile-card-art), small")].some(text => {
+    return [...card.querySelectorAll(":scope > span:not(.tile-card-art), small")].flatMap(text => {
       const bounds = text.getBoundingClientRect();
       return text.scrollWidth > text.clientWidth + 1 || text.scrollHeight > text.clientHeight + 1 ||
-        bounds.right > cardBounds.right + 1 || bounds.bottom > cardBounds.bottom + 1;
+        bounds.right > cardBounds.right + 1 || bounds.bottom > cardBounds.bottom + 1
+        ? [{ tile: card.innerText, text: text.textContent, card: [cardBounds.width, cardBounds.height], textBounds: [bounds.width, bounds.height], scroll: [text.scrollWidth, text.scrollHeight] }]
+        : [];
     });
   }));
-  expect(desktopOverflow).toBe(false);
+  expect(desktopOverflow).toEqual([]);
   const snakeCard = page.locator(".tile-card").filter({ hasText: "Snake" });
   await expect(snakeCard).toBeVisible();
   await expect(snakeCard.locator("img")).toHaveAttribute("src", /^data:image\/svg\+xml/);
   await snakeCard.click();
   await expect(page.locator("#inspectorTitle")).toHaveText("Tile 11 / Snake");
+  await expect(page.locator('[data-property="solid"] .tile-property-status')).toHaveText("Inherited from base tile");
   await expect(page.locator("#inspectorTitle")).toHaveText(/^Tile /);
   await expect(page.locator("#tilePreviewImage")).toBeVisible();
   await page.getByLabel("Grid", { exact: true }).check();
@@ -252,26 +294,161 @@ test("single numeric tile catalog fills the workspace with SVG artwork cards", a
 test("new numeric tiles can be added from the single catalog", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const nextId = await getNextNumericTileId(page);
   await expect(page.locator("#addEntry")).toHaveText("+ Add numeric tile");
   await page.locator("#addEntry").click();
-  await expect(page.locator("#identifierDialog")).toBeVisible();
-  await page.locator("#identifierDialog").getByLabel("Tile name").fill("Mud");
-  await page.locator('#identifierForm button[type="submit"]').click();
-  await expect(page.locator("#identifierDialog")).not.toBeVisible();
-  await expect(page.locator('.tile-card[data-entry-key="numeric:20"]')).toBeVisible();
-  await expect(page.locator("#inspectorTitle")).toHaveText("Tile 20 / Mud");
-  await expect(page.getByLabel("Editor category", { exact: true })).toHaveValue("Environmental");
+  await expect(page.locator("#tileCreationDialog")).toBeVisible();
+  await page.locator("#tileCreationDialog").getByLabel("Tile name", { exact: true }).fill("Discarded draft");
+  await page.locator("#tileCreationCancel").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  await expect(page.locator(".tile-card").filter({ hasText: "Discarded draft" })).toHaveCount(0);
+  expect(await getNextNumericTileId(page)).toBe(nextId);
+
+  await page.locator("#addEntry").click();
+  await page.locator("#tileCreationDialog").getByLabel("Tile name", { exact: true }).fill("Mud");
+  await page.locator("#tileCreationDialog").getByLabel("Editor category", { exact: true }).selectOption("Environmental");
+  await expect(page.locator("#tileCreationCategoryHelp")).toContainText("does not add gameplay behavior");
+  await page.locator("#tileCreationNext").click();
+  await expect(page.locator('[data-tile-creation-step="2"]')).toBeVisible();
+  await page.locator("#tileCreationNext").click();
+  await expect(page.locator('[data-tile-creation-step="3"]')).toBeVisible();
+  await expect(page.locator("#tileCreationReviewName")).toHaveText("Mud");
+  await expect(page.locator("#tileCreationReviewSource")).toHaveText("Start blank");
+  await page.locator("#tileCreationCreate").click();
+  await expect(page.locator("#tileCreationDialog")).not.toBeVisible();
+  await expect(page.locator(`.tile-card[data-entry-key="numeric:${nextId}"]`)).toBeVisible();
+  await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${nextId} / Mud`);
+  await expect(page.locator("#inspectorFields").getByLabel("Editor category", { exact: true })).toHaveValue("Environmental");
+  await expect(page.locator("#statusText")).toContainText(`Created Mud (ID ${nextId})`);
+  expect(await page.locator(".tile-builder-section").evaluateAll(sections => sections.map(section => section.open)))
+    .toEqual([true, false, false, false, false]);
   await page.getByLabel("Filter tiles by editor category").selectOption("Environmental");
-  await expect(page.locator('.tile-card[data-entry-key="numeric:20"]')).toBeVisible();
+  await expect(page.locator(`.tile-card[data-entry-key="numeric:${nextId}"]`)).toBeVisible();
   await page.getByLabel("Filter tiles by editor category").selectOption("Interactive");
-  await expect(page.locator('.tile-card[data-entry-key="numeric:20"]')).toHaveCount(0);
+  await expect(page.locator(`.tile-card[data-entry-key="numeric:${nextId}"]`)).toHaveCount(0);
   await page.getByLabel("Filter tiles by editor category").selectOption("");
   await expect(page.locator("#dirtyStatus")).toHaveText("Unsaved changes");
 
   await addSupportedProperty(page, "moveCost");
-  await expect(page.getByRole("spinbutton", { name: "Move Cost" })).toHaveValue("1");
-  await page.getByRole("spinbutton", { name: "Move Cost" }).fill("3");
-  await expect(page.getByRole("spinbutton", { name: "Move Cost" })).toHaveValue("3");
+  await expect(page.getByRole("spinbutton", { name: "Shared movement cost" })).toHaveValue("1");
+  await page.getByRole("spinbutton", { name: "Shared movement cost" }).fill("3");
+  await expect(page.getByRole("spinbutton", { name: "Shared movement cost" })).toHaveValue("3");
+});
+
+test("guided tile creation copies full definitions independently and saves them across reload", async ({ page }) => {
+  const persistence = await prepareTileCreationPersistence(page, registry => {
+    const platform = registry.tiles.find(tile => tile.id === 12);
+    platform.definition.futureRule = { source: "platform", levels: [1, 2] };
+    platform.definition.decor = { winter: { name: "Snow trim" } };
+  });
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const newTileId = await getNextNumericTileId(page);
+  await page.locator("#addEntry").click();
+  const dialog = page.locator("#tileCreationDialog");
+  await dialog.getByLabel("Tile name", { exact: true }).fill("Frost platform");
+  await dialog.getByLabel("Editor category", { exact: true }).selectOption("Item");
+  await page.locator("#tileCreationNext").click();
+  await page.locator('input[name="tileStartMode"][value="entire"]').check();
+  await dialog.getByLabel("Search tiles by name or ID").fill("12");
+  const platformOption = page.locator('.tile-source-option[aria-label^="Choose Platform, ID 12"]');
+  await expect(platformOption).toBeVisible();
+  await expect(platformOption.locator("img")).toHaveCount(1);
+  await expect(platformOption).toContainText("Environmental");
+  await platformOption.click();
+  await page.locator("#tileCreationNext").click();
+  await expect(page.locator("#tileCreationReviewSource")).toContainText("Platform (ID 12)");
+  await expect(page.locator("#tileCreationVariantNotice")).toContainText("Variant data is copied as-is");
+  await page.locator("#tileCreationCreate").click();
+  await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${newTileId} / Frost platform`);
+  await expect(page.locator("#inspectorFields").getByLabel("Editor category", { exact: true })).toHaveValue("Item");
+  await expect(page.locator("#dirtyStatus")).toHaveText("Unsaved changes");
+
+  const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  await capabilities.locator(":scope > summary").click();
+  const copiedMoveCost = page.getByRole("spinbutton", { name: "Shared movement cost" });
+  await expect(copiedMoveCost).toHaveValue("1");
+  await copiedMoveCost.fill("7");
+  await copiedMoveCost.dispatchEvent("change");
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+
+  const savedRegistry = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+  persistence.persist(savedRegistry);
+  const original = savedRegistry.tiles.find(tile => tile.id === 12);
+  const copy = savedRegistry.tiles.find(tile => tile.id === newTileId);
+  expect(savedRegistry.nextTileId).toBe(newTileId + 1);
+  expect(savedRegistry.airTileId).toBe(1);
+  expect(savedRegistry.playerArtTileId).toBe(13);
+  expect(savedRegistry.defeatedMonsterTileId).toBe(3);
+  expect(copy.category).toBe("Item");
+  expect(copy.legacyCode).toBeUndefined();
+  expect(copy.definition.svg).toBe(original.definition.svg);
+  expect(copy.definition.futureRule).toEqual({ source: "platform", levels: [1, 2] });
+  expect(copy.definition.decor).toEqual({ winter: { name: "Snow trim" } });
+  expect(copy.definition.moveCost).toBe(7);
+  expect(original.definition.moveCost).toBe(1);
+
+  await page.reload();
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await expect(page.locator(`.tile-card[data-entry-key="numeric:${newTileId}"]`)).toContainText("Frost platform");
+  await expect(page.locator(`.tile-card[data-entry-key="numeric-variant:${newTileId}:decor:winter"]`)).toBeVisible();
+  await page.locator(`.tile-card[data-entry-key="numeric:${newTileId}"]`).click();
+  const reloadedCapabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  await reloadedCapabilities.locator(":scope > summary").click();
+  await expect(page.getByRole("spinbutton", { name: "Shared movement cost" })).toHaveValue("7");
+});
+
+test("guided tile creation copies only selected capabilities on mobile", async ({ page }) => {
+  const persistence = await prepareTileCreationPersistence(page, registry => {
+    const platform = registry.tiles.find(tile => tile.id === 12);
+    platform.definition.futureRule = { source: "platform" };
+    platform.definition.decor = { winter: { name: "Snow trim" } };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const newTileId = await getNextNumericTileId(page);
+  await page.locator("#addEntry").click();
+  const dialog = page.locator("#tileCreationDialog");
+  await dialog.getByLabel("Tile name", { exact: true }).fill("Selected platform copy");
+  await dialog.getByLabel("Editor category", { exact: true }).selectOption("Interactive");
+  await page.locator("#tileCreationNext").click();
+  await page.locator('input[name="tileStartMode"][value="capabilities"]').check();
+  await dialog.getByLabel("Search tiles by name or ID").fill("Platform");
+  await page.locator('.tile-source-option[aria-label^="Choose Platform, ID 12"]').click();
+  await page.locator('#tileCreationCapabilityList input[data-capability-id="movement"]').check();
+  await page.locator('#tileCreationCapabilityList input[data-capability-id="appearance"]').check();
+  const dialogBounds = await dialog.evaluate(element => ({ width: element.clientWidth, scrollWidth: element.scrollWidth }));
+  expect(dialogBounds.scrollWidth).toBeLessThanOrEqual(dialogBounds.width + 1);
+  await page.locator("#tileCreationNext").click();
+  await expect(page.locator("#tileCreationReviewCapabilities")).toContainText("Movement: Shared movement cost");
+  await expect(page.locator("#tileCreationReviewCapabilities")).toContainText("Appearance: SVG artwork");
+  await expect(page.locator("#tileCreationVariantNotice")).toBeHidden();
+  await page.locator("#tileCreationCreate").click();
+  await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${newTileId} / Selected platform copy`);
+
+  const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  await capabilities.locator(":scope > summary").click();
+  const copiedMoveCost = page.getByRole("spinbutton", { name: "Shared movement cost" });
+  await expect(copiedMoveCost).toHaveValue("1");
+  await copiedMoveCost.fill("5");
+  await copiedMoveCost.dispatchEvent("change");
+  await page.locator("#saveDoc").click();
+  const savedRegistry = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+  persistence.persist(savedRegistry);
+  const source = savedRegistry.tiles.find(tile => tile.id === 12);
+  const copy = savedRegistry.tiles.find(tile => tile.id === newTileId);
+  expect(copy.category).toBe("Interactive");
+  expect(copy.definition.svg).toBe(source.definition.svg);
+  expect(copy.definition.moveCost).toBe(5);
+  expect(copy.definition.solid).toBeUndefined();
+  expect(copy.definition.gravity).toBeUndefined();
+  expect(copy.definition.hint).toBeUndefined();
+  expect(copy.definition.futureRule).toBeUndefined();
+  expect(copy.definition.decor).toBeUndefined();
+  expect(copy.definition.variants).toBeUndefined();
+  expect(source.definition.moveCost).toBe(1);
 });
 
 test("numeric tile properties use typed controls, preserve custom JSON, and restore fallbacks on removal", async ({ page }) => {
@@ -282,25 +459,26 @@ test("numeric tile properties use typed controls, preserve custom JSON, and rest
   ]);
 
   await addSupportedProperty(page, "fallDamageCancel");
-  const fallCancel = page.getByRole("checkbox", { name: "Fall Damage Cancel" });
+  const fallCancel = page.getByRole("checkbox", { name: "Cancel fall damage" });
   await expect(fallCancel).not.toBeChecked();
-  await page.getByRole("button", { name: "Remove Fall Damage Cancel" }).click();
+  await expect(page.locator('[data-property="fallDamageCancel"] .tile-property-status')).toHaveText("Explicit override");
+  await page.getByRole("button", { name: "Remove Cancel fall damage override" }).click();
   await expect(page.locator('[data-property="fallDamageCancel"] .tile-property-status')).toHaveText("Runtime default (not stored)");
-  await expect(page.getByRole("button", { name: "Add Fall Damage Cancel" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Cancel fall damage" })).toBeVisible();
 
-  await page.getByRole("checkbox", { name: "Gravity" }).uncheck();
-  await expect(page.locator('[data-property="fallDamageCancel"] .tile-property-effective-default')).toHaveText("Effective default: true");
+  await page.getByRole("checkbox", { name: "Gravity affects this tile" }).uncheck();
+  await expect(page.locator('[data-property="fallDamageCancel"] .tile-property-effective-default')).toHaveText("Runtime default: true");
   await addSupportedProperty(page, "fallDamageCancel");
-  await expect(page.getByRole("checkbox", { name: "Fall Damage Cancel" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Cancel fall damage" })).toBeChecked();
 
   await addSupportedProperty(page, "bounce");
-  await expect(page.getByRole("spinbutton", { name: "Bounce" })).toHaveValue("0");
-  await page.getByRole("spinbutton", { name: "Bounce" }).fill("2.5");
-  await page.getByRole("spinbutton", { name: "Bounce" }).dispatchEvent("change");
+  await expect(page.getByRole("spinbutton", { name: "Landing bounce height" })).toHaveValue("0");
+  await page.getByRole("spinbutton", { name: "Landing bounce height" }).fill("2.5");
+  await page.getByRole("spinbutton", { name: "Landing bounce height" }).dispatchEvent("change");
 
   await addSupportedProperty(page, "pickupType");
-  await page.getByLabel("Pickup Type", { exact: true }).selectOption("turbo");
-  await page.getByLabel("Hint", { exact: true }).fill("A typed multiline hint");
+  await page.getByLabel("Pickup reward type", { exact: true }).selectOption("turbo");
+  await page.getByLabel("Inspection hint", { exact: true }).fill("A typed multiline hint");
   await addSupportedProperty(page, "tags");
   await page.getByRole("button", { name: "Add tags row" }).click();
   await page.getByLabel("Item 1").fill("water");
@@ -332,7 +510,7 @@ test("numeric tile properties use typed controls, preserve custom JSON, and rest
   await page.getByLabel("Future Rule").fill("keep me");
   await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
   await addSupportedProperty(page, "autoPush");
-  const autoPush = page.locator('[data-property="autoPush"] input[aria-label="Auto Push"]');
+  const autoPush = page.locator('[data-property="autoPush"] input[aria-label="Auto-push target"]');
   const tileSuggestions = await autoPush.getAttribute("list");
   expect(tileSuggestions).toBeTruthy();
   await expect(page.locator(`#${tileSuggestions} option[value="P"]`)).toHaveCount(1);
@@ -372,19 +550,24 @@ test("Tile Builder categories are editor-only and capability copies stay indepen
   await expect(collision.locator("select")).toHaveCount(0);
   await expect(collision.locator('[data-property="solid"]')).toBeVisible();
   await expect(collision.locator('[data-property="fallDamageCancel"]')).toBeVisible();
-  const waterMoveCost = page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]');
+  const waterMoveCost = page.locator('[data-property="moveCost"] input[aria-label="Shared movement cost"]');
   await expect(waterMoveCost).toHaveValue("1");
   await waterMoveCost.fill("4");
   await waterMoveCost.dispatchEvent("change");
-  await page.getByLabel("Editor category", { exact: true }).selectOption("Item");
+  await page.locator("#inspectorFields").getByLabel("Editor category", { exact: true }).selectOption("Item");
   const movement = page.locator(".tile-capability-group").filter({ has: page.getByRole("heading", { name: "Movement" }) });
+  await expect(movement.locator(".tile-capability-copy-preview")).toBeHidden();
   await movement.getByLabel("Copy Movement from tile").selectOption("1");
+  await expect(movement.locator(".tile-capability-copy-preview")).toContainText("Shared movement cost: Explicit: 4 -> Explicit: 1");
+  await waterMoveCost.fill("6");
+  await waterMoveCost.dispatchEvent("change");
+  await expect(movement.locator(".tile-capability-copy-preview")).toContainText("Shared movement cost: Explicit: 6 -> Explicit: 1");
   await movement.getByRole("button", { name: "Copy settings" }).click();
-  await expect(page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]')).toHaveValue("1");
-  await expect(page.getByRole("checkbox", { name: "Gravity" })).not.toBeChecked();
+  await expect(page.locator('[data-property="moveCost"] input[aria-label="Shared movement cost"]')).toHaveValue("1");
+  await expect(page.getByRole("checkbox", { name: "Gravity affects this tile" })).not.toBeChecked();
   await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
 
-  const copiedMoveCost = page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]');
+  const copiedMoveCost = page.locator('[data-property="moveCost"] input[aria-label="Shared movement cost"]');
   await copiedMoveCost.fill("5");
   await copiedMoveCost.dispatchEvent("change");
   const advanced = page.locator(".tile-builder-section").filter({ has: page.getByText("Advanced", { exact: true }) });
@@ -412,8 +595,8 @@ test("Tile Builder categories are editor-only and capability copies stay indepen
   await page.reload();
   await page.locator('.nav-document[data-document="numericTiles"]').click();
   await page.locator('.tile-card[data-entry-key="numeric:16"]').click();
-  await expect(page.getByLabel("Editor category", { exact: true })).toHaveValue("Item");
-  await expect(page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]')).toHaveValue("5");
+  await expect(page.locator("#inspectorFields").getByLabel("Editor category", { exact: true })).toHaveValue("Item");
+  await expect(page.locator('[data-property="moveCost"] input[aria-label="Shared movement cost"]')).toHaveValue("5");
   await expect(page.getByLabel("Future Rule", { exact: true })).toHaveValue("keep this field");
   await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
 });
@@ -433,7 +616,7 @@ test("SVG upload, validation, preview refresh, and discard keep source separate 
     mimeType: "image/svg+xml",
     buffer: Buffer.from(validSvg)
   });
-  await expect(page.getByLabel("Svg", { exact: true })).toHaveValue(validSvg);
+  await expect(page.getByLabel("SVG artwork", { exact: true })).toHaveValue(validSvg);
   await expect(page.locator("#tilePreviewImage")).toBeVisible();
   const sanitized = await page.evaluate(async () => {
     const { sanitizeSvgArtwork } = await import("/src/editor/svgArtwork.js");
@@ -450,13 +633,13 @@ test("SVG upload, validation, preview refresh, and discard keep source separate 
   const airAppearance = page.locator(".tile-builder-section").filter({ has: page.getByText("Appearance", { exact: true }) });
   await airAppearance.locator(":scope > summary").click();
 
-  await page.getByLabel("Svg", { exact: true }).fill("<svg><g></svg>");
+  await page.getByLabel("SVG artwork", { exact: true }).fill("<svg><g></svg>");
   await expect(page.locator("#tilePreviewError")).toContainText("malformed");
   await expect(page.locator("#validationList")).toContainText("numericTiles.tiles[0].definition.svg");
   await page.locator("#saveDoc").click();
   await expect(page.locator("#statusText")).toContainText("Save blocked");
 
-  await page.getByLabel("Svg", { exact: true }).fill(validSvg);
+  await page.getByLabel("SVG artwork", { exact: true }).fill(validSvg);
   await expect(page.locator("#validationSummary")).toHaveAttribute("data-state", "valid");
   await page.locator("#discardTileArtwork").click();
   await expect(page.locator("#tilePreviewError")).toContainText("No SVG artwork");
@@ -469,27 +652,27 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   await expect(page.locator("#workspaceTitle")).toHaveText("Tile Catalog");
   await expect(page.getByLabel("Air tile")).toHaveValue("1");
 
-  await page.locator("#addEntry").click();
-  await page.locator("#identifierDialog").getByLabel("Tile name").fill("Amber crawler");
-  await page.locator('#identifierForm button[type="submit"]').click();
-  await expect(page.locator("#inspectorTitle")).toHaveText("Tile 20 / Amber crawler");
+  const newTileId = await getNextNumericTileId(page);
+  await createBlankTileThroughWizard(page, "Amber crawler", "Interactive");
+  await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${newTileId} / Amber crawler`);
 
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await capabilities.locator(":scope > summary").click();
   await page.getByText("Add Property", { exact: true }).click();
   await page.getByLabel("Search supported properties").fill("solid");
-  await page.getByRole("button", { name: /^Solid boolean/ }).click();
-  await expect(page.getByRole("checkbox", { name: "Solid" })).toBeVisible();
-  await page.getByRole("checkbox", { name: "Solid" }).check();
+  await page.locator('.tile-property-option[data-property-name="solid"]').click();
+  await expect(page.getByRole("checkbox", { name: "Solid (blocks movement)" })).toBeVisible();
+  await page.getByRole("checkbox", { name: "Solid (blocks movement)" }).check();
 
   await page.locator("#duplicateEntry").click();
-  await expect(page.locator("#inspectorTitle")).toHaveText("Tile 21 / Amber crawler copy");
+  const duplicateId = newTileId + 1;
+  await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${duplicateId} / Amber crawler copy`);
   await capabilities.locator(":scope > summary").click();
-  await expect(page.getByRole("checkbox", { name: "Solid" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Solid (blocks movement)" })).toBeChecked();
   const identity = page.locator(".tile-builder-section").filter({ has: page.getByText("Identity", { exact: true }) });
   await identity.locator(":scope > summary").click();
   await page.locator("#inspectorFields").getByLabel("Tile name", { exact: true }).fill("Copper crawler");
-  await expect(page.locator('.tile-card[data-entry-key="numeric:21"]')).toContainText("Copper crawler");
+  await expect(page.locator(`.tile-card[data-entry-key="numeric:${duplicateId}"]`)).toContainText("Copper crawler");
 
   await page.locator("#newNumericDoc").click();
   await page.locator("#createNumericMap").click();
@@ -500,12 +683,12 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   await expect(page.getByLabel("Spawn Y")).toHaveValue("1");
   await page.getByLabel("Spawn X").fill("6");
   await page.getByLabel("Spawn X").dispatchEvent("change");
-  await page.getByRole("button", { name: "Select Copper crawler, ID 21" }).click();
+  await page.getByRole("button", { name: `Select Copper crawler, ID ${duplicateId}` }).click();
   await page.getByLabel("Map cell 5, 5").click();
   await expect(page.locator("#dirtyStatus")).toHaveText("Unsaved changes");
 
   await page.locator('.nav-document[data-document="numericTiles"]').click();
-  await page.locator('.tile-card[data-entry-key="numeric:21"]').click();
+  await page.locator(`.tile-card[data-entry-key="numeric:${duplicateId}"]`).click();
   await page.locator("#deleteEntry").click();
   await expect(page.locator("#dependencyDialog")).toBeVisible();
   await expect(page.locator("#dependencyList")).toContainText("numericMap.cells[4][4]");
@@ -516,16 +699,15 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   await page.getByRole("button", { name: "Select Air, ID 1" }).click();
   await page.getByLabel("Map cell 5, 5").click();
   await page.locator('.nav-document[data-document="numericTiles"]').click();
-  await page.locator('.tile-card[data-entry-key="numeric:21"]').click();
+  await page.locator(`.tile-card[data-entry-key="numeric:${duplicateId}"]`).click();
   await page.locator("#deleteEntry").click();
   await expect(page.locator("#confirmDependencyDelete")).toBeEnabled();
   await page.locator("#confirmDependencyDelete").click();
-  await expect(page.locator('.tile-card[data-entry-key="numeric:21"]')).toHaveCount(0);
+  await expect(page.locator(`.tile-card[data-entry-key="numeric:${duplicateId}"]`)).toHaveCount(0);
 
-  await page.locator("#addEntry").click();
-  await page.locator("#identifierDialog").getByLabel("Tile name").fill("Next tile");
-  await page.locator('#identifierForm button[type="submit"]').click();
-  await expect(page.locator("#inspectorTitle")).toHaveText("Tile 22 / Next tile");
+  const nextTileId = newTileId + 2;
+  await createBlankTileThroughWizard(page, "Next tile", "Environmental");
+  await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${nextTileId} / Next tile`);
 });
 
 test("Studio exposes only one active numeric tile catalog", async ({ page }) => {
@@ -578,6 +760,47 @@ async function addSupportedProperty(page, name) {
   if (!await capabilities.evaluate(section => section.open)) await capabilities.locator(":scope > summary").click();
   await page.locator(".tile-add-property summary").click();
   await page.getByLabel("Search supported properties").fill(name);
-  const label = name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, char => char.toUpperCase());
-  await page.locator(".tile-property-option").filter({ has: page.getByText(label, { exact: true }) }).click();
+  await page.locator(`.tile-property-option[data-property-name="${name}"]`).click();
+}
+
+async function createBlankTileThroughWizard(page, name, category) {
+  await page.locator("#addEntry").click();
+  const dialog = page.locator("#tileCreationDialog");
+  await dialog.getByLabel("Tile name", { exact: true }).fill(name);
+  await dialog.getByLabel("Editor category", { exact: true }).selectOption(category);
+  await page.locator("#tileCreationNext").click();
+  await page.locator("#tileCreationNext").click();
+  await page.locator("#tileCreationCreate").click();
+}
+
+async function getNextNumericTileId(page) {
+  return page.evaluate(async () => {
+    const response = await fetch("/tiles2.json", { cache: "no-store" });
+    return (await response.json()).nextTileId;
+  });
+}
+
+async function prepareTileCreationPersistence(page, mutateRegistry = () => {}) {
+  let persistedRegistry = null;
+  await page.route("**/tiles2.json*", async route => {
+    if (persistedRegistry) return route.fulfill({ json: persistedRegistry });
+    const response = await route.fetch();
+    const registry = await response.json();
+    mutateRegistry(registry);
+    return route.fulfill({ response, json: registry });
+  });
+  await page.addInitScript(() => {
+    window.__createdRegistryJson = null;
+    Object.defineProperty(window, "showSaveFilePicker", {
+      configurable: true,
+      value: async () => ({
+        name: "tiles2.json",
+        createWritable: async () => ({
+          write: async content => { window.__createdRegistryJson = content; },
+          close: async () => {}
+        })
+      })
+    });
+  });
+  return { persist: registry => { persistedRegistry = registry; } };
 }

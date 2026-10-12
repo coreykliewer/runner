@@ -159,6 +159,86 @@
     </form>
   </dialog>
 
+  <dialog id="tileCreationDialog" class="tile-creation-dialog" aria-labelledby="tileCreationTitle">
+    <form id="tileCreationForm" class="tile-creation-form">
+      <div class="dialog-kicker">Tile catalog</div>
+      <h2 id="tileCreationTitle">Create a tile</h2>
+      <p id="tileCreationStepCount" class="tile-creation-step-count" aria-live="polite">Step 1 of 3</p>
+      <ol class="tile-creation-progress" aria-label="Tile creation steps">
+        <li data-step="1" aria-current="step">Identity</li>
+        <li data-step="2">Starting point</li>
+        <li data-step="3">Review</li>
+      </ol>
+
+      <section class="tile-creation-step" data-tile-creation-step="1" aria-labelledby="tileIdentityStepTitle">
+        <h3 id="tileIdentityStepTitle" tabindex="-1">Tile identity</h3>
+        <label for="tileCreationName">Tile name</label>
+        <input id="tileCreationName" name="tileName" type="text" maxlength="100" autocomplete="off" required />
+        <label for="tileCreationCategory">Editor category</label>
+        <select id="tileCreationCategory" name="tileCategory" required>
+          <option value="">Choose a category</option>
+          <option value="Environmental">Environmental</option>
+          <option value="Item">Item</option>
+          <option value="Interactive">Interactive</option>
+        </select>
+        <p id="tileCreationCategoryHelp" class="tile-creation-help" aria-live="polite">Choose how this tile is organized in the catalog. Category does not add gameplay behavior.</p>
+      </section>
+
+      <section class="tile-creation-step" data-tile-creation-step="2" aria-labelledby="tileStartingPointTitle" hidden>
+        <h3 id="tileStartingPointTitle" tabindex="-1">Choose a starting point</h3>
+        <fieldset class="tile-start-modes">
+          <legend>How should the new definition start?</legend>
+          <label class="tile-start-mode">
+            <input type="radio" name="tileStartMode" value="blank" checked />
+            <span><strong>Start blank</strong><small>Create an empty definition.</small></span>
+          </label>
+          <label class="tile-start-mode">
+            <input type="radio" name="tileStartMode" value="entire" />
+            <span><strong>Copy existing tile</strong><small>Copy all definition data, including variants and custom JSON.</small></span>
+          </label>
+          <label class="tile-start-mode">
+            <input type="radio" name="tileStartMode" value="capabilities" />
+            <span><strong>Copy selected capabilities</strong><small>Copy only the groups you choose; variants and unrelated fields are not copied.</small></span>
+          </label>
+        </fieldset>
+        <div id="tileCreationSourcePicker" class="tile-creation-source-picker" hidden>
+          <label for="tileCreationSourceSearch">Search tiles by name or ID</label>
+          <input id="tileCreationSourceSearch" type="search" autocomplete="off" />
+          <div id="tileCreationSourceResults" class="tile-creation-source-results" role="list" aria-label="Source tiles"></div>
+          <p id="tileCreationSourceStatus" class="tile-creation-help" aria-live="polite">Choose a source tile.</p>
+        </div>
+        <fieldset id="tileCreationCapabilityOptions" class="tile-creation-capabilities" hidden>
+          <legend>Capabilities to copy</legend>
+          <div id="tileCreationCapabilityList"></div>
+          <p class="tile-creation-help">Only explicit properties in selected groups are copied. Unselected properties and variant buckets stay absent.</p>
+        </fieldset>
+        <p id="tileCreationStepError" class="dialog-error" role="alert"></p>
+      </section>
+
+      <section class="tile-creation-step" data-tile-creation-step="3" aria-labelledby="tileCreationReviewTitle" hidden>
+        <h3 id="tileCreationReviewTitle" tabindex="-1">Review and create</h3>
+        <dl class="tile-creation-review">
+          <div><dt>New tile</dt><dd id="tileCreationReviewName"></dd></div>
+          <div><dt>Category</dt><dd id="tileCreationReviewCategory"></dd></div>
+          <div><dt>Starting point</dt><dd id="tileCreationReviewSource"></dd></div>
+          <div><dt>Copied capabilities</dt><dd id="tileCreationReviewCapabilities"></dd></div>
+          <div><dt>Artwork</dt><dd id="tileCreationReviewArtwork"></dd></div>
+          <div><dt>Resulting definition</dt><dd id="tileCreationReviewSummary"></dd></div>
+        </dl>
+        <p id="tileCreationVariantNotice" class="tile-creation-notice" hidden></p>
+        <p class="tile-creation-help">The numeric ID is assigned only when you select Create Tile.</p>
+      </section>
+
+      <p id="tileCreationError" class="dialog-error" role="alert"></p>
+      <div class="dialog-actions tile-creation-actions">
+        <button id="tileCreationCancel" type="button">Cancel</button>
+        <button id="tileCreationBack" type="button" hidden>Back</button>
+        <button id="tileCreationNext" type="button" class="primary-action">Next</button>
+        <button id="tileCreationCreate" type="button" class="primary-action" hidden>Create Tile</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="numericDocumentDialog" class="identifier-dialog" aria-labelledby="numericDocumentTitle">
     <div class="dialog-form">
       <div class="dialog-kicker">Separate numeric files</div>

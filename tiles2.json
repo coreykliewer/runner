@@ -1,7 +1,7 @@
 {
   "format": "runner.numeric-tile-registry",
   "version": 1,
-  "nextTileId": 20,
+  "nextTileId": 24,
   "legacyIdMapping": {
     ".": 1,
     "B": 2,
@@ -378,6 +378,42 @@
         "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 23.04 23.04'><path fill='#352e3d' d='M23.04 0 13.68 9.36H12.96V10.08H12.24V10.8H11.52V11.52H10.8V12.24L.72 22.32H0V23.04H23.04Z'/><rect fill='#4b465a' x='12.24' y='12.24' width='10.8' height='10.08'/><path fill='#4b465a' d='M22.32.72V0H21.6V.72H20.88V1.44H20.16V2.16H19.44V2.88H18.72V3.6H18V4.32H17.28V5.04H16.56V5.76H15.84V6.48H15.12V7.2H14.4V7.92H13.68V8.64H12.96V9.36H12.24V10.08H11.52V10.8H22.32Z'/><rect fill='#4b465a' x='10.8' y='10.8' width='.72' height='.72'/><path fill='#4b465a' d='M10.08 12.24H9.36V12.96H8.64V13.68H7.92V14.4H7.2V15.12H6.48V15.84H5.76V16.56H5.04V17.28H4.32V18H3.6V18.72H2.88V19.44H2.16V20.16H1.44V20.88H.72V21.6H0V22.32H10.8V11.52H10.08Z'/><rect fill='#000' x='22.32' y='0' width='.72' height='.72'/><rect fill='#000' x='22.32' y='22.32' width='.72' height='.72'/><polygon fill='#5b5a70' points='9.36 13.68 8.64 14.4 7.92 14.4 7.92 15.12 7.2 15.12 7.2 15.84 5.04 18 4.32 18 4.32 18.72 2.16 20.88 2.88 20.88 2.88 21.6 4.32 21.6 4.32 20.88 5.04 20.88 5.04 21.6 7.2 21.6 7.2 20.88 7.92 20.88 7.92 21.6 8.64 21.6 8.64 20.88 9.36 20.88 9.36 21.6 10.08 21.6 10.08 20.16 9.36 20.16 9.36 19.44 10.08 19.44 10.08 18.72 9.36 18.72 9.36 18 10.08 18 10.08 16.56 9.36 16.56 9.36 15.84 10.08 15.84 10.08 15.12 9.36 15.12 9.36 13.68'/><polygon fill='#5b5a70' points='20.88 13.68 20.88 12.96 12.96 12.96 12.96 20.88 13.68 20.88 13.68 21.6 15.12 21.6 15.12 20.88 15.84 20.88 15.84 21.6 17.28 21.6 17.28 20.88 19.44 20.88 19.44 21.6 23.04 21.6 23.04 13.68'/><polygon fill='#5b5a70' points='16.74 9.36 16.74 10.08 18.09 10.08 18.09 9.36 18.9 9.36 18.9 10.08 20.25 10.08 20.25 9.36 20.88 9.36 20.88 10.08 21.6 10.08 21.6 8.73 20.88 8.73 20.88 7.2 21.6 7.2 21.6 6.48 20.88 6.48 20.88 5.67 21.6 5.67 21.6 4.32 20.88 4.32 20.88 2.16 21.6 2.16 21.6 1.44 18.72 4.32 18 4.32 18 5.04 16.56 6.48 15.84 6.48 15.84 7.2 15.12 7.2 15.12 7.92 13.68 9.36'/><rect fill='#6b778d' x='12.96' y='14.4' width='.72' height='2.16'/><rect fill='#6b778d' x='12.96' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='18.72' width='.72' height='1.44'/><rect fill='#6b778d' x='12.96' y='20.88' width='.72' height='.72'/><rect fill='#6b778d' x='12.96' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='17.37' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='18.9' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='12.96' width='2.16' height='.72'/><rect fill='#6b778d' x='21.6' y='.72' width='.72' height='.72'/><rect fill='#6b778d' x='20.88' y='1.44' width='.72' height='.72'/><rect fill='#6b778d' x='20.16' y='2.16' width='.72' height='.72'/><rect fill='#6b778d' x='19.44' y='2.88' width='.72' height='.72'/><rect fill='#6b778d' x='18.72' y='3.6' width='.72' height='.72'/><rect fill='#6b778d' x='17.28' y='5.04' width='.72' height='.72'/><rect fill='#6b778d' x='16.56' y='5.76' width='.72' height='.72'/><rect fill='#6b778d' x='13.68' y='8.64' width='.72' height='.72'/><rect fill='#6b778d' x='10.08' y='12.24' width='.72' height='.72'/><rect fill='#6b778d' x='9.36' y='12.96' width='.72' height='.72'/><rect fill='#6b778d' x='8.64' y='13.68' width='.72' height='.72'/><rect fill='#6b778d' x='6.48' y='15.84' width='.72' height='.72'/><rect fill='#6b778d' x='5.76' y='16.56' width='.72' height='.72'/><rect fill='#6b778d' x='5.04' y='17.28' width='.72' height='.72'/><rect fill='#6b778d' x='3.6' y='18.72' width='.72' height='.72'/><rect fill='#6b778d' x='14.4' y='7.92' width='.72' height='.72'/><rect fill='#6b778d' x='2.88' y='19.44' width='.72' height='.72'/><rect fill='#6b778d' x='2.16' y='20.16' width='.72' height='.72'/><rect fill='#6b778d' x='1.44' y='20.88' width='.72' height='.72'/></svg>"
       },
       "category": "Environmental"
+    },
+    {
+      "id": 20,
+      "name": "Stone Wall",
+      "definition": {},
+      "category": "Environmental"
+    },
+    {
+      "id": 21,
+      "name": "Lava copy",
+      "definition": {
+        "solid": true,
+        "gravity": false,
+        "insideDamage": {
+          "amount": 999,
+          "when": "instant"
+        },
+        "moveCost": 1,
+        "deathMessage": "You were scorched by lava!",
+        "hint": "Ok, thats molting lava. That looks like instant death.",
+        "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 23.04 23.04'><g><path fill='#5c140b' d='M23.04,22.1v.94H0v-.94c7.68,1.88,15.36-1.87,23.04,0Z'/><path fill='#5c140b' d='M23.04,18.28v3.82c-7.68-1.87-15.36,1.88-23.04,0v-3.82c7.68-1.88,15.36,1.87,23.04,0Z'/><path fill='#a51e22' d='M23.04,16.4v1.88c-7.68,1.87-15.36-1.88-23.04,0v-1.88c7.68-1.87,15.36,1.88,23.04,0Z'/><path fill='#e16a26' d='M23.04,12.58v3.82c-7.68,1.88-15.36-1.87-23.04,0v-3.82c7.68,1.87,15.36-1.88,23.04,0Z'/><path fill='#fdb714' d='M23.04,10.7v1.88c-7.68-1.88-15.36,1.87-23.04,0v-1.88c7.68,1.88,15.36-1.87,23.04,0Z'/><path fill='#a51e22' d='M23.04,6.88v3.82c-7.68-1.87-15.36,1.88-23.04,0v-3.82c7.68-1.88,15.36,1.87,23.04,0Z'/><path fill='#5c140b' d='M23.04,5v1.88c-7.68,1.87-15.36-1.88-23.04,0v-1.88c7.68-1.88,15.36,1.88,23.04,0Z'/><path fill='#e16a26' d='M23.04,1.18v3.82c-7.68,1.88-15.36-1.88-23.04,0V1.18c7.68,1.87,15.36-1.88,23.04,0Z'/><path fill='#5c140b' d='M23.04,0v1.18C15.36-.7,7.68,3.05,0,1.18V0h23.04Z'/></g></svg>",
+        "fallDamageCancel": true
+      },
+      "category": "Environmental"
+    },
+    {
+      "id": 22,
+      "name": "Fire Wall",
+      "definition": {},
+      "category": "Environmental"
+    },
+    {
+      "id": 23,
+      "name": "Rat",
+      "definition": {},
+      "category": "Interactive"
     }
   ]
 }

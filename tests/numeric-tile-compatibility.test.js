@@ -38,7 +38,14 @@ describe("numeric tile compatibility foundation", () => {
     ]);
 
     assert.deepEqual(tileBackup, legacyTiles);
-    assert.deepEqual(projectTileRegistryToLegacy(normalizeTileDefinitions(registry), { requireLegacyCode: true }).definitions, legacyTiles);
+    const legacyProjection = projectTileRegistryToLegacy(normalizeTileDefinitions(registry));
+    const projected = legacyProjection.definitions;
+    assert.deepEqual(legacyProjection.unprojectedIds, registry.tiles.filter(tile => tile.legacyCode == null).map(tile => tile.id));
+    assert.equal(projected.K.fallDamageCancel, false);
+    assert.equal(projected.K.moveCost, 1);
+    delete projected.K.fallDamageCancel;
+    delete projected.K.moveCost;
+    assert.deepEqual(projected, legacyTiles);
     assert.deepEqual(validateNumericTileRegistry(registry), []);
     assert.equal(validateLevels(levels, registry).filter(issue => issue.severity === "error").length, 0);
     for (const [levelId, level] of Object.entries(levels.levels)) {

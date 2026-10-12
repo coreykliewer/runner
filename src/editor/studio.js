@@ -14,9 +14,17 @@ import { ContentDocumentStore, ALL_CONTENT_DOCUMENTS, CONTENT_DOCUMENTS, createE
 import { renderJsonEditor } from "./fieldEditor.js";
 import { renderTilePropertyEditor } from "./tilePropertyEditor.js";
 import { sanitizeSvgArtwork } from "./svgArtwork.js";
-import { TILE_EDITOR_CATEGORIES } from "../tileProperties.js";
+import { TILE_EDITOR_CATEGORIES, TILE_CAPABILITY_GROUPS, TILE_PROPERTY_DEFINITIONS } from "../tileProperties.js";
 
 const store = new ContentDocumentStore();
+const TILE_CREATION_CAPABILITY_GROUPS = [
+  ...TILE_CAPABILITY_GROUPS,
+  {
+    id: "appearance",
+    label: "Appearance",
+    properties: Object.keys(TILE_PROPERTY_DEFINITIONS).filter(name => TILE_PROPERTY_DEFINITIONS[name].category === "artwork")
+  }
+];
 const elements = {
   nav: document.getElementById("documentNav"),
   workspaceTitle: document.getElementById("workspaceTitle"),
@@ -62,6 +70,8 @@ let cells = [];
 let identifierDialogResolver = null;
 let identifierValidator = null;
 let dependencyDialogResolver = null;
+let tileCreationDraft = null;
+let mapCellSizeFrame = null;
 
 initialize();
 
@@ -97,6 +107,25 @@ function bindToolbar() {
   document.getElementById("exportDoc").addEventListener("click", exportActiveDocument);
   document.getElementById("newNumericDoc").addEventListener("click", openNumericDocumentDialog);
   document.getElementById("addEntry").addEventListener("click", addEntry);
+  document.getElementById("tileCreationCancel").addEventListener("click", closeTileCreationDialog);
+  document.getElementById("tileCreationBack").addEventListener("click", () => setTileCreationStep(tileCreationDraft.step - 1));
+  document.getElementById("tileCreationNext").addEventListener("click", advanceTileCreationStep);
+  document.getElementById("tileCreationCreate").addEventListener("click", createTileFromWizard);
+  document.getElementById("tileCreationName").addEventListener("input", clearTileCreationErrors);
+  document.getElementById("tileCreationCategory").addEventListener("change", updateTileCreationCategoryHelp);
+  document.getElementById("tileCreationSourceSearch").addEventListener("input", renderTileCreationSources);
+  for (const radio of document.querySelectorAll('input[name="tileStartMode"]')) {
+    radio.addEventListener("change", updateTileCreationMode);
+  }
+  document.getElementById("tileCreationForm").addEventListener("submit", event => {
+    event.preventDefault();
+    if (tileCreationDraft?.step === 3) createTileFromWizard();
+    else advanceTileCreationStep();
+  });
+  document.getElementById("tileCreationDialog").addEventListener("cancel", event => {
+    event.preventDefault();
+    closeTileCreationDialog();
+  });
   document.getElementById("duplicateEntry").addEventListener("click", duplicateSelectedTile);
   document.getElementById("deleteEntry").addEventListener("click", deleteEntry);
   document.getElementById("loadMap").addEventListener("click", loadMapFromText);
@@ -834,22 +863,305 @@ function collectSuggestions() {
   };
 }
 
+function openTileCreationDialog() {
+  tileCreationDraft = { step: 1, mode: "blank", sourceId: null };
+  document.getElementById("tileCreationName").value = "";
+  document.getElementById("tileCreationCategory").value = "";
+  document.getElementById("tileCreationSourceSearch").value = "";
+  document.getElementById("tileCreationError").textContent = "";
+  document.getElementById("tileCreationStepError").textContent = "";
+  document.querySelector('input[name="tileStartMode"][value="blank"]').checked = true;
+  renderTileCreationCapabilityOptions();
+  updateTileCreationCategoryHelp();
+  updateTileCreationMode();
+  setTileCreationStep(1);
+  document.getElementById("tileCreationDialog").showModal();
+  document.getElementById("tileCreationName").focus();
+}
+
+function closeTileCreationDialog() {
+  tileCreationDraft = null;
+  const dialog = document.getElementById("tileCreationDialog");
+  if (dialog.open) dialog.close();
+}
+
+function clearTileCreationErrors() {
+  document.getElementById("tileCreationError").textContent = "";
+  document.getElementById("tileCreationStepError").textContent = "";
+}
+
+function updateTileCreationCategoryHelp() {
+  const descriptions = {
+    Environmental: "Terrain, atmosphere, and world surfaces.",
+    Item: "Collectibles and rewards the player can gather.",
+    Interactive: "Doors, signs, creatures, and other active world objects."
+  };
+  const category = document.getElementById("tileCreationCategory").value;
+  document.getElementById("tileCreationCategoryHelp").textContent = category
+    ? `${descriptions[category]} This category only organizes the catalog; it does not add gameplay behavior.`
+    : "Choose how this tile is organized in the catalog. Category does not add gameplay behavior.";
+}
+
+function updateTileCreationMode() {
+  if (!tileCreationDraft) return;
+  const mode = document.querySelector('input[name="tileStartMode"]:checked')?.value || "blank";
+  tileCreationDraft.mode = mode;
+  const needsSource = mode !== "blank";
+  document.getElementById("tileCreationSourcePicker").hidden = !needsSource;
+  document.getElementById("tileCreationCapabilityOptions").hidden = mode !== "capabilities";
+  if (needsSource) renderTileCreationSources();
+  clearTileCreationErrors();
+}
+
+function setTileCreationStep(step) {
+  if (!tileCreationDraft) return;
+  tileCreationDraft.step = step;
+  document.getElementById("tileCreationStepCount").textContent = `Step ${step} of 3`;
+  for (const panel of document.querySelectorAll("[data-tile-creation-step]")) {
+    panel.hidden = Number(panel.dataset.tileCreationStep) !== step;
+  }
+  for (const item of document.querySelectorAll(".tile-creation-progress [data-step]")) {
+    if (Number(item.dataset.step) === step) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+  }
+  document.getElementById("tileCreationBack").hidden = step === 1;
+  document.getElementById("tileCreationNext").hidden = step === 3;
+  document.getElementById("tileCreationCreate").hidden = step !== 3;
+  document.getElementById("tileCreationNext").textContent = step === 2 ? "Review" : "Next";
+  clearTileCreationErrors();
+  if (step === 3) renderTileCreationReview();
+  document.querySelector(`[data-tile-creation-step="${step}"] h3`)?.focus();
+}
+
+function advanceTileCreationStep() {
+  if (!tileCreationDraft) return;
+  clearTileCreationErrors();
+  if (tileCreationDraft.step === 1) {
+    const name = document.getElementById("tileCreationName").value.trim();
+    const category = document.getElementById("tileCreationCategory").value;
+    if (!name) {
+      document.getElementById("tileCreationError").textContent = "Enter a tile name.";
+      document.getElementById("tileCreationName").focus();
+      return;
+    }
+    if (!TILE_EDITOR_CATEGORIES.includes(category)) {
+      document.getElementById("tileCreationError").textContent = "Choose an editor category.";
+      document.getElementById("tileCreationCategory").focus();
+      return;
+    }
+    tileCreationDraft.name = name;
+    tileCreationDraft.category = category;
+    setTileCreationStep(2);
+    return;
+  }
+
+  if (tileCreationDraft.step === 2) {
+    if (tileCreationDraft.mode !== "blank" && !getTileCreationSource()) {
+      document.getElementById("tileCreationStepError").textContent = "Choose a source tile or switch to Start blank.";
+      document.getElementById("tileCreationSourceSearch").focus();
+      return;
+    }
+    if (tileCreationDraft.mode === "capabilities" && getSelectedTileCreationGroups().length === 0) {
+      document.getElementById("tileCreationStepError").textContent = "Select at least one capability group.";
+      document.getElementById("tileCreationCapabilityList").querySelector("input")?.focus();
+      return;
+    }
+    setTileCreationStep(3);
+  }
+}
+
+function renderTileCreationCapabilityOptions() {
+  const container = document.getElementById("tileCreationCapabilityList");
+  container.replaceChildren();
+  for (const capability of TILE_CREATION_CAPABILITY_GROUPS) {
+    const label = document.createElement("label");
+    label.className = "tile-copy-capability";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = capability.id;
+    checkbox.dataset.capabilityId = capability.id;
+    const text = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = capability.label;
+    const properties = document.createElement("small");
+    properties.textContent = capability.properties
+      .map(propertyName => TILE_PROPERTY_DEFINITIONS[propertyName]?.label || propertyName)
+      .join(" · ");
+    text.append(name, properties);
+    label.append(checkbox, text);
+    container.append(label);
+  }
+}
+
+function getSelectedTileCreationGroups() {
+  const selected = new Set([...document.querySelectorAll("#tileCreationCapabilityList input:checked")].map(input => input.value));
+  return TILE_CREATION_CAPABILITY_GROUPS.filter(group => selected.has(group.id));
+}
+
+function getTileCreationSource() {
+  if (tileCreationDraft?.sourceId == null) return null;
+  return store.get("numericTiles").value.tiles.find(tile => tile.id === tileCreationDraft.sourceId) || null;
+}
+
+function renderTileCreationSources() {
+  const container = document.getElementById("tileCreationSourceResults");
+  const status = document.getElementById("tileCreationSourceStatus");
+  container.replaceChildren();
+  if (!tileCreationDraft) return;
+  const query = document.getElementById("tileCreationSourceSearch").value.trim().toLowerCase();
+  const results = store.get("numericTiles").value.tiles.filter(tile =>
+    !query || `${tile.name} ${tile.id} ${tile.category || ""}`.toLowerCase().includes(query));
+  for (const tile of results) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tile-source-option";
+    button.setAttribute("aria-pressed", String(tileCreationDraft.sourceId === tile.id));
+    button.setAttribute("aria-label", `Choose ${tile.name}, ID ${tile.id}, ${tile.category || "Uncategorized"}`);
+    const artwork = tileImages[String(tile.id)];
+    if (artwork?.complete && artwork.naturalWidth) {
+      const image = document.createElement("img");
+      image.src = artwork.src;
+      image.alt = "";
+      button.append(image);
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.className = "tile-source-placeholder";
+      placeholder.textContent = tile.name.slice(0, 2).toUpperCase();
+      button.append(placeholder);
+    }
+    const info = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = `${tile.name} (ID ${tile.id})`;
+    const summary = document.createElement("small");
+    summary.textContent = `${tile.category || "Uncategorized"} · ${summarizeTileDefinition(tile.definition)}`;
+    info.append(title, summary);
+    button.append(info);
+    button.addEventListener("click", () => {
+      tileCreationDraft.sourceId = tile.id;
+      renderTileCreationSources();
+      status.textContent = `Selected ${tile.name} (ID ${tile.id}).`;
+      clearTileCreationErrors();
+    });
+    container.append(button);
+  }
+  if (!results.length) {
+    const empty = document.createElement("p");
+    empty.className = "tile-creation-help";
+    empty.textContent = "No tiles match this search.";
+    container.append(empty);
+  }
+  if (!getTileCreationSource()) status.textContent = "Choose a source tile.";
+}
+
+function summarizeTileDefinition(definition = {}) {
+  const groups = TILE_CREATION_CAPABILITY_GROUPS
+    .filter(group => group.properties.some(propertyName => Object.hasOwn(definition, propertyName)))
+    .map(group => group.label);
+  const variants = countTileVariants(definition);
+  const customCount = Object.keys(definition).filter(key =>
+    !Object.hasOwn(TILE_PROPERTY_DEFINITIONS, key) && !VARIANT_BUCKETS.includes(key) && key !== "variants").length;
+  const parts = [groups.length ? groups.join(", ") : "No configured capabilities"];
+  parts.push(typeof definition.svg === "string" && definition.svg ? "Artwork" : "No artwork");
+  if (customCount) parts.push(`${customCount} custom field${customCount === 1 ? "" : "s"}`);
+  if (variants) parts.push(`${variants} variant entr${variants === 1 ? "y" : "ies"}`);
+  return parts.join(" · ");
+}
+
+function countTileVariants(definition = {}) {
+  let count = 0;
+  for (const bucket of VARIANT_BUCKETS) {
+    count += Object.keys(definition[bucket] || {}).length;
+    count += Object.keys(definition.variants?.[bucket] || {}).length;
+  }
+  return count;
+}
+
+function buildTileCreationDefinition(source) {
+  if (tileCreationDraft.mode === "blank") return {};
+  if (!source) return {};
+  if (tileCreationDraft.mode === "entire") return cloneJson(source.definition || {});
+  const definition = {};
+  for (const group of getSelectedTileCreationGroups()) {
+    for (const propertyName of group.properties) {
+      if (Object.hasOwn(source.definition || {}, propertyName)) {
+        definition[propertyName] = cloneJson(source.definition[propertyName]);
+      }
+    }
+  }
+  return definition;
+}
+
+function renderTileCreationReview() {
+  const source = getTileCreationSource();
+  const definition = buildTileCreationDefinition(source);
+  const groups = getSelectedTileCreationGroups();
+  document.getElementById("tileCreationReviewName").textContent = tileCreationDraft.name;
+  document.getElementById("tileCreationReviewCategory").textContent = tileCreationDraft.category;
+  document.getElementById("tileCreationReviewSource").textContent = tileCreationDraft.mode === "blank"
+    ? "Start blank"
+    : `${source.name} (ID ${source.id}) · ${tileCreationDraft.mode === "entire" ? "entire definition" : "selected capabilities only"}`;
+  if (tileCreationDraft.mode === "capabilities") {
+    document.getElementById("tileCreationReviewCapabilities").textContent = groups.map(group => {
+      const copied = group.properties.filter(propertyName => Object.hasOwn(source.definition || {}, propertyName));
+      const labels = copied.map(propertyName => TILE_PROPERTY_DEFINITIONS[propertyName]?.label || propertyName);
+      return `${group.label}: ${labels.length ? labels.join(", ") : "no explicit source properties"}`;
+    }).join("; ");
+  } else if (tileCreationDraft.mode === "entire") {
+    document.getElementById("tileCreationReviewCapabilities").textContent = "All definition properties and custom JSON";
+  } else {
+    document.getElementById("tileCreationReviewCapabilities").textContent = "None";
+  }
+  document.getElementById("tileCreationReviewArtwork").textContent = definition.svg ? "SVG artwork will be copied" : "No SVG artwork";
+  document.getElementById("tileCreationReviewSummary").textContent = summarizeTileDefinition(definition);
+
+  const notice = document.getElementById("tileCreationVariantNotice");
+  const variantCount = tileCreationDraft.mode === "entire" ? countTileVariants(definition) : 0;
+  notice.hidden = variantCount === 0;
+  if (variantCount) {
+    const hasEncounterVariants = Boolean(definition.monster || definition.lock || definition.variants?.monster || definition.variants?.lock);
+    notice.textContent = `The complete definition includes ${variantCount} variant entr${variantCount === 1 ? "y" : "ies"}. Variant data is copied as-is;${hasEncounterVariants ? " monster/lock data retains the existing variant-based runtime interpretation and does not create a new independent encounter mechanic." : " this does not add new runtime behavior."}`;
+  }
+}
+
+function createTileFromWizard() {
+  if (!tileCreationDraft || tileCreationDraft.step !== 3) return;
+  const source = getTileCreationSource();
+  if (tileCreationDraft.mode !== "blank" && !source) {
+    document.getElementById("tileCreationError").textContent = "Choose a source tile before creating.";
+    return;
+  }
+  try {
+    const definition = buildTileCreationDefinition(source);
+    const result = addNumericTile(store.get("numericTiles").value, {
+      name: tileCreationDraft.name,
+      definition
+    });
+    const created = result.registry.tiles.find(tile => tile.id === result.id);
+    created.category = tileCreationDraft.category;
+    store.update("numericTiles", () => result.registry);
+    const { id, name } = created;
+    activeDocument = "numericTiles";
+    selection = { kind: "entry", key: id };
+    closeTileCreationDialog();
+    loadTileImages();
+    renderNavigation();
+    renderWorkspace();
+    renderInspector();
+    const identity = elements.inspectorFields.querySelector(".tile-builder-section");
+    if (identity) identity.open = true;
+    renderTilePalette();
+    runValidation();
+    updateStatus(`Created ${name} (ID ${id}). Changes are unsaved. Identity is open; Capabilities and Appearance are ready below.`);
+  } catch (error) {
+    document.getElementById("tileCreationError").textContent = error.message;
+  }
+}
+
 async function addEntry() {
   const record = store.get(activeDocument);
   if (activeDocument === "numericTiles") {
-    const name = await requestIdentifier({
-      title: "Add numeric tile",
-      label: "Tile name",
-      help: "Choose a descriptive name. The stable numeric ID is assigned automatically.",
-      maxLength: 100,
-      validate: value => value ? "" : "Tile name is required."
-    });
-    if (!name) return;
-    const result = addNumericTile(record.value, { name, definition: {} });
-    result.registry.tiles.find(tile => tile.id === result.id).category = TILE_EDITOR_CATEGORIES[0];
-    store.update(activeDocument, () => result.registry);
-    selection = { kind: "entry", key: result.id };
-    loadTileImages();
+    openTileCreationDialog();
+    return;
   } else if (activeDocument === "tiles") {
     const code = await requestIdentifier({
       title: "Add tile",
@@ -1206,20 +1518,31 @@ function buildMapGrid() {
   }
   const mapScroll = document.querySelector(".map-scroll");
   if (mapScroll && typeof ResizeObserver === "function") {
-    new ResizeObserver(updateMapCellSize).observe(mapScroll);
+    new ResizeObserver(scheduleMapCellSize).observe(mapScroll);
   }
-  window.addEventListener("resize", updateMapCellSize);
-  updateMapCellSize();
+  window.addEventListener("resize", scheduleMapCellSize);
+  scheduleMapCellSize();
+}
+
+function scheduleMapCellSize() {
+  if (mapCellSizeFrame != null) window.cancelAnimationFrame(mapCellSizeFrame);
+  mapCellSizeFrame = window.requestAnimationFrame(() => {
+    mapCellSizeFrame = window.requestAnimationFrame(() => {
+      mapCellSizeFrame = null;
+      updateMapCellSize();
+    });
+  });
 }
 
 function updateMapCellSize() {
   const mapScroll = document.querySelector(".map-scroll");
   if (!mapScroll) return;
   const styles = getComputedStyle(mapScroll);
-  const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
-  const availableHeight = mapScroll.clientHeight - verticalPadding;
-  if (availableHeight <= 0) return;
-  const cellSize = Math.max(8, Math.min(24, Math.floor((availableHeight - 24) / DEFAULT_ROWS)));
+  const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+  const availableWidth = mapScroll.clientWidth - horizontalPadding;
+  if (availableWidth <= 0) return;
+  const widthLimitedCellSize = Math.floor((availableWidth - 34) / DEFAULT_COLS);
+  const cellSize = Math.max(1, Math.min(24, widthLimitedCellSize));
   elements.grid.style.setProperty("--map-cell-size", `${cellSize}px`);
 }
 
