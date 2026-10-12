@@ -1,3 +1,5 @@
+import { TILE_EDITOR_CATEGORIES } from "./tileProperties.js";
+
 export const TILE_REGISTRY_FORMAT = "runner.numeric-tile-registry";
 export const TILE_REGISTRY_VERSION = 1;
 export const FIRST_TILE_ID = 1;
@@ -174,6 +176,9 @@ export function validateNumericTileRegistry(registry) {
     }
     if (typeof tile.name !== "string" || !tile.name.trim()) {
       issues.push({ severity: "error", path: `${path}.name`, message: "Tile name is required." });
+    }
+    if (tile.category != null && !TILE_EDITOR_CATEGORIES.includes(tile.category)) {
+      issues.push({ severity: "error", path: `${path}.category`, message: `category must be one of: ${TILE_EDITOR_CATEGORIES.join(", ")}.` });
     }
     if (!isPlainObject(tile.definition)) {
       issues.push({ severity: "error", path: `${path}.definition`, message: "Tile definition must be an object." });

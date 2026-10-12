@@ -25,6 +25,24 @@ describe("editor content document store", () => {
     }
   });
 
+  it("recovers a malformed numeric catalog from the legacy backup and marks it unsaved", async () => {
+    const store = new ContentDocumentStore({
+      fetchImpl: async url => url === "tiles2.json"
+        ? { ok: true, json: async () => { throw new SyntaxError("Unexpected end of JSON input"); } }
+        : {
+            ok: true,
+            json: async () => JSON.parse(await readFile(url, "utf8"))
+          }
+    });
+
+    await store.loadAll();
+    const catalog = store.get("numericTiles");
+    assert.equal(catalog.sourceName, "Recovered from tiles2.legacy.json");
+    assert.equal(catalog.dirty, true);
+    assert.equal(catalog.value.tiles.length, 19);
+    assert.equal(catalog.value.tiles.find(tile => tile.legacyCode === "W").id, 16);
+  });
+
   it("round-trips unknown fields and tracks changes independently", () => {
     const store = new ContentDocumentStore();
     const original = {

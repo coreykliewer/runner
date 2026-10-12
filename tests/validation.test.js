@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { validateAchievements, validateContentDocuments, validateLevels, validateMap, validateNarrative, validateTiles } from "../src/validation.js";
 import { resolveExitDestination } from "../src/levelRouting.js";
 import { getRollLimitState } from "../src/rollLimit.js";
-import { TILE_PROPERTY_CATEGORIES, TILE_PROPERTY_DEFINITIONS, getTilePropertyInitialValue } from "../src/tileProperties.js";
+import { TILE_CAPABILITY_GROUPS, TILE_EDITOR_CATEGORIES, TILE_PROPERTY_CATEGORIES, TILE_PROPERTY_DEFINITIONS, getTilePropertyInitialValue } from "../src/tileProperties.js";
 
 describe("validation", () => {
   it("validates the current tile file shape", async () => {
@@ -222,6 +222,8 @@ describe("validation", () => {
   });
 
   it("centralizes the visual tile property categories and fallback-aware initial values", () => {
+    assert.deepEqual(TILE_EDITOR_CATEGORIES, ["Environmental", "Item", "Interactive"]);
+    assert.deepEqual(TILE_CAPABILITY_GROUPS.slice(0, 3).map(group => group.label), ["Collision", "Movement", "Physics"]);
     assert.deepEqual(TILE_PROPERTY_CATEGORIES.map(category => category.label), [
       "Collision and Physics",
       "Movement",

@@ -1,18 +1,30 @@
 # Runner JSON Authoring Guide
 
-> Legacy reference: examples below describe the original letter-keyed catalog and map format. The active `tiles2.json` and `levels.json` now use the numeric registry and numeric map formats. Original files are preserved in `tiles2.legacy.json` and `levels.legacy.json`.
+> Legacy reference: the examples below describe the original letter-keyed catalog and map format. The active `tiles2.json` and `levels.json` use numeric formats. Original files are preserved in `tiles2.legacy.json` and `levels.legacy.json`.
 
-This guide explains the three main JSON files in plain language:
+## Current Numeric Authoring
 
-- `tiles2.json` defines what each tile is and what it does.
-- `levels.json` defines the playable maps and how exits connect them.
+- `tiles2.json` is the single active tile catalog and contains the `runner.numeric-tile-registry` document. Each tile has a stable numeric `id`, a display `name`, and a JSON `definition` containing gameplay properties and artwork.
+- `levels.json` stores each map as a `runner.numeric-map` JSON grid. Cells reference tile IDs; `variants` stores per-cell variant keys; `spawn` stores the player's starting coordinates.
+- In Runner Studio, select **Tile Catalog** and **Add numeric tile** to create a named tile. Its numeric ID is allocated automatically. Use **Add Property** to edit supported gameplay properties and the SVG controls to import or change artwork.
+- Select a level to paint its numeric grid using the numeric tile palette. Numeric IDs remain stable and are not reused after deletion. Deletion is blocked while the tile is referenced by maps, roles, or other supported references.
+- Save writes to a selected file when the browser permits it. If write access is denied, Studio downloads the JSON instead.
+- `tiles2.legacy.json` and `levels.legacy.json` are recovery copies. Do not use the letter-keyed examples below to edit the active numeric documents.
+
+For the registry and map schemas, compatibility rules, and migration tooling, see [Numeric Tile Migration](numeric-tile-migration.md).
+For the current Runner Studio Tile Builder sections and step-by-step numeric tile/variant workflows, see [Tile Catalog Guide](tile-catalog-guide.md).
+
+The legacy examples in this guide describe these original JSON files:
+
+- `tiles2.legacy.json` defines what each legacy tile code is and what it does.
+- `levels.legacy.json` defines the original playable maps and how exits connect them.
 - `achievements.json` defines achievements, tutorial nudges, and stat rewards.
 
 The big idea is: gameplay code should provide facts, and JSON should describe content and rules.
 
 ## Quick Mental Model
 
-A map is made of one-character tile codes.
+In the legacy format, a map is made of one-character tile codes.
 
 For example:
 
@@ -22,11 +34,11 @@ For example:
 - `E` means exit.
 - `R` means runner starting position.
 
-`tiles2.json` explains what those letters mean. `levels.json` places those letters into maps. `achievements.json` watches runner facts like movement, counters, stats, XP, pickups, and damage.
+`tiles2.legacy.json` explains what those letters mean. `levels.legacy.json` places those letters into maps. `achievements.json` watches runner facts like movement, counters, stats, XP, pickups, and damage.
 
-## `tiles2.json`
+## `tiles2.legacy.json` (Legacy Catalog)
 
-`tiles2.json` is the tile catalog.
+`tiles2.legacy.json` is the original letter-keyed tile catalog.
 
 Each top-level key is one tile code:
 
@@ -152,9 +164,9 @@ Example:
 
 This means every time the runner enters water, their `in_water` stat increases by 1.
 
-### Variants
+### Legacy Variants
 
-Some tiles can have variants. In a map, variants are written with braces:
+The following examples describe variants in the legacy letter-keyed format. The active numeric format stores a variant key in a `variants` grid parallel to `cells`; see the [Tile Catalog Guide](tile-catalog-guide.md) for current Studio workflows. Some legacy tiles can have variants. In a map, variants are written with braces:
 
 ```text
 E{a}
@@ -171,9 +183,9 @@ Variants let one tile type behave differently in different places. Examples incl
 
 Variant names should be simple sanitized strings: letters, numbers, underscores, and similar safe identifiers.
 
-## `levels.json`
+## `levels.legacy.json` (Legacy Levels)
 
-`levels.json` is the level list.
+`levels.legacy.json` is the original letter-map level list.
 
 Example:
 
@@ -217,7 +229,7 @@ Example:
 
 If the map contains `E{a}`, the game looks for exit variant `a`.
 
-In `levels.json`, this means:
+In `levels.legacy.json`, this means:
 
 ```json
 "exits": {
@@ -514,12 +526,12 @@ Example:
 ## Adding A New Tile
 
 1. Choose a one-character code.
-2. Add it to `tiles2.json`.
+2. Add it to the active numeric catalog in Runner Studio; the alphabetic examples here apply only to `tiles2.legacy.json`.
 3. Decide whether it is solid.
 4. Decide whether gravity applies.
 5. Set movement cost.
 6. Add damage, pickup, effects, tags, or stat grants if needed.
-7. Add the tile to a map in `levels.json` or with the editor.
+7. Paint the numeric tile into a map in `levels.json` with Runner Studio.
 
 Example:
 
@@ -539,8 +551,8 @@ Example:
 
 - Do not hardcode tile ids into achievement logic.
 - Do not create special-purpose counters when the game already knows the value.
-- Use `tiles2.json` as the source of truth for tile behavior like `moveCost`.
-- Use `levels.json` as the source of truth for maps and exit routing.
+- Use the numeric definitions in `tiles2.json` as the source of truth for tile behavior like `moveCost`.
+- Use numeric map grids in `levels.json` as the source of truth for maps and exit routing.
 - Use `achievements.json` as the source of truth for achievement conditions and stat rewards.
 - Keep counters and stats separate.
 - Let gameplay provide context; let achievement JSON describe the rule.

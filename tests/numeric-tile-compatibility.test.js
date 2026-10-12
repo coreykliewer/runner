@@ -51,6 +51,16 @@ describe("numeric tile compatibility foundation", () => {
     }
   });
 
+  it("preserves valid authoring categories and reports unsupported category values", () => {
+    const registry = migrateLegacyTileDefinitions({ P: { solid: true, futureRule: { keep: true } } });
+    registry.tiles[0].category = "Environmental";
+    assert.deepEqual(validateNumericTileRegistry(registry), []);
+    assert.deepEqual(registry.tiles[0].definition.futureRule, { keep: true });
+
+    registry.tiles[0].category = "Combat";
+    assert.equal(validateNumericTileRegistry(registry).some(issue => issue.path === "tiles[0].category"), true);
+  });
+
   it("assigns a deterministic mapping independent of object key order", () => {
     const first = createDeterministicLegacyIdMapping(["Z", "P", ".", "M"]);
     const second = createDeterministicLegacyIdMapping(["M", ".", "Z", "P"]);

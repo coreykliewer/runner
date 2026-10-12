@@ -40,7 +40,7 @@ The registry format is `runner.numeric-tile-registry`, version `1`:
 }
 ```
 
-`id` is a positive safe integer. `name` is presentation metadata; all gameplay properties, variants, artwork, and unknown properties remain inside `definition`. `legacyCode` is an optional compatibility alias for the current letter-based engine. `legacyIdMapping` is a persistent code-to-ID manifest; retaining entries for deleted codes reserves those IDs. `nextTileId` must be greater than every active or reserved ID.
+`id` is a positive safe integer. `name` is presentation metadata; all gameplay properties, variants, artwork, and unknown properties remain inside `definition`. `legacyCode` is an optional alias used only to decode legacy map strings and preserve old event/context references. Numeric gameplay does not depend on it. `legacyIdMapping` is a persistent code-to-ID manifest; retaining entries for deleted codes reserves those IDs. `nextTileId` must be greater than every active or reserved ID.
 
 Use `migrateLegacyTileDefinitions()` for a first deterministic mapping. It sorts old keys before assignment. Persist that mapping; do not recompute IDs after migration. `addNumericTile()` allocates at `nextTileId`. `removeNumericTile()` deliberately preserves `nextTileId` and the mapping. These APIs are in [numericTileRegistry.js](../src/numericTileRegistry.js).
 
@@ -58,7 +58,7 @@ The JSON-grid format is `runner.numeric-map`, version `1`:
   "height": 1,
   "cells": [[1, 12, 104]],
   "variants": [[null, null, "snake"]],
-  "spawn": { "x": 4, "y": 7, "artTileId": 2 }
+  "spawn": { "x": 1, "y": 0, "artTileId": 2 }
 }
 ```
 
@@ -76,9 +76,9 @@ The adapter still uses `legacyCode` only to decode old map strings, preserve leg
 
 Registry metadata now supports `airTileId`, `playerArtTileId`, and `defeatedMonsterTileId`. Legacy migration infers them from `.`/`R` and the `pickupType: "dead"` definition. Numeric maps use `spawn: { x, y, artTileId? }`, so the map does not need an `R` tile. Monster variant definitions may specify `defeatedTileId` to override the registry-wide defeated-monster replacement.
 
-The current game canvas remains 25x15. Numeric gameplay maps with other dimensions are rejected instead of being silently truncated or padded. Runner Studio loads and edits the numeric registry and paints numeric level maps, while the separate legacy catalog remains available.
+The current game canvas remains 25x15. Numeric gameplay maps with other dimensions are rejected instead of being silently truncated or padded. Runner Studio loads and edits the single numeric registry in `tiles2.json` and paints numeric level maps. Legacy catalog JSON remains available from the backup or by explicit import; it is not a second default catalog.
 
-## Phase 2 Runtime Behavior
+## Current Runtime Behavior
 
 The gameplay grid now stores numeric tile IDs. `tileAt()` returns a numeric ID or `null` at the board boundary; `tileDataAt()` resolves the tile definition and the cell's variant. Out-of-bounds collision remains an engine sentinel, not a registered tile. Rendering, collision, movement costs, hazards, pickups/effects, stat grants, slopes, bounce, and exits read JSON definitions.
 
@@ -98,13 +98,13 @@ Narrative events now match optional numeric `trigger.tileId`; the old `trigger.t
 
 Studio edits the one numeric registry in `tiles2.json`; there is no separate active numeric registry file. `levels.json` contains numeric maps. The migration utility is `scripts/migrate-numeric-content.mjs`; it previews by default and only writes with `--apply`. The exact pre-migration files are `tiles2.legacy.json` and `levels.legacy.json`.
 
-The conversion was explicitly applied. Runtime readers continue to support old maps and links; do not overwrite the preserved backups. Migration helpers still return new objects for callers to review and export explicitly.
+The conversion was explicitly applied. Runtime readers continue to support old maps and links; do not overwrite the preserved backups. The editor saves through a selected file handle when permitted and falls back to a JSON download if the browser denies write access.
 
-## Phase 2 Migration Notes
+## Migration Maintenance
 
 1. Use the migration utility in preview mode before applying it to another content set; it reports unresolved map cells or missing spawn markers.
 2. Keep the preserved legacy backups. Conversion uses the shared decoder so variants stay aligned with cells.
-3. Phase 2 moves gameplay dispatch to properties and metadata references. Continue moving any new behavior out of identity-specific branches.
+3. Keep gameplay dispatch property-driven; tile identity must not imply behavior.
 4. Keep dual map readers for old links and imported content. New writers should emit explicit versioned numeric maps.
 5. Never compact IDs. Keep deleted IDs reserved in the mapping and allocate only at or above `nextTileId`.
 

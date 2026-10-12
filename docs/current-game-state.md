@@ -6,7 +6,7 @@ The current app is served as static files:
 
 - `index.html` loads `style.css` and `game.js`.
 - `editor.html` loads `editor.css` and the Runner Studio controller in `src/editor/studio.js`.
-- Runner Studio manages `levels.json`, the single numeric tile catalog in `tiles2.json`, `fixtures/level1-narrative.json`, and `achievements.json` as separate editable documents. It uses the shared codecs and content validators; browser file pickers are used when available, with JSON import/download fallbacks.
+- Runner Studio manages `levels.json`, the single numeric tile catalog in `tiles2.json`, `fixtures/level1-narrative.json`, and `achievements.json` as separate editable documents. It uses the shared codecs and content validators. Saves write through a selected file handle when permitted and download JSON if the browser denies write access.
 - `tiles2.json` is the canonical `runner.numeric-tile-registry` document used by gameplay and Studio. The original letter-keyed catalog and maps are retained in `tiles2.legacy.json` and `levels.legacy.json` as recovery/import sources.
 - `levels.json` contains canonical numeric JSON-grid maps and exit-variant-to-level mappings. Embedded maps in the legacy catalog remain a fallback.
 - Every current level map uses stable numeric tile IDs and explicit spawn data; no second active tile catalog is loaded.
@@ -45,19 +45,17 @@ There is no bundler or build step. Run `npm test` for module tests, `npm run smo
 - Clicking nearby tiles inspects hints/sign text.
 - Space, Enter, Escape, or clicking a modal closes modal text.
 
-## Map Shape
+## Numeric Map Shape
 
 - Default grid size: 25 columns by 15 rows.
-- Canonical row separator: `~`.
-- Legacy row separator: `.`.
-- Air is represented internally as `.`, but encoded as `A`.
-- Rows shorter than 25 cells are padded with air.
-- Rows longer than 25 cells are truncated.
-- Maps shorter than 15 rows are padded with air rows.
+- `cells` is a 15-row by 25-column grid of stable positive tile IDs.
+- `variants` is a parallel grid of variant keys or `null`.
+- `spawn` stores the player's `{ x, y }` coordinates and optional `artTileId`.
+- The registry's `airTileId` identifies empty cells; the player's start is not a tile in the map grid.
 
-## Map Encoding
+## Legacy Map Strings
 
-Map rows are run-length encoded.
+Legacy RLE strings remain readable for old URLs and imported content. They are not the format used by current `levels.json` maps. Legacy rows are run-length encoded with `~` as the canonical separator and `.` accepted as an older separator. Rows are normalized to 25 columns and 15 rows.
 
 - `P25`: 25 platform tiles.
 - `A10`: 10 air tiles.
@@ -65,17 +63,17 @@ Map rows are run-length encoded.
 - `M{snake}1`: one monster tile with variant `snake`.
 - Legacy single-letter variants such as `Ma1` are still accepted by the game decoder.
 
-The editor currently writes brace variants: `T{variant}N`.
+The legacy editor wrote brace variants such as `T{variant}N`; legacy single-letter variants such as `Ma1` are also accepted.
 
 ## Tile Schema Notes
 
-Common tile fields:
+Tile behavior is defined by JSON properties on registry entries, never by numeric IDs. Common properties include:
 
 - `solid`: whether the tile blocks movement.
 - `gravity`: whether gravity applies inside the tile.
 - `moveCost`: default movement cost.
-- `insideMoveCost`: movement cost while inside fluid/no-gravity tiles.
-- `jumpAllowed`: whether jumping is allowed from/through the tile.
+- `moveCostTop`, `moveCostInside`, and `insideMoveCost`: movement costs and the compatibility fallback alias.
+- `jumpAllowed`: compatibility field with no confirmed gameplay effect in the current engine.
 - `hint`: inspect text.
 - `deathMessage`: damage/death/status text used by several interactions.
 - `svg`: base tile sprite.
@@ -86,7 +84,8 @@ Common tile fields:
 - `insideDamage`: damage while inside the tile.
 - `bounce`: bounce height or bounce behavior.
 - `slope`: `left` or `right`.
+- `effects`, `grantStats`, and `tags`: pickup rewards and tile tags.
 - `lock`, `monster`, `sign`, `exit`, `platform`, `pickup`, `decor`: variant buckets.
 
-Movement behavior and costs remain data-driven in `tiles2.json`; level routing belongs in `levels.json`; achievement conditions belong in `achievements.json`.
+Movement behavior and costs are data-driven in `tiles2.json`; level routing belongs in `levels.json`; achievement conditions belong in `achievements.json`.
 

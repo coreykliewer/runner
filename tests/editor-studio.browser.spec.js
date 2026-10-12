@@ -20,6 +20,16 @@ test("Studio loads all documents and tracks edits", async ({ page }) => {
   }
 });
 
+test("Studio recovers an empty numeric catalog from the legacy backup", async ({ page }) => {
+  await page.route("**/tiles2.json*", route => route.fulfill({ status: 200, contentType: "application/json", body: "" }));
+  await page.goto("/editor.html");
+  await expect(page.locator("#statusText")).toContainText("recovered from backup");
+  await expect(page.locator('.nav-document[data-document="numericTiles"] .dirty-dot')).toHaveText("Modified");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await expect(page.locator(".tile-card").filter({ hasText: "Tile W" })).toBeVisible();
+  await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
+});
+
 test("Studio imports supported and malformed JSON with a clear result", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator("#fallbackFileInput").setInputFiles({
@@ -45,6 +55,21 @@ test("Save blocks invalid documents", async ({ page }) => {
   await expect(page.locator("#validationSummary")).toHaveAttribute("data-state", "error");
   await page.locator("#saveDoc").click();
   await expect(page.locator("#statusText")).toContainText("Save blocked");
+});
+
+test("Diagnostics panel can collapse and expand without hiding its summary", async ({ page }) => {
+  await page.goto("/editor.html");
+  const panel = page.locator(".validation-panel");
+  const summary = panel.locator(":scope > summary");
+  await expect(panel).not.toHaveAttribute("open", "");
+  await expect(page.locator("#validationSummary")).toBeVisible();
+  await expect(page.locator("#validationList")).toBeHidden();
+  await summary.click();
+  await expect(panel).toHaveAttribute("open", "");
+  await expect(page.locator("#validationList")).toBeVisible();
+  await expect(page.locator("#validationSummary")).toBeVisible();
+  await summary.click();
+  await expect(panel).not.toHaveAttribute("open", "");
 });
 
 test("fallback Save acknowledges warnings and downloads a unique file", async ({ page }) => {
@@ -113,9 +138,10 @@ test("Save downloads JSON when the selected file handle denies write access", as
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#saveDoc").click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^runner-levels-export-\d+\.json$/);
-  await expect(page.locator("#statusText")).toContainText("write access was unavailable");
-  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  expect(download.suggestedFilename()).toMatch(/^protected-levels-download-\d+\.json$/);
+  await expect(page.locator("#statusText")).toContainText("original was not overwritten");
+  await expect(page.locator("#workspaceMeta")).toContainText("levels.json - unsaved changes");
+  await expect(page.locator("#dirtyStatus")).toHaveText("Unsaved changes");
 });
 
 test("Studio loads a legacy map hash into the selected level", async ({ page }) => {
@@ -179,8 +205,17 @@ test("single numeric tile catalog fills the workspace with SVG artwork cards", a
   }));
   expect(catalog.height).toBeGreaterThan(300);
   expect(catalog.contentHeight).toBeGreaterThan(catalog.height);
-  expect(catalog.cardHeight).toBeLessThan(100);
+  expect(catalog.cardHeight).toBeLessThan(120);
   expect(await page.locator(".tile-card").count()).toBeGreaterThan(20);
+  const desktopOverflow = await page.locator(".tile-card").evaluateAll(cards => cards.some(card => {
+    const cardBounds = card.getBoundingClientRect();
+    return [...card.querySelectorAll(":scope > span:not(.tile-card-art), small")].some(text => {
+      const bounds = text.getBoundingClientRect();
+      return text.scrollWidth > text.clientWidth + 1 || text.scrollHeight > text.clientHeight + 1 ||
+        bounds.right > cardBounds.right + 1 || bounds.bottom > cardBounds.bottom + 1;
+    });
+  }));
+  expect(desktopOverflow).toBe(false);
   const snakeCard = page.locator(".tile-card").filter({ hasText: "Snake" });
   await expect(snakeCard).toBeVisible();
   await expect(snakeCard.locator("img")).toHaveAttribute("src", /^data:image\/svg\+xml/);
@@ -190,6 +225,8 @@ test("single numeric tile catalog fills the workspace with SVG artwork cards", a
   await expect(page.locator("#tilePreviewImage")).toBeVisible();
   await page.getByLabel("Grid", { exact: true }).check();
   await expect(page.locator("#tilePreviewCanvas")).toHaveClass(/has-grid/);
+  const variants = page.locator(".tile-builder-section").filter({ has: page.getByText("Variants", { exact: true }) });
+  await variants.locator(":scope > summary").click();
   const variant = page.locator('.tile-card.variant-entry[data-entry-key^="numeric-variant:11:"]').first();
   await expect(variant).toBeVisible();
   await variant.click();
@@ -201,6 +238,15 @@ test("single numeric tile catalog fills the workspace with SVG artwork cards", a
     contentHeight: element.scrollHeight
   }));
   expect(mobileCatalog.contentHeight).toBeGreaterThan(mobileCatalog.height);
+  const mobileOverflow = await page.locator(".tile-card").evaluateAll(cards => cards.some(card => {
+    const cardBounds = card.getBoundingClientRect();
+    return [...card.querySelectorAll(":scope > span:not(.tile-card-art), small")].some(text => {
+      const bounds = text.getBoundingClientRect();
+      return text.scrollWidth > text.clientWidth + 1 || text.scrollHeight > text.clientHeight + 1 ||
+        bounds.right > cardBounds.right + 1 || bounds.bottom > cardBounds.bottom + 1;
+    });
+  }));
+  expect(mobileOverflow).toBe(false);
 });
 
 test("new numeric tiles can be added from the single catalog", async ({ page }) => {
@@ -209,11 +255,17 @@ test("new numeric tiles can be added from the single catalog", async ({ page }) 
   await expect(page.locator("#addEntry")).toHaveText("+ Add numeric tile");
   await page.locator("#addEntry").click();
   await expect(page.locator("#identifierDialog")).toBeVisible();
-  await page.getByLabel("Tile name").fill("Mud");
+  await page.locator("#identifierDialog").getByLabel("Tile name").fill("Mud");
   await page.locator('#identifierForm button[type="submit"]').click();
   await expect(page.locator("#identifierDialog")).not.toBeVisible();
   await expect(page.locator('.tile-card[data-entry-key="numeric:20"]')).toBeVisible();
   await expect(page.locator("#inspectorTitle")).toHaveText("Tile 20 / Mud");
+  await expect(page.getByLabel("Editor category", { exact: true })).toHaveValue("Environmental");
+  await page.getByLabel("Filter tiles by editor category").selectOption("Environmental");
+  await expect(page.locator('.tile-card[data-entry-key="numeric:20"]')).toBeVisible();
+  await page.getByLabel("Filter tiles by editor category").selectOption("Interactive");
+  await expect(page.locator('.tile-card[data-entry-key="numeric:20"]')).toHaveCount(0);
+  await page.getByLabel("Filter tiles by editor category").selectOption("");
   await expect(page.locator("#dirtyStatus")).toHaveText("Unsaved changes");
 
   await addSupportedProperty(page, "moveCost");
@@ -225,15 +277,19 @@ test("new numeric tiles can be added from the single catalog", async ({ page }) 
 test("numeric tile properties use typed controls, preserve custom JSON, and restore fallbacks on removal", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator('.nav-document[data-document="numericTiles"]').click();
-  await expect(page.locator(".tile-property-category h3").first()).toHaveText("Collision and Physics");
+  await expect(page.locator(".tile-builder-section > summary")).toHaveText([
+    "Identity", "Appearance", "Capabilities", "Variants", "Advanced"
+  ]);
 
   await addSupportedProperty(page, "fallDamageCancel");
   const fallCancel = page.getByRole("checkbox", { name: "Fall Damage Cancel" });
   await expect(fallCancel).not.toBeChecked();
   await page.getByRole("button", { name: "Remove Fall Damage Cancel" }).click();
-  await expect(page.locator('[data-property="fallDamageCancel"]')).toHaveCount(0);
+  await expect(page.locator('[data-property="fallDamageCancel"] .tile-property-status')).toHaveText("Runtime default (not stored)");
+  await expect(page.getByRole("button", { name: "Add Fall Damage Cancel" })).toBeVisible();
 
   await page.getByRole("checkbox", { name: "Gravity" }).uncheck();
+  await expect(page.locator('[data-property="fallDamageCancel"] .tile-property-effective-default')).toHaveText("Effective default: true");
   await addSupportedProperty(page, "fallDamageCancel");
   await expect(page.getByRole("checkbox", { name: "Fall Damage Cancel" })).toBeChecked();
 
@@ -282,10 +338,92 @@ test("numeric tile properties use typed controls, preserve custom JSON, and rest
   await expect(page.locator(`#${tileSuggestions} option[value="P"]`)).toHaveCount(1);
 });
 
+test("Tile Builder categories are editor-only and capability copies stay independent", async ({ page }) => {
+  let persistedRegistry = null;
+  await page.route("**/tiles2.json*", async route => {
+    if (persistedRegistry) return route.fulfill({ json: persistedRegistry });
+    return route.continue();
+  });
+  await page.addInitScript(() => {
+    window.__savedTileJson = null;
+    Object.defineProperty(window, "showSaveFilePicker", {
+      configurable: true,
+      value: async () => ({
+        name: "tiles2.json",
+        createWritable: async () => ({
+          write: async content => { window.__savedTileJson = content; },
+          close: async () => {}
+        })
+      })
+    });
+  });
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const sections = await page.locator(".tile-builder-section > summary").allTextContents();
+  expect(sections).toEqual(["Identity", "Appearance", "Capabilities", "Variants", "Advanced"]);
+  expect(await page.locator(".tile-builder-section").evaluateAll(items => items.every(item => !item.open))).toBe(true);
+
+  await page.locator('.tile-card[data-entry-key="numeric:16"]').click();
+  const identity = page.locator(".tile-builder-section").filter({ has: page.getByText("Identity", { exact: true }) });
+  await identity.locator(":scope > summary").click();
+  const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  await capabilities.locator(":scope > summary").click();
+  const collision = page.locator(".tile-capability-group").filter({ has: page.getByRole("heading", { name: "Collision" }) });
+  await expect(collision.locator("select")).toHaveCount(0);
+  await expect(collision.locator('[data-property="solid"]')).toBeVisible();
+  await expect(collision.locator('[data-property="fallDamageCancel"]')).toBeVisible();
+  const waterMoveCost = page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]');
+  await expect(waterMoveCost).toHaveValue("1");
+  await waterMoveCost.fill("4");
+  await waterMoveCost.dispatchEvent("change");
+  await page.getByLabel("Editor category", { exact: true }).selectOption("Item");
+  const movement = page.locator(".tile-capability-group").filter({ has: page.getByRole("heading", { name: "Movement" }) });
+  await movement.getByLabel("Copy Movement from tile").selectOption("1");
+  await movement.getByRole("button", { name: "Copy settings" }).click();
+  await expect(page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]')).toHaveValue("1");
+  await expect(page.getByRole("checkbox", { name: "Gravity" })).not.toBeChecked();
+  await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
+
+  const copiedMoveCost = page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]');
+  await copiedMoveCost.fill("5");
+  await copiedMoveCost.dispatchEvent("change");
+  const advanced = page.locator(".tile-builder-section").filter({ has: page.getByText("Advanced", { exact: true }) });
+  await advanced.locator(":scope > summary").click();
+  await advanced.locator(".tile-custom-properties > summary").click();
+  await advanced.getByRole("button", { name: "Add key and value" }).click();
+  await page.getByLabel("Property name").fill("futureRule");
+  await page.getByLabel("Property type").selectOption("string");
+  await page.getByRole("button", { name: "Create property" }).click();
+  await page.getByLabel("Future Rule").fill("keep this field");
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  const savedRegistry = await page.evaluate(() => JSON.parse(window.__savedTileJson));
+  persistedRegistry = savedRegistry;
+  const air = savedRegistry.tiles.find(tile => tile.id === 1);
+  const water = savedRegistry.tiles.find(tile => tile.id === 16);
+  expect(air.definition.moveCost).toBe(1);
+  expect(water.definition.moveCost).toBe(5);
+  expect(water.definition.gravity).toBe(false);
+  expect(water.definition.tags).toEqual(["water"]);
+  expect(water.definition.futureRule).toBe("keep this field");
+  expect(typeof water.definition.svg).toBe("string");
+  expect(water.category).toBe("Item");
+  expect(water.definition.category).toBeUndefined();
+  await page.reload();
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await page.locator('.tile-card[data-entry-key="numeric:16"]').click();
+  await expect(page.getByLabel("Editor category", { exact: true })).toHaveValue("Item");
+  await expect(page.locator('[data-property="moveCost"] input[aria-label="Move Cost"]')).toHaveValue("5");
+  await expect(page.getByLabel("Future Rule", { exact: true })).toHaveValue("keep this field");
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+});
+
 test("SVG upload, validation, preview refresh, and discard keep source separate from safe rendering", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator('.nav-document[data-document="numericTiles"]').click();
   await addSupportedProperty(page, "svg");
+  const appearance = page.locator(".tile-builder-section").filter({ has: page.getByText("Appearance", { exact: true }) });
+  await appearance.locator(":scope > summary").click();
   await expect(page.locator("#tilePreviewError")).toContainText("No SVG artwork");
   await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
 
@@ -306,9 +444,11 @@ test("SVG upload, validation, preview refresh, and discard keep source separate 
 
   await page.locator("#newNumericDoc").click();
   await page.locator("#createNumericMap").click();
-  await expect(page.getByRole("button", { name: "Select Tile ., ID 1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select Air, ID 1" })).toBeVisible();
   await page.locator('.nav-document[data-document="numericTiles"]').click();
   await page.locator('.tile-card[data-entry-key="numeric:1"]').click();
+  const airAppearance = page.locator(".tile-builder-section").filter({ has: page.getByText("Appearance", { exact: true }) });
+  await airAppearance.locator(":scope > summary").click();
 
   await page.getByLabel("Svg", { exact: true }).fill("<svg><g></svg>");
   await expect(page.locator("#tilePreviewError")).toContainText("malformed");
@@ -330,10 +470,12 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   await expect(page.getByLabel("Air tile")).toHaveValue("1");
 
   await page.locator("#addEntry").click();
-  await page.getByLabel("Tile name").fill("Amber crawler");
+  await page.locator("#identifierDialog").getByLabel("Tile name").fill("Amber crawler");
   await page.locator('#identifierForm button[type="submit"]').click();
   await expect(page.locator("#inspectorTitle")).toHaveText("Tile 20 / Amber crawler");
 
+  const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  await capabilities.locator(":scope > summary").click();
   await page.getByText("Add Property", { exact: true }).click();
   await page.getByLabel("Search supported properties").fill("solid");
   await page.getByRole("button", { name: /^Solid boolean/ }).click();
@@ -342,8 +484,11 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
 
   await page.locator("#duplicateEntry").click();
   await expect(page.locator("#inspectorTitle")).toHaveText("Tile 21 / Amber crawler copy");
+  await capabilities.locator(":scope > summary").click();
   await expect(page.getByRole("checkbox", { name: "Solid" })).toBeChecked();
-  await page.getByLabel("Name", { exact: true }).fill("Copper crawler");
+  const identity = page.locator(".tile-builder-section").filter({ has: page.getByText("Identity", { exact: true }) });
+  await identity.locator(":scope > summary").click();
+  await page.locator("#inspectorFields").getByLabel("Tile name", { exact: true }).fill("Copper crawler");
   await expect(page.locator('.tile-card[data-entry-key="numeric:21"]')).toContainText("Copper crawler");
 
   await page.locator("#newNumericDoc").click();
@@ -368,7 +513,7 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   await page.locator("#cancelDependencyDelete").click();
 
   await page.locator('.nav-document[data-document="numericMap"]').click();
-  await page.getByRole("button", { name: "Select Tile ., ID 1" }).click();
+  await page.getByRole("button", { name: "Select Air, ID 1" }).click();
   await page.getByLabel("Map cell 5, 5").click();
   await page.locator('.nav-document[data-document="numericTiles"]').click();
   await page.locator('.tile-card[data-entry-key="numeric:21"]').click();
@@ -378,7 +523,7 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   await expect(page.locator('.tile-card[data-entry-key="numeric:21"]')).toHaveCount(0);
 
   await page.locator("#addEntry").click();
-  await page.getByLabel("Tile name").fill("Next tile");
+  await page.locator("#identifierDialog").getByLabel("Tile name").fill("Next tile");
   await page.locator('#identifierForm button[type="submit"]').click();
   await expect(page.locator("#inspectorTitle")).toHaveText("Tile 22 / Next tile");
 });
@@ -394,6 +539,30 @@ test("Studio exposes only one active numeric tile catalog", async ({ page }) => 
   await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
 });
 
+test("Registry Roles is a separate collapsible area above Properties", async ({ page }) => {
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const roles = page.locator("#registryRolesPanel");
+  const summary = roles.locator(":scope > summary");
+  await expect(roles).toBeVisible();
+  await expect(roles).not.toHaveAttribute("open", "");
+  await expect(page.getByLabel("Air tile")).toBeHidden();
+  const positions = await page.evaluate(() => ({
+    rolesBottom: document.querySelector("#registryRolesPanel").getBoundingClientRect().bottom,
+    propertiesTop: document.querySelector(".inspector-heading").getBoundingClientRect().top
+  }));
+  expect(positions.rolesBottom).toBeLessThanOrEqual(positions.propertiesTop);
+  await summary.click();
+  await expect(roles).toHaveAttribute("open", "");
+  await expect(page.getByLabel("Air tile")).toHaveValue("1");
+  await summary.click();
+  await expect(roles).not.toHaveAttribute("open", "");
+  await expect(page.getByLabel("Air tile")).toBeHidden();
+  await expect(page.locator(".inspector-heading")).toBeVisible();
+  await summary.click();
+  await expect(page.getByLabel("Air tile")).toHaveValue("1");
+});
+
 test("selected numeric level can open as a standalone map with spawn data", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator("#newNumericDoc").click();
@@ -405,6 +574,8 @@ test("selected numeric level can open as a standalone map with spawn data", asyn
 });
 
 async function addSupportedProperty(page, name) {
+  const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  if (!await capabilities.evaluate(section => section.open)) await capabilities.locator(":scope > summary").click();
   await page.locator(".tile-add-property summary").click();
   await page.getByLabel("Search supported properties").fill(name);
   const label = name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, char => char.toUpperCase());

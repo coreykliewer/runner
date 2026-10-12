@@ -137,6 +137,15 @@ test("numeric registry and versioned numeric URL map preserve current movement b
   await expect(page.locator("#log")).toContainText("Right");
 });
 
+test("gameplay falls back to the legacy tile backup when tiles2.json is empty", async ({ page }) => {
+  await page.route("**/tiles2.json*", route => route.fulfill({ status: 200, contentType: "application/json", body: "" }));
+  await page.addInitScript(() => { Math.random = () => 0; });
+  await page.goto("/");
+  await expect(page.locator("#log")).not.toContainText("BOOT ERROR");
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  await expect(page.locator("#die1")).not.toHaveText("0");
+});
+
 test("numeric JSON-grid maps in levels.json load through the legacy gameplay adapter", async ({ page }) => {
   const legacyTiles = JSON.parse(await readFile("tiles2.legacy.json", "utf8"));
   const normalized = normalizeTileDefinitions(legacyTiles);

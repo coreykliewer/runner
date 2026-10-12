@@ -50,6 +50,13 @@
       <div id="tileWorkspace" class="tile-workspace">
         <label id="tileSearch" class="tile-search" hidden>
           <input id="tileSearchInput" type="search" placeholder="Search tiles by name or ID" aria-label="Search tiles by name or ID" />
+          <select id="tileCategoryFilter" aria-label="Filter tiles by editor category">
+            <option value="">All categories</option>
+            <option value="Environmental">Environmental</option>
+            <option value="Item">Item</option>
+            <option value="Interactive">Interactive</option>
+            <option value="uncategorized">Uncategorized</option>
+          </select>
         </label>
         <div id="entryList" class="entry-list" aria-label="Document entries"></div>
         <section id="tilePreview" class="tile-preview" aria-label="Tile artwork preview" hidden>
@@ -110,6 +117,13 @@
     </section>
 
     <aside class="inspector-panel" aria-label="Property inspector">
+      <details id="registryRolesPanel" class="registry-roles-panel" aria-label="Registry roles" hidden>
+        <summary class="registry-roles-heading">
+          <span>Registry Roles</span>
+          <span class="validation-toggle-label"><span class="when-open">Collapse</span><span class="when-closed">Expand</span></span>
+        </summary>
+        <div id="registryRoleFields" class="registry-role-fields"></div>
+      </details>
       <div class="inspector-heading">
         <div class="panel-kicker">Properties</div>
         <h2 id="inspectorTitle">Select an entry</h2>
@@ -117,16 +131,17 @@
       <div id="inspectorFields" class="inspector-fields"></div>
     </aside>
 
-    <section class="validation-panel" aria-label="Validation results">
-      <div class="validation-heading">
+    <details class="validation-panel" aria-label="Validation results">
+      <summary class="validation-heading" aria-controls="validationList">
         <div>
           <div class="panel-kicker">Diagnostics</div>
           <h2>Validation</h2>
         </div>
         <strong id="validationSummary" data-state="valid">Checking</strong>
-      </div>
+        <span class="validation-toggle-label"><span class="when-open">Collapse</span><span class="when-closed">Expand</span></span>
+      </summary>
       <div id="validationList" class="validation-list"></div>
-    </section>
+    </details>
   </main>
 
   <dialog id="identifierDialog" class="identifier-dialog" aria-labelledby="identifierTitle">

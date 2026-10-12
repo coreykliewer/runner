@@ -1,4 +1,4 @@
-import { assertNumericTileRegistry, isNumericTileRegistry } from "../numericTileRegistry.js";
+import { assertNumericTileRegistry, isNumericTileRegistry, migrateLegacyTileDefinitions } from "../numericTileRegistry.js";
 import { decodeNumericMap, isNumericMapDocument } from "../numericMapCodec.js";
 
 export const CONTENT_DOCUMENTS = [
@@ -31,11 +31,23 @@ export class ContentDocumentStore {
     }
 
     const loaded = await Promise.all(CONTENT_DOCUMENTS.map(async definition => {
-      const response = await this.fetchImpl(definition.url, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Unable to load ${definition.fileName}: HTTP ${response.status}`);
-      const value = await response.json();
-      assertDocumentShape(definition.id, value);
-      return [definition.id, makeRecord(definition, value, definition.fileName)];
+      try {
+        const response = await this.fetchImpl(definition.url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Unable to load ${definition.fileName}: HTTP ${response.status}`);
+        const value = await response.json();
+        assertDocumentShape(definition.id, value);
+        return [definition.id, makeRecord(definition, value, definition.fileName)];
+      } catch (error) {
+        if (definition.id !== "numericTiles") throw error;
+        const backup = await this.fetchImpl("tiles2.legacy.json", { cache: "no-store" });
+        if (!backup.ok) throw error;
+        const legacyDefinitions = await backup.json();
+        const registry = migrateLegacyTileDefinitions(legacyDefinitions);
+        const recovered = makeRecord(definition, registry, "Recovered from tiles2.legacy.json");
+        recovered.savedValue = null;
+        recovered.dirty = true;
+        return [definition.id, recovered];
+      }
     }));
 
     const optional = await Promise.all(OPTIONAL_CONTENT_DOCUMENTS
@@ -117,6 +129,13 @@ export class ContentDocumentStore {
       sourceName: sourceName || current.sourceName,
       fileHandle: fileHandle === undefined ? current.fileHandle : fileHandle
     };
+    this.documents.set(id, next);
+    return next;
+  }
+
+  clearFileHandle(id) {
+    const current = this.get(id);
+    const next = { ...current, fileHandle: null };
     this.documents.set(id, next);
     return next;
   }

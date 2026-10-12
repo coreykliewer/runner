@@ -1,10 +1,12 @@
 # Runner v2 Upgrade Roadmap
 
+> This is a planning-history document. For the current shipped state, see [Current Game State](current-game-state.md) and [Numeric Tile Migration](numeric-tile-migration.md).
+
 ## Current Status
 
-- Branch: `v2-upgrade`
-- Baseline commit: `626ab1a65d494d9129823123de9d735954646134`
-- Current published app and local checkout match content-wise.
+- Active branch: `main`
+- Current catalog: the numeric tile registry in `tiles2.json`.
+- Current levels: numeric JSON-grid maps in `levels.json`; legacy source copies are retained for recovery.
 - Current runtime is a static browser app with no build step.
 
 ## Version Notes
@@ -19,12 +21,13 @@ Runner is a tile-based canvas game using a 25 x 15 map. The player rolls two dic
 
 Important current features:
 
-- Canvas renderer with tile sprites loaded from `tiles2.json`.
-- URL hash map loading with `#map=...`.
+- Canvas renderer with numeric tile sprites and property-driven gameplay.
+- URL hash loading supports legacy `#map=...` and numeric `#mapv=1&map=...` maps.
 - URL hash carry-over stats with `#st=...` and portable checkpoint links.
 - Dice rolling and selected-die spending.
 - Movement, jumping, diagonal jumping, gravity, falling, water/fluid behavior, slopes, bounce, hazards, exits, pickups, locks, signs, monsters, fog, and modal text.
-- Separate editor page for painting maps, choosing variants, generating map strings, and opening maps in the game.
+- Runner Studio edits the single numeric catalog, paints numeric level maps, edits typed tile properties and artwork, and opens maps in the game.
+- Studio saves through a selected file handle when permitted and falls back to downloading JSON when the browser denies write access.
 - Exit routing from `levels.json`, with validation for missing destination levels and a legacy variant-ID fallback.
 - Level-boundary local checkpoints; midlevel world mutations are intentionally not persisted.
 - Achievement comparisons reject missing explicit paths while preserving bare named-counter defaults.

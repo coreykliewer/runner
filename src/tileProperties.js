@@ -12,6 +12,17 @@ export const TILE_PROPERTY_CATEGORIES = [
   { id: "advanced", label: "Advanced and Compatibility" }
 ];
 
+export const TILE_EDITOR_CATEGORIES = ["Environmental", "Item", "Interactive"];
+
+export const TILE_CAPABILITY_GROUPS = [
+  { id: "collision", label: "Collision", properties: ["solid", "fallDamageCancel"] },
+  { id: "movement", label: "Movement", properties: ["moveCost", "moveCostTop", "moveCostInside", "insideMoveCost"] },
+  { id: "physics", label: "Physics", properties: ["gravity", "bounce", "slope", "fallDamageThreshold", "fallDamageMultiplier", "jumpAllowed", "sinkSpeed", "riseSpeed", "autoPush"] },
+  { id: "hazards", label: "Damage and Hazards", properties: ["insideDamage", "topDamage"] },
+  { id: "rewards", label: "Items and Rewards", properties: ["pickupType", "effects", "grantStats", "tags"] },
+  { id: "messaging", label: "Text and Messaging", properties: ["hint", "signMessage", "signHtml", "deathMessage", "pickupMessage", "logKind", "logHtml"] }
+];
+
 const property = (category, type, initialValue, runtimeDefault, status, description, options = {}) => ({
   category,
   type,

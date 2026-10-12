@@ -14,6 +14,7 @@ import { ContentDocumentStore, ALL_CONTENT_DOCUMENTS, CONTENT_DOCUMENTS, createE
 import { renderJsonEditor } from "./fieldEditor.js";
 import { renderTilePropertyEditor } from "./tilePropertyEditor.js";
 import { sanitizeSvgArtwork } from "./svgArtwork.js";
+import { TILE_EDITOR_CATEGORIES } from "../tileProperties.js";
 
 const store = new ContentDocumentStore();
 const elements = {
@@ -30,6 +31,8 @@ const elements = {
   tilePreviewCanvas: document.getElementById("tilePreviewCanvas"),
   tilePreviewImage: document.getElementById("tilePreviewImage"),
   tilePreviewError: document.getElementById("tilePreviewError"),
+  registryRolesPanel: document.getElementById("registryRolesPanel"),
+  registryRoleFields: document.getElementById("registryRoleFields"),
   inspectorTitle: document.getElementById("inspectorTitle"),
   inspectorFields: document.getElementById("inspectorFields"),
   validationList: document.getElementById("validationList"),
@@ -76,7 +79,9 @@ async function initialize() {
     renderInspector();
     runValidation();
     document.getElementById("newNumericDoc").disabled = false;
-    updateStatus("Four content documents loaded");
+    updateStatus(store.get("numericTiles").sourceName === "Recovered from tiles2.legacy.json"
+      ? "Tile catalog recovered from backup; Save to repair tiles2.json"
+      : "Four content documents loaded");
   } catch (error) {
     updateStatus(error.message, true);
     elements.validationSummary.textContent = "Content load failed";
@@ -104,6 +109,7 @@ function bindToolbar() {
     elements.variantBox.value = brushVariant;
   });
   elements.tileSearchInput.addEventListener("input", renderWorkspace);
+  document.getElementById("tileCategoryFilter").addEventListener("change", renderWorkspace);
   document.getElementById("tilePreviewBackground").addEventListener("input", event => {
     elements.tilePreviewCanvas.style.backgroundColor = event.target.value;
   });
@@ -252,13 +258,16 @@ function renderWorkspace() {
     : definition.label;
 
   const searchText = elements.tileSearchInput.value.trim().toLowerCase();
+  const categoryFilter = document.getElementById("tileCategoryFilter").value;
   for (const entry of getEntries(record)) {
-    if (isTileCatalog && searchText && !`${entry.title} ${entry.subtitle} ${entry.key}`.toLowerCase().includes(searchText)) continue;
+    if (isTileCatalog && categoryFilter && (categoryFilter === "uncategorized" ? Boolean(entry.category) : entry.category !== categoryFilter)) continue;
+    if (isTileCatalog && searchText && !`${entry.title} ${entry.subtitle} ${entry.key} ${entry.category || ""}`.toLowerCase().includes(searchText)) continue;
     const button = document.createElement("button");
     button.type = "button";
     const isSelected = selection.kind === "entry" && selection.key === entry.key &&
       (selection.variant?.bucket || "") === (entry.selection?.variant?.bucket || "") &&
-      (selection.variant?.key || "") === (entry.selection?.variant?.key || "");
+      (selection.variant?.key || "") === (entry.selection?.variant?.key || "") &&
+      Boolean(selection.variant?.nested) === Boolean(entry.selection?.variant?.nested);
     button.className = `entry-row${isTileCatalog ? " tile-card" : ""}${entry.selection?.variant ? " variant-entry" : ""}${isSelected ? " is-selected" : ""}`;
     button.dataset.entryKey = String(entry.catalogId ?? entry.key);
     if (isTileCatalog) {
@@ -309,22 +318,27 @@ function getEntries(record) {
         key: tile.id,
         catalogId: `numeric:${tile.id}`,
         title: tile.name,
-        subtitle: `ID ${tile.id} · Base tile`,
+        subtitle: `ID ${tile.id} · ${tile.category || "Uncategorized"} · Base tile`,
+        category: tile.category || "",
         selection: { kind: "entry", key: tile.id },
         artKey: String(tile.id)
       });
       for (const bucket of VARIANT_BUCKETS) {
-        const direct = tile.definition?.[bucket];
-        const nested = tile.definition?.variants?.[bucket];
-        for (const [variantKey, variantDefinition] of Object.entries(direct || nested || {})) {
-          entries.push({
-            key: tile.id,
-            catalogId: `numeric-variant:${tile.id}:${bucket}:${variantKey}`,
-            title: variantDefinition?.name || variantKey,
-            subtitle: `ID ${tile.id} / ${bucket} / ${variantKey}`,
-            selection: { kind: "entry", key: tile.id, variant: { bucket, key: variantKey, nested: !direct } },
-            artKey: `${tile.id}:${bucket}:${variantKey}`
-          });
+        for (const [nested, group] of [
+          [false, tile.definition?.[bucket]],
+          [true, tile.definition?.variants?.[bucket]]
+        ]) {
+          for (const [variantKey, variantDefinition] of Object.entries(group || {})) {
+            entries.push({
+              key: tile.id,
+              catalogId: `numeric-variant:${tile.id}:${bucket}:${variantKey}${nested ? ":nested" : ""}`,
+              title: variantDefinition?.name || variantKey,
+              subtitle: `ID ${tile.id} / ${bucket} / ${variantKey}${nested ? " / nested" : ""}`,
+              category: tile.category || "",
+              selection: { kind: "entry", key: tile.id, variant: { bucket, key: variantKey, nested } },
+              artKey: `${tile.id}:${bucket}:${variantKey}`
+            });
+          }
         }
       }
     }
@@ -339,6 +353,7 @@ function getEntries(record) {
         catalogId: `tile:${code}`,
         title: code,
         subtitle: definition?.pickupType || (definition?.exit ? "Exit" : definition?.solid ? "Solid" : definition?.gravity === false ? "Fluid" : "Tile"),
+        category: definition?.category || "",
         selection: { kind: "entry", key: code },
         artKey: code
       });
@@ -349,6 +364,7 @@ function getEntries(record) {
             catalogId: `variant:${code}:${bucket}:${variantKey}`,
             title: variantDefinition.name || variantKey,
             subtitle: `${code} / ${bucket} / ${variantKey}`,
+            category: definition?.category || "",
             selection: { kind: "entry", key: code, variant: { bucket, key: variantKey } },
             artKey: `${code}:${bucket}:${variantKey}`
           });
@@ -412,9 +428,14 @@ function selectedValue() {
   return record.value[record.collection]?.[selection.key];
 }
 
-function renderInspector() {
+function renderInspector({ preserveTileBuilderState = false } = {}) {
+  const tileBuilderState = preserveTileBuilderState
+    ? [...elements.inspectorFields.querySelectorAll(".tile-builder-section, .tile-custom-properties")].map(section => section.open)
+    : null;
   const record = store.get(activeDocument);
   const value = selectedValue();
+  elements.registryRolesPanel.hidden = activeDocument !== "numericTiles";
+  if (elements.registryRolesPanel.hidden) elements.registryRoleFields.replaceChildren();
   const selectionName = selection.kind === "settings"
     ? "Document settings"
     : activeDocument === "tiles"
@@ -437,6 +458,11 @@ function renderInspector() {
   }
   if ((activeDocument === "tiles" || activeDocument === "numericTiles") && selection.kind === "entry") {
     renderVisualTileInspector(value);
+    if (tileBuilderState) {
+      elements.inspectorFields.querySelectorAll(".tile-builder-section, .tile-custom-properties").forEach((section, index) => {
+        if (index < tileBuilderState.length) section.open = tileBuilderState[index];
+      });
+    }
     if (activeDocument === "numericTiles") renderNumericRegistryRoleControls(record.value);
     return;
   }
@@ -482,44 +508,81 @@ function renderInspector() {
 }
 
 function renderVisualTileInspector(value) {
-  if (activeDocument === "numericTiles" && !selection.variant) {
-    const nameField = document.createElement("label");
-    nameField.className = "field-row";
-    const nameLabel = document.createElement("span");
-    nameLabel.className = "field-label";
-    nameLabel.textContent = "Tile name";
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.value = value.name || "";
-    nameInput.setAttribute("aria-label", "Name");
-    nameInput.addEventListener("input", () => {
-      store.update("numericTiles", registry => {
-        const tile = registry.tiles.find(item => item.id === selection.key);
-        if (tile) tile.name = nameInput.value;
-      });
-      elements.inspectorTitle.textContent = `Tile ${selection.key} / ${nameInput.value || "Unnamed"}`;
-      elements.tilePreviewTitle.textContent = nameInput.value || "Unnamed";
-      renderNavigation();
-      renderWorkspaceMeta();
-      renderWorkspace();
-      runValidation();
-    });
-    nameField.append(nameLabel, nameInput);
-    elements.inspectorFields.append(nameField);
-  }
-
+  const registry = activeDocument === "numericTiles" ? store.get("numericTiles").value : null;
+  const tile = registry?.tiles.find(item => item.id === selection.key);
   const definition = selection.variant
     ? value
     : activeDocument === "numericTiles" ? value.definition || {} : value;
-  if (selection.variant) renderVariantInheritance(definition);
+  const variantEntries = activeDocument === "numericTiles"
+    ? getEntries(store.get("numericTiles")).filter(entry => entry.key === selection.key && entry.selection?.variant)
+    : [];
   const propertyEditor = document.createElement("div");
   propertyEditor.className = "tile-property-editor";
   renderTilePropertyEditor(propertyEditor, {
     value: definition,
+    tileId: activeDocument === "numericTiles" ? selection.key : null,
+    name: selection.variant ? tile?.name : tile?.name || definition?.name || String(selection.key),
+    category: selection.variant ? tile?.category : tile?.category || definition?.category || "",
+    baseDefinition: getBaseTileDefinition(),
+    isVariant: Boolean(selection.variant),
+    variant: selection.variant || null,
+    variants: variantEntries.map(entry => ({
+      bucket: entry.selection.variant.bucket,
+      key: entry.selection.variant.key,
+      nested: entry.selection.variant.nested,
+      hasArtwork: typeof getVariantDefinition(entry.selection)?.svg === "string"
+    })),
+    copySources: (registry?.tiles || []).map(item => ({ id: item.id, name: item.name, definition: item.definition })),
     suggestions: collectSuggestions(),
+    onNameChange: nextName => {
+      if (activeDocument === "numericTiles" && tile) {
+        store.update("numericTiles", next => {
+          const current = next.tiles.find(item => item.id === selection.key);
+          if (current) current.name = nextName;
+        });
+        elements.inspectorTitle.textContent = `Tile ${selection.key} / ${nextName || "Unnamed"}`;
+        elements.tilePreviewTitle.textContent = nextName || "Unnamed";
+        renderNavigation();
+        renderWorkspaceMeta();
+        renderWorkspace();
+        runValidation();
+      } else {
+        updateSelectedTileDefinition({ ...getSelectedTileDefinition(), name: nextName });
+        renderWorkspace();
+        runValidation();
+      }
+    },
+    onCategoryChange: nextCategory => {
+      if (activeDocument === "numericTiles" && tile) {
+        store.update("numericTiles", next => {
+          const current = next.tiles.find(item => item.id === selection.key);
+          if (!current) return;
+          if (nextCategory) current.category = nextCategory;
+          else delete current.category;
+        });
+        renderNavigation();
+        renderWorkspaceMeta();
+        runValidation();
+      } else {
+        const next = { ...getSelectedTileDefinition() };
+        if (nextCategory) next.category = nextCategory;
+        else delete next.category;
+        updateSelectedTileDefinition(next);
+        renderNavigation();
+        renderWorkspaceMeta();
+        runValidation();
+      }
+    },
+    onSelectVariant: nextVariant => {
+      const entry = variantEntries.find(item =>
+        item.selection.variant.bucket === nextVariant.bucket &&
+        item.selection.variant.key === nextVariant.key &&
+        Boolean(item.selection.variant.nested) === Boolean(nextVariant.nested));
+      if (entry) selectEntry(entry.selection);
+    },
     onChange: (nextDefinition, options = {}) => {
       updateSelectedTileDefinition(nextDefinition);
-      if (options.refresh) renderInspector();
+      if (options.refresh) renderInspector({ preserveTileBuilderState: true });
       renderNavigation();
       renderWorkspaceMeta();
       if (Object.hasOwn(nextDefinition, "svg") || Object.hasOwn(definition, "svg")) loadTileImages();
@@ -528,20 +591,15 @@ function renderVisualTileInspector(value) {
     }
   });
   elements.inspectorFields.append(propertyEditor);
+}
+
+function getVariantDefinition(variantSelection) {
   if (activeDocument === "numericTiles") {
-    const identifier = document.createElement("label");
-    identifier.className = "field-row numeric-tile-id";
-    const caption = document.createElement("span");
-    caption.className = "field-label";
-    caption.textContent = "Numeric tile ID (stable)";
-    const idInput = document.createElement("input");
-    idInput.type = "number";
-    idInput.value = String(selection.key);
-    idInput.readOnly = true;
-    idInput.setAttribute("aria-label", "Numeric tile ID, read only");
-    identifier.append(caption, idInput);
-    elements.inspectorFields.prepend(identifier);
+    const tile = store.get("numericTiles").value.tiles.find(item => item.id === variantSelection.key);
+    const groups = variantSelection.variant.nested ? tile?.definition?.variants : tile?.definition;
+    return groups?.[variantSelection.variant.bucket]?.[variantSelection.variant.key];
   }
+  return store.get("tiles").value[variantSelection.key]?.[variantSelection.variant.bucket]?.[variantSelection.variant.key];
 }
 
 function renderVariantInheritance(variantDefinition) {
@@ -609,7 +667,8 @@ function renderTilePreview() {
   const entry = getEntries(store.get(activeDocument)).find(item =>
     item.selection?.key === selection.key &&
     (item.selection?.variant?.bucket || "") === (selection.variant?.bucket || "") &&
-    (item.selection?.variant?.key || "") === (selection.variant?.key || ""));
+    (item.selection?.variant?.key || "") === (selection.variant?.key || "") &&
+    Boolean(item.selection?.variant?.nested) === Boolean(selection.variant?.nested));
   if (!entry) return;
   const tile = activeDocument === "numericTiles"
     ? store.get("numericTiles").value.tiles.find(item => item.id === selection.key)
@@ -659,6 +718,7 @@ function cloneJson(value) {
 }
 
 function renderNumericRegistryRoleControls(registry) {
+  elements.registryRoleFields.replaceChildren();
   const section = document.createElement("section");
   section.className = "numeric-role-controls field-object";
   const heading = document.createElement("div");
@@ -700,7 +760,7 @@ function renderNumericRegistryRoleControls(registry) {
     label.append(caption, select);
     section.append(label);
   }
-  elements.inspectorFields.prepend(section);
+  elements.registryRoleFields.append(section);
 }
 
 function updateSelectedValue(nextValue) {
@@ -786,6 +846,7 @@ async function addEntry() {
     });
     if (!name) return;
     const result = addNumericTile(record.value, { name, definition: {} });
+    result.registry.tiles.find(tile => tile.id === result.id).category = TILE_EDITOR_CATEGORIES[0];
     store.update(activeDocument, () => result.registry);
     selection = { kind: "entry", key: result.id };
     loadTileImages();
@@ -1602,12 +1663,12 @@ async function saveActiveDocument() {
         store.markSaved(activeDocument, { sourceName: handle.name, fileHandle: handle });
       } catch (error) {
         if (error.name === "AbortError") throw error;
-        const exportName = uniqueDownloadName(activeDocument);
-        downloadText(exportName, store.serialize(activeDocument));
-        store.markSaved(activeDocument, { fileHandle: null });
+        const fallbackName = downloadedCopyName(handle.name || record.fileName);
+        downloadText(fallbackName, store.serialize(activeDocument));
+        store.clearFileHandle(activeDocument);
         renderNavigation();
         renderWorkspaceMeta();
-        updateStatus(`${record.label} write access was unavailable; downloaded ${exportName} instead`);
+        updateStatus(`Could not overwrite ${handle.name || record.fileName}; downloaded ${fallbackName}. The original was not overwritten.`);
         return;
       }
     } else {
@@ -1671,6 +1732,12 @@ function downloadText(fileName, text) {
 
 function uniqueDownloadName(id) {
   return createExportName(id).replace(".json", `-${Date.now()}.json`);
+}
+
+function downloadedCopyName(targetName) {
+  const fileName = String(targetName).split(/[\\/]/).pop() || "runner-content.json";
+  const baseName = fileName.toLowerCase().endsWith(".json") ? fileName.slice(0, -5) : fileName;
+  return `${baseName}-download-${Date.now()}.json`;
 }
 
 function previewSelectedLevel() {

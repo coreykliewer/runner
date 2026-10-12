@@ -248,6 +248,7 @@ function startGameLoop() {
 // ============================================================
 const TILE_URLS = [
     "tiles2.json",
+  "tiles2.legacy.json",
     "https://corsproxy.io/?https://clikproductions.com/runner/tiles2.json",
     "https://api.allorigins.win/raw?url=https://clikproductions.com/runner/tiles2.json"
 ];
@@ -296,8 +297,15 @@ function tryFetch(urls) {
         console.warn(`[Runner] Failed to load from ${url}. Trying next URL...`);
         return tryFetch(urls);
       }
-      console.log(`[Runner] Successfully loaded tiles from: ${url}`);
-      return res;
+      return res.clone().json()
+        .then(() => {
+          console.log(`[Runner] Successfully loaded tiles from: ${url}`);
+          return res;
+        })
+        .catch(err => {
+          console.warn(`[Runner] Invalid tile JSON from ${url}. Trying next URL...`, err);
+          return tryFetch(urls);
+        });
     })
     .catch(err => {
       console.warn(`[Runner] Network error for ${url}. Trying next URL...`, err);
