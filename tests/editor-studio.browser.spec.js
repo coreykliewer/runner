@@ -264,22 +264,24 @@ test("single numeric tile catalog fills the workspace with SVG artwork cards", a
   await expect(page.locator("#inspectorTitle")).toHaveText("Tile 11 / Snake");
   await expect(page.locator('[data-property="solid"] .tile-property-status')).toHaveText("Inherited from base tile");
   await expect(page.locator("#inspectorTitle")).toHaveText(/^Tile /);
-  await expect(page.locator("#tilePreviewImage")).toBeVisible();
-  await page.getByLabel("Grid", { exact: true }).check();
-  await expect(page.locator("#tilePreviewCanvas")).toHaveClass(/has-grid/);
+  await expect(page.locator("#tilePreview")).toHaveCount(0);
   const variants = page.locator(".tile-builder-section").filter({ has: page.getByText("Variants", { exact: true }) });
   await variants.locator(":scope > summary").click();
   const variant = page.locator('.tile-card.variant-entry[data-entry-key^="numeric-variant:11:"]').first();
   await expect(variant).toBeVisible();
   await variant.click();
   await expect(page.locator(".tile-inheritance")).toContainText("Variant");
+  const variantAppearance = page.locator(".tile-builder-section").filter({ has: page.getByText("Appearance", { exact: true }) });
+  await variantAppearance.locator(":scope > summary").click();
+  await expect(page.locator('[data-property="svg"]')).toBeVisible();
+  await expect(page.getByLabel("SVG artwork", { exact: true })).toBeVisible();
 
   await page.setViewportSize({ width: 320, height: 780 });
   const mobileCatalog = await page.locator("#entryList").evaluate(element => ({
     height: element.clientHeight,
     contentHeight: element.scrollHeight
   }));
-  expect(mobileCatalog.contentHeight).toBeGreaterThan(mobileCatalog.height);
+  expect(mobileCatalog.height).toBeGreaterThan(300);
   const mobileOverflow = await page.locator(".tile-card").evaluateAll(cards => cards.some(card => {
     const cardBounds = card.getBoundingClientRect();
     return [...card.querySelectorAll(":scope > span:not(.tile-card-art), small")].some(text => {
@@ -601,13 +603,13 @@ test("Tile Builder categories are editor-only and capability copies stay indepen
   await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
 });
 
-test("SVG upload, validation, preview refresh, and discard keep source separate from safe rendering", async ({ page }) => {
+test("SVG upload, validation, catalog thumbnails, and variant artwork editing remain available", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator('.nav-document[data-document="numericTiles"]').click();
   await addSupportedProperty(page, "svg");
   const appearance = page.locator(".tile-builder-section").filter({ has: page.getByText("Appearance", { exact: true }) });
   await appearance.locator(":scope > summary").click();
-  await expect(page.locator("#tilePreviewError")).toContainText("No SVG artwork");
+  await expect(page.locator('[data-property="svg"] .tile-svg-source')).toBeVisible();
   await expect(page.locator("#validationSummary")).not.toHaveAttribute("data-state", "error");
 
   const validSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="#347c79"/></svg>';
@@ -617,7 +619,7 @@ test("SVG upload, validation, preview refresh, and discard keep source separate 
     buffer: Buffer.from(validSvg)
   });
   await expect(page.getByLabel("SVG artwork", { exact: true })).toHaveValue(validSvg);
-  await expect(page.locator("#tilePreviewImage")).toBeVisible();
+  await expect(page.locator('.tile-card[data-entry-key="numeric:1"] img')).toHaveAttribute("src", /^data:image\/svg\+xml/);
   const sanitized = await page.evaluate(async () => {
     const { sanitizeSvgArtwork } = await import("/src/editor/svgArtwork.js");
     return sanitizeSvgArtwork('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><style>rect{fill:url(https://example.test/x)}</style><image href="https://example.test/x"/></svg>');
@@ -634,15 +636,13 @@ test("SVG upload, validation, preview refresh, and discard keep source separate 
   await airAppearance.locator(":scope > summary").click();
 
   await page.getByLabel("SVG artwork", { exact: true }).fill("<svg><g></svg>");
-  await expect(page.locator("#tilePreviewError")).toContainText("malformed");
   await expect(page.locator("#validationList")).toContainText("numericTiles.tiles[0].definition.svg");
   await page.locator("#saveDoc").click();
   await expect(page.locator("#statusText")).toContainText("Save blocked");
 
   await page.getByLabel("SVG artwork", { exact: true }).fill(validSvg);
   await expect(page.locator("#validationSummary")).toHaveAttribute("data-state", "valid");
-  await page.locator("#discardTileArtwork").click();
-  await expect(page.locator("#tilePreviewError")).toContainText("No SVG artwork");
+  await expect(page.locator('.tile-card[data-entry-key="numeric:1"] img')).toHaveAttribute("src", /^data:image\/svg\+xml/);
 });
 
 test("numeric registry authoring creates, duplicates, edits, and safely deletes tiles", async ({ page }) => {

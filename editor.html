@@ -59,33 +59,6 @@
           </select>
         </label>
         <div id="entryList" class="entry-list" aria-label="Document entries"></div>
-        <section id="tilePreview" class="tile-preview" aria-label="Tile artwork preview" hidden>
-          <div class="tile-preview-heading">
-            <div>
-              <div class="panel-kicker">Artwork preview</div>
-              <h3 id="tilePreviewTitle">Select a tile</h3>
-              <p id="tilePreviewId"></p>
-            </div>
-            <div class="tile-preview-controls">
-              <label title="Preview background">
-                <span>Background</span>
-                <input id="tilePreviewBackground" type="color" value="#e8eeea" aria-label="Preview background" />
-              </label>
-              <label title="Preview zoom">
-                <span>Zoom</span>
-                <input id="tilePreviewZoom" type="range" min="1" max="5" value="2" aria-label="Preview zoom" />
-              </label>
-              <label class="tile-grid-toggle"><input id="tilePreviewGrid" type="checkbox" /> Grid</label>
-            </div>
-          </div>
-          <div id="tilePreviewCanvas" class="tile-preview-canvas">
-            <img id="tilePreviewImage" alt="Selected tile artwork" hidden />
-            <p id="tilePreviewError">No SVG artwork</p>
-          </div>
-          <div class="tile-artwork-actions">
-            <button id="discardTileArtwork" type="button">Discard artwork changes</button>
-          </div>
-        </section>
       </div>
 
       <section id="mapEditor" class="map-editor" hidden aria-label="Level map editor">

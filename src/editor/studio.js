@@ -33,12 +33,6 @@ const elements = {
   tileWorkspace: document.getElementById("tileWorkspace"),
   tileSearch: document.getElementById("tileSearch"),
   tileSearchInput: document.getElementById("tileSearchInput"),
-  tilePreview: document.getElementById("tilePreview"),
-  tilePreviewTitle: document.getElementById("tilePreviewTitle"),
-  tilePreviewId: document.getElementById("tilePreviewId"),
-  tilePreviewCanvas: document.getElementById("tilePreviewCanvas"),
-  tilePreviewImage: document.getElementById("tilePreviewImage"),
-  tilePreviewError: document.getElementById("tilePreviewError"),
   registryRolesPanel: document.getElementById("registryRolesPanel"),
   registryRoleFields: document.getElementById("registryRoleFields"),
   inspectorTitle: document.getElementById("inspectorTitle"),
@@ -139,16 +133,6 @@ function bindToolbar() {
   });
   elements.tileSearchInput.addEventListener("input", renderWorkspace);
   document.getElementById("tileCategoryFilter").addEventListener("change", renderWorkspace);
-  document.getElementById("tilePreviewBackground").addEventListener("input", event => {
-    elements.tilePreviewCanvas.style.backgroundColor = event.target.value;
-  });
-  document.getElementById("tilePreviewGrid").addEventListener("change", event => {
-    elements.tilePreviewCanvas.classList.toggle("has-grid", event.target.checked);
-  });
-  document.getElementById("tilePreviewZoom").addEventListener("input", event => {
-    elements.tilePreviewImage.style.setProperty("--preview-zoom", String(Number(event.target.value) / 2));
-  });
-  document.getElementById("discardTileArtwork").addEventListener("click", discardSelectedArtwork);
   elements.mapBox.addEventListener("change", loadMapFromText);
   elements.fileInput.addEventListener("change", async event => {
     const files = [...event.target.files];
@@ -263,7 +247,6 @@ function renderWorkspace() {
   const isTileCatalog = activeDocument === "tiles" || activeDocument === "numericTiles";
   elements.tileWorkspace.classList.toggle("is-active", isTileCatalog);
   elements.tileSearch.hidden = !isTileCatalog;
-  elements.tilePreview.hidden = !isTileCatalog || selection.kind !== "entry";
   elements.entryList.classList.toggle("tile-catalog", isTileCatalog);
   elements.entryList.hidden = activeDocument === "numericMap";
 
@@ -324,8 +307,6 @@ function renderWorkspace() {
     button.addEventListener("click", () => selectEntry(entry.selection || { kind: "entry", key: entry.key }));
     elements.entryList.append(button);
   }
-  renderTilePreview();
-
   document.getElementById("addEntry").disabled = activeDocument === "levels" && selection.kind !== "settings" && !record.value.levels;
   document.getElementById("addEntry").hidden = activeDocument === "numericMap";
   const numericBaseTileSelected = activeDocument === "numericTiles" && selection.kind === "entry" && !selection.variant;
@@ -570,7 +551,6 @@ function renderVisualTileInspector(value) {
           if (current) current.name = nextName;
         });
         elements.inspectorTitle.textContent = `Tile ${selection.key} / ${nextName || "Unnamed"}`;
-        elements.tilePreviewTitle.textContent = nextName || "Unnamed";
         renderNavigation();
         renderWorkspaceMeta();
         renderWorkspace();
@@ -689,51 +669,6 @@ function updateSelectedTileDefinition(nextDefinition) {
     if (!selection.variant) tiles[selection.key] = nextDefinition;
     else (tiles[selection.key][selection.variant.bucket] ||= {})[selection.variant.key] = nextDefinition;
   });
-}
-
-function renderTilePreview() {
-  if (!elements.tilePreview || elements.tilePreview.hidden) return;
-  const entry = getEntries(store.get(activeDocument)).find(item =>
-    item.selection?.key === selection.key &&
-    (item.selection?.variant?.bucket || "") === (selection.variant?.bucket || "") &&
-    (item.selection?.variant?.key || "") === (selection.variant?.key || "") &&
-    Boolean(item.selection?.variant?.nested) === Boolean(selection.variant?.nested));
-  if (!entry) return;
-  const tile = activeDocument === "numericTiles"
-    ? store.get("numericTiles").value.tiles.find(item => item.id === selection.key)
-    : null;
-  const baseName = activeDocument === "numericTiles" ? tile?.name || "Unnamed" : `Tile ${selection.key}`;
-  elements.tilePreviewTitle.textContent = `${baseName}${selection.variant ? ` / ${selection.variant.key}` : ""}`;
-  elements.tilePreviewId.textContent = activeDocument === "numericTiles" ? `ID ${selection.key}` : `Tile ${selection.key}`;
-  const image = tileImages[entry.artKey] || (selection.variant ? tileImages[String(selection.key)] : null);
-  const error = tileArtworkErrors[entry.artKey] || "";
-  elements.tilePreviewImage.hidden = !image?.complete || !image.naturalWidth;
-  elements.tilePreviewImage.removeAttribute("src");
-  if (!elements.tilePreviewImage.hidden) elements.tilePreviewImage.src = image.src;
-  elements.tilePreviewError.hidden = !elements.tilePreviewImage.hidden;
-  elements.tilePreviewError.classList.toggle("is-invalid", Boolean(error));
-  elements.tilePreviewError.textContent = error || "No SVG artwork for this tile or variant.";
-}
-
-function discardSelectedArtwork() {
-  const record = store.get(activeDocument);
-  const savedRoot = record.savedValue;
-  let savedDefinition = activeDocument === "numericTiles"
-    ? savedRoot?.tiles?.find(tile => tile.id === selection.key)?.definition
-    : savedRoot?.[selection.key];
-  if (selection.variant) {
-    const groups = selection.variant.nested ? savedDefinition?.variants : savedDefinition;
-    savedDefinition = groups?.[selection.variant.bucket]?.[selection.variant.key];
-  }
-  const nextDefinition = cloneJson(getSelectedTileDefinition());
-  if (typeof savedDefinition?.svg === "string") nextDefinition.svg = savedDefinition.svg;
-  else delete nextDefinition.svg;
-  updateSelectedTileDefinition(nextDefinition);
-  renderInspector();
-  renderNavigation();
-  renderWorkspaceMeta();
-  loadTileImages();
-  runValidation();
 }
 
 function getSelectedTileDefinition() {
