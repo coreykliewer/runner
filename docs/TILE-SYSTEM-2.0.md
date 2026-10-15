@@ -30,6 +30,8 @@ This document records the approved direction for the Runner Tile System 2.0 rede
 - Dice maximums are configurable and may exceed six.
 - Movement-triggered encounters evaluate after movement and time payment.
 - Both dice exhausted requires a new player roll.
+- Voluntary early rerolls are allowed while unused time remains. A reroll discards the remaining time on both dice, replaces both die values, and consumes exactly one player roll under the existing roll-limit mechanic.
+- Each die emits an observable reroll event, including when its resulting numeric value is unchanged. Existing roll-limit behavior, persistence, and death conditions are preserved.
 
 ## Checkpoint 5: Combat
 

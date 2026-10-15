@@ -295,6 +295,10 @@ Use an immutable event per die mutation, with one root action ID shared by the a
 
 Snapshots are value copies. They are never mutated after event creation. `eventId` is unique; `actionId` identifies the whole causal action; `parentActionId` links a consequence-created child action; `sequence` is assigned from actual mutation order. The pair in `after` is the only dice pair a condition for that event may read.
 
+### Approved Early Rerolls
+
+Voluntary rerolls are approved while unused time remains. A voluntary reroll discards the remaining time from both dice, replaces both die values, and consumes exactly one player roll under the existing roll-limit mechanic. Emit an observable reroll event for each die even when its numeric result is unchanged. Preserve existing roll-limit behavior, persistence, and death conditions; the reroll rule does not add a separate roll counter or change those conditions. The exact event names and serialization remain governed by the proposed event schema and are not implementation authorization.
+
 ### Spend Example: Die 1 = 2, Die 2 = 4, Die 1 Selected, Cost = 3
 
 The spend is one action with two ordered mutations. Time remaining after the action is 3.
@@ -411,7 +415,6 @@ These recommendations are not approved design decisions. Choices with likely gam
 
 | Question | Recommended default | Gameplay impact / approval note |
 | --- | --- | --- |
-| Early voluntary rerolls | Allow a player-requested reroll while time remains, matching current UI behavior; replace both current values and discard the remaining pool. Emit ordered per-die reroll events even for unchanged values. | **Material:** allows trading unused time for a new result. An alternative is to require exhaustion except for effects. |
 | Gravity and forced movement | Free unless a capability configures a whole-number cost. Treat each completed grid displacement as a movement action; evaluate movement rules after its resolution. Costs, if configured, use selected-die-first spill. | **Material:** whether gravity happens at zero remaining time and whether every fall cell can trigger rules changes hazards/encounter frequency. Recommend resolve each discrete fall/forced step, but ask approval. |
 | Stable instance IDs | Opaque UUID per stateful/reward-capable placement; persist in `instanceIds`. Move preserves ID, duplicate/new placement creates one, copied level receives new IDs. Legacy conversion writes once and reuses a migration manifest. | **Material:** changing identity resets state/reward eligibility; map-editor copy/move semantics need explicit approval. |
 | Equal-priority rules | For each event snapshot, priority descending, then explicit `authorOrder` ascending. Require unique author order within the event scope. Never use map row, tile name, category, or tile ID to break ties. | **Material:** determines which state mutation/reward happens first. Priority direction and author-order scope must be approved. |
@@ -471,7 +474,7 @@ These tests require gameplay/runtime implementation approval and belong to the s
 3. Item use preflight/commit is atomic: success consumes inventory and applies configured time/effects together before publishing ordered events; failure leaves inventory and dice unchanged and emits no committed `item_used`/`die_changed` event.
 4. Automatic attack limits are keyed by attacker instance and player roll, and cannot be bypassed by multiple actions/events in that roll.
 5. Nested dice effects process FIFO, preserve event snapshots, detect cycles, and report the approved queue-limit overflow without silently dropping work.
-6. Damage and other consequences apply after their triggering action resolves and before the next player action. Configured maximum die values, early rerolls, gravity, and forced movement follow the defaults approved from Section 7.
+6. A voluntary early reroll while time remains discards both remaining pools, consumes one player roll under the existing roll-limit mechanic, and emits both per-die reroll events even if values are unchanged. Regression tests preserve existing roll-limit accounting, persistence, and death conditions. Damage and other consequences apply after their triggering action resolves and before the next player action. Configured maximum die values, gravity, and forced movement follow the defaults approved from Section 7.
 7. Spatial detection uses only the authoritative rule trigger relation; no duplicate tile-level range can override it. Boundary and contact behavior match the approved spatial semantics.
 
 ## 11. Decisions Requested Before Phase 1
@@ -480,7 +483,6 @@ Approve or revise:
 
 - Registry/map/save version names and boundaries, and whether Item IDs share the tile namespace as proposed.
 - Capability vocabulary and common rule condition/action forms sufficient for the seven examples without special entity schemas.
-- Early voluntary reroll policy and its time-discard behavior.
 - Gravity/forced movement action boundaries and when their rules evaluate.
 - UUID placement identity, move/copy behavior, and migration-manifest scope.
 - Priority direction and global author-order scope.
