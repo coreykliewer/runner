@@ -35,6 +35,7 @@ export function createTileSystemV2RuleDispatcher({
       const activeRules = queued.rules ?? rules;
       const childQueue = [];
       const pendingConsequences = [];
+      const candidateConsequenceKeys = new Set();
       const rootActionId = queued.rootActionId ?? batch.actionId;
       const cycleSignatures = queued.cycleSignatures ?? new Set();
 
@@ -50,40 +51,23 @@ export function createTileSystemV2RuleDispatcher({
           const match = matchRule(rule, event, queued.context ?? context, relationMatcher, diagnostics, ruleIndex);
           if (match) matchingRules.push({ rule, ruleIndex, sourceInstanceId: match.sourceInstanceId });
         }
-        matchingRules.sort((left, right) => right.rule.priority - left.rule.priority ||
-          left.rule.authorOrder - right.rule.authorOrder || left.ruleIndex - right.ruleIndex);
-
         for (const matched of matchingRules) {
           const rule = matched.rule;
           const sourceInstanceId = matched.sourceInstanceId;
           const consequenceKey = `${batch.actionId}|${rule.id}|${sourceInstanceId ?? "global"}`;
-          if (appliedConsequenceKeys.has(consequenceKey)) continue;
-          const usesAttackGuard = rule.activation?.scope === "attacker_per_player_roll" ||
-            (rule.activation?.scope == null && (rule.actions || []).some(action => action?.type === "damage" && (action.target == null || action.target === "runner")));
-          if (usesAttackGuard) {
-            if (!sourceInstanceId) {
-              diagnostics.push(diagnostic("missing_attacker_instance", `Rule '${rule.id}' requires a sourceInstanceId for attacker-per-roll activation.`));
-              continue;
-            }
-            const attackKey = `${batch.rollId}|${sourceInstanceId}`;
-            if (attackerRollKeys.has(attackKey)) continue;
-            attackerRollKeys.add(attackKey);
-          }
-          appliedConsequenceKeys.add(consequenceKey);
-          for (const [effectIndex, effect] of (rule.actions || []).entries()) {
-            pendingConsequences.push({
-              actionId: batch.actionId,
-              rootActionId,
-              rollId: batch.rollId,
-              event,
-              rule,
-              sourceInstanceId,
-              effect,
-              effectIndex,
-              ruleIndex: matched.ruleIndex,
-              context: queued.context ?? context
-            });
-          }
+          if (appliedConsequenceKeys.has(consequenceKey) || candidateConsequenceKeys.has(consequenceKey)) continue;
+          candidateConsequenceKeys.add(consequenceKey);
+          pendingConsequences.push({
+            actionId: batch.actionId,
+            rootActionId,
+            rollId: batch.rollId,
+            event,
+            rule,
+            sourceInstanceId,
+            consequenceKey,
+            ruleIndex: matched.ruleIndex,
+            context: queued.context ?? context
+          });
         }
       }
 
@@ -93,71 +77,91 @@ export function createTileSystemV2RuleDispatcher({
         left.ruleIndex - right.ruleIndex || left.effectIndex - right.effectIndex);
 
       for (const consequence of pendingConsequences) {
+        const rule = consequence.rule;
+        const sourceInstanceId = consequence.sourceInstanceId;
+        const usesAttackGuard = rule.activation?.scope === "attacker_per_player_roll" ||
+          (rule.activation?.scope == null && (rule.actions || []).some(action => action?.type === "damage" && (action.target == null || action.target === "runner")));
+        const attackKey = `${consequence.rollId}|${sourceInstanceId ?? ""}`;
+        if (appliedConsequenceKeys.has(consequence.consequenceKey)) continue;
+        if (usesAttackGuard) {
+          if (!sourceInstanceId) {
+            diagnostics.push(diagnostic("missing_attacker_instance", `Rule '${rule.id}' requires a sourceInstanceId for attacker-per-roll activation.`, consequence));
+            continue;
+          }
+          if (attackerRollKeys.has(attackKey)) continue;
+        }
         const cycleSignature = makeCycleSignature(consequence);
         if (cycleSignatures.has(cycleSignature)) {
-          diagnostics.push(diagnostic("action_cycle_detected", `Repeated child-action cycle detected at rule '${consequence.rule.id}'.`, consequence));
+          diagnostics.push(diagnostic("action_cycle_detected", `Repeated child-action cycle detected at rule '${rule.id}'.`, consequence));
           continue;
         }
         cycleSignatures.add(cycleSignature);
-        const handler = getHandler(effectHandlers, consequence.effect?.type);
-        if (!handler) {
-          diagnostics.push(diagnostic("unregistered_effect", `No handler registered for typed effect '${consequence.effect?.type}'.`, consequence));
-          continue;
-        }
-        let result;
-        try {
-          result = handler(cloneJson(consequence.effect), freezeDeep({
+        let consequenceApplied = false;
+        for (const [effectIndex, effect] of (rule.actions || []).entries()) {
+          const handler = getHandler(effectHandlers, effect?.type);
+          if (!handler) {
+            diagnostics.push(diagnostic("unregistered_effect", `No handler registered for typed effect '${effect?.type}'.`, consequence));
+            continue;
+          }
+          let result;
+          try {
+            result = handler(cloneJson(effect), freezeDeep({
+              actionId: consequence.actionId,
+              rootActionId: consequence.rootActionId,
+              rollId: consequence.rollId,
+              event: consequence.event,
+              rule: cloneJson(rule),
+              sourceInstanceId,
+              state: freezeDeep(cloneJson(currentState)),
+              context: freezeDeep(cloneJson(consequence.context))
+            })) || {};
+          } catch (error) {
+            diagnostics.push(diagnostic("effect_handler_error", `Effect '${effect?.type}' failed: ${error.message}`, consequence));
+            continue;
+          }
+          consequenceApplied = true;
+          if (Object.hasOwn(result, "state")) currentState = cloneJson(result.state);
+          for (const item of result.diagnostics || []) diagnostics.push({ severity: item.severity || "warning", ...item });
+          applied.push({
             actionId: consequence.actionId,
-            rootActionId: consequence.rootActionId,
-            rollId: consequence.rollId,
-            event: consequence.event,
-            rule: cloneJson(consequence.rule),
-            sourceInstanceId: consequence.sourceInstanceId,
-            state: freezeDeep(cloneJson(currentState)),
-            context: freezeDeep(cloneJson(consequence.context))
-          })) || {};
-        } catch (error) {
-          diagnostics.push(diagnostic("effect_handler_error", `Effect '${consequence.effect?.type}' failed: ${error.message}`, consequence));
-          continue;
-        }
-        if (Object.hasOwn(result, "state")) currentState = cloneJson(result.state);
-        for (const item of result.diagnostics || []) diagnostics.push({ severity: item.severity || "warning", ...item });
-        applied.push({
-          actionId: consequence.actionId,
-          eventId: consequence.event.eventId,
-          ruleId: consequence.rule.id,
-          sourceInstanceId: consequence.sourceInstanceId,
-          effectType: consequence.effect?.type,
-          effectIndex: consequence.effectIndex
-        });
-
-        for (const child of result.childActions || []) {
-          if (stoppedRootActions.has(rootActionId)) break;
-          const childActionCount = childActionCounts.get(rootActionId) || 0;
-          if (childActionCount >= maxChildActions) {
-            stoppedRootActions.add(rootActionId);
-            diagnostics.push(diagnostic("child_action_limit", `Root action '${rootActionId}' reached the ${maxChildActions}-child-action limit; remaining child actions were not queued.`, consequence));
-            break;
-          }
-          const childBatch = child?.batch;
-          if (!childBatch) {
-            diagnostics.push(diagnostic("invalid_child_action", "Effect handler returned a child action without an event batch.", consequence));
-            continue;
-          }
-          if (childBatch.parentActionId !== consequence.actionId) {
-            diagnostics.push(diagnostic("invalid_child_parent", `Child action '${childBatch.actionId}' must name '${consequence.actionId}' as parentActionId.`, consequence));
-            continue;
-          }
-          childActionCounts.set(rootActionId, childActionCount + 1);
-          childQueue.push({
-            batch: childBatch,
-            rules: child.rules ?? activeRules,
-            context: child.context ?? consequence.context,
-            rootActionId,
-            cycleSignatures: new Set(cycleSignatures),
-            actionSignature: child.signature ?? null
+            eventId: consequence.event.eventId,
+            ruleId: rule.id,
+            sourceInstanceId,
+            effectType: effect?.type,
+            effectIndex
           });
+          if (usesAttackGuard && (rule.activation?.scope === "attacker_per_player_roll" || isRunnerAttack(effect))) {
+            attackerRollKeys.add(attackKey);
+          }
+          for (const child of result.childActions || []) {
+            if (stoppedRootActions.has(rootActionId)) break;
+            const childActionCount = childActionCounts.get(rootActionId) || 0;
+            if (childActionCount >= maxChildActions) {
+              stoppedRootActions.add(rootActionId);
+              diagnostics.push(diagnostic("child_action_limit", `Root action '${rootActionId}' reached the ${maxChildActions}-child-action limit; remaining child actions were not queued.`, consequence));
+              break;
+            }
+            const childBatch = child?.batch;
+            if (!childBatch) {
+              diagnostics.push(diagnostic("invalid_child_action", "Effect handler returned a child action without an event batch.", consequence));
+              continue;
+            }
+            if (childBatch.parentActionId !== consequence.actionId) {
+              diagnostics.push(diagnostic("invalid_child_parent", `Child action '${childBatch.actionId}' must name '${consequence.actionId}' as parentActionId.`, consequence));
+              continue;
+            }
+            childActionCounts.set(rootActionId, childActionCount + 1);
+            childQueue.push({
+              batch: childBatch,
+              rules: child.rules ?? activeRules,
+              context: child.context ?? consequence.context,
+              rootActionId,
+              cycleSignatures: new Set(cycleSignatures),
+              actionSignature: child.signature ?? null
+            });
+          }
         }
+        if (consequenceApplied) appliedConsequenceKeys.add(consequence.consequenceKey);
       }
       batchQueue.push(...childQueue);
     }
@@ -305,4 +309,8 @@ function freezeDeep(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) freezeDeep(child);
   return Object.freeze(value);
+}
+
+function isRunnerAttack(effect) {
+  return effect?.type === "damage" && (effect.target == null || effect.target === "runner");
 }

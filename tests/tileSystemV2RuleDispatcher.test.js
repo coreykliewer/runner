@@ -91,6 +91,7 @@ describe("Phase 2A deterministic rule dispatcher", () => {
     assert.equal(result.applied.filter(entry => entry.ruleId === "high-first").length, 1);
     assert.equal(result.applied.filter(entry => entry.ruleId === "high-late").length, 1);
     assert.equal(result.applied.filter(entry => entry.ruleId === "low").length, 1);
+    assert.equal(result.applied.find(entry => entry.ruleId === "high-first").eventId, "multi-snapshot:1");
   });
 
   it("orders consequences by priority across different snapshots in one action", () => {
@@ -129,6 +130,46 @@ describe("Phase 2A deterministic rule dispatcher", () => {
     });
     assert.equal(attacks, 1);
     assert.deepEqual(result.diagnostics, []);
+    assert.equal(dispatcher.getLedgerSnapshot().attackerRollKeys.length, 1);
+  });
+
+  it("lets the higher-priority same-attacker rule win across different dice snapshots without duplicate attacks", () => {
+    const appliedAttacks = [];
+    const dispatcher = createTileSystemV2RuleDispatcher({
+      effectHandlers: { damage: (effect, context) => { appliedAttacks.push({ amount: effect.amount, eventId: context.event.eventId }); return {}; } }
+    });
+    const batch = makeBatch({
+      actionId: "move-cost-3",
+      rollId: "roll-7",
+      changes: [
+        { die: "die1", before: { die1: 2, die2: 4 }, value: 0 },
+        { die: "die2", value: 3 }
+      ],
+      source: { kind: "movement", instanceId: "rat-instance" }
+    });
+    const lowPriorityAttack = {
+      id: "rat-attack-on-first-snapshot",
+      priority: 10,
+      authorOrder: 1,
+      sourceInstanceId: "rat-instance",
+      trigger: { events: ["die_changed"] },
+      conditions: [{ type: "dice_sum", operator: "==", value: 4 }],
+      actions: [{ type: "damage", target: "runner", amount: 1 }]
+    };
+    const highPriorityAttack = {
+      id: "rat-attack-on-second-snapshot",
+      priority: 20,
+      authorOrder: 1,
+      sourceInstanceId: "rat-instance",
+      trigger: { events: ["die_changed"] },
+      conditions: [{ type: "dice_sum", operator: "==", value: 3 }],
+      actions: [{ type: "damage", target: "runner", amount: 2 }]
+    };
+
+    const result = dispatcher.dispatch({ batches: batch, rules: [lowPriorityAttack, highPriorityAttack] });
+    assert.deepEqual(batch.events.map(event => event.after), [{ die1: 0, die2: 4 }, { die1: 0, die2: 3 }]);
+    assert.deepEqual(appliedAttacks, [{ amount: 2, eventId: "move-cost-3:2" }]);
+    assert.equal(result.applied.length, 1);
     assert.equal(dispatcher.getLedgerSnapshot().attackerRollKeys.length, 1);
   });
 
