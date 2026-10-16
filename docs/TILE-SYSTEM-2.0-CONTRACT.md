@@ -1,8 +1,8 @@
 # Runner Tile System 2.0: Phase 0 Technical Contract
 
-**Status:** Proposed contract for review. Not authorization to implement.
+**Status:** Phase 0 architecture decisions approved. Phase 1 implementation is authorized for schemas, validation, codecs, and authored-content migration previews only; this does not authorize runtime or editor changes.
 
-This proposal is subordinate to the approved decisions in [TILE-SYSTEM-2.0.md](TILE-SYSTEM-2.0.md) and the current-code findings in [TILE-SYSTEM-2.0-AUDIT.md](TILE-SYSTEM-2.0-AUDIT.md). The schema, defaults, examples, and migration policies below that go beyond those decisions are recommendations requiring approval. No engine, editor, catalog, map, or save-format changes are included in this phase.
+This contract follows the approved decisions in [TILE-SYSTEM-2.0.md](TILE-SYSTEM-2.0.md) and the current-code findings in [TILE-SYSTEM-2.0-AUDIT.md](TILE-SYSTEM-2.0-AUDIT.md). Unapproved runtime defaults remain explicitly labeled. Phase 1 must not change gameplay behavior, editor UI, active catalogs, levels, or save formats.
 
 ## 1. Contract Principles
 
@@ -64,7 +64,8 @@ Rules for this document:
 - `artwork.svg` contains editable, sanitized SVG. It never affects collision.
 - `capabilities` is an open object containing only capabilities enabled for that definition. Unrecognized capability keys and other unknown properties survive round trips.
 - Item definitions use the same `tiles` array and ID allocator. `capabilities.item` marks an item definition and contains item-specific authoring data. A reward refers to that record by `itemId`.
-- The shown global dice settings are a proposed location for default maximums. A level may override them only if that precedence is approved; otherwise keep the settings in the single ruleset configuration. Each maximum is a positive integer and may exceed six.
+- Global per-die capacities are stored in registry settings. Levels may specify per-die capacities that override the global value; omitted level values inherit global capacities. Capacities are positive integers and may exceed six.
+- The proposed level field is `levels.<levelKey>.diceCapacities`, shaped as `{ "die1": 8, "die2": 10 }`. Effective capacity is resolved independently per die: level value when present, otherwise the registry global value.
 - `legacyCode` and `legacyIdMapping` remain compatibility aliases only. Runtime behavior does not depend on them.
 
 ### Composable Capabilities
@@ -73,7 +74,8 @@ The capability namespace is intentionally generic. This proposal's initial vocab
 
 | Capability | Proposed responsibility |
 | --- | --- |
-| `traversal` | Grid collision, movement costs, gravity, and optional forced-movement costs. Blocked movement cost defaults to zero. Costs are nonnegative whole numbers; a spend can consume both dice. |
+| `traversal` | Grid collision, movement costs, gravity, and optional automatic forced-movement costs. Gravity and automatic forced movement continue at zero remaining time; they are free unless an independent whole-number cost is configured. Blocked movement cost defaults to zero. Movement costs are nonnegative whole numbers; a spend can consume both dice. |
+| `interaction` | Independent whole-number time cost for an interaction. It is not inherited from or coupled to movement cost. The universal omitted-value default remains pending approval. |
 | `vitals` | Maximum health, defense, and other generic damage-resistance values. Current health belongs to placed-instance state or player state, not a shared definition. |
 | `item` | Stackability, use-time cost (default zero), use/equip eligibility, and typed `onUse` actions applied in the atomic item-use transaction. It contains no player-owned quantity. |
 | `equipment` | Allowed slot metadata and generic capability modifiers while equipped. The equipment instance references the catalog Item ID. |
@@ -84,7 +86,7 @@ The capability namespace is intentionally generic. This proposal's initial vocab
 
 These names are a proposal, not a new approved mechanic list. The implementation may consolidate overlapping capability names if it preserves the approved behavior and authoring clarity. A tile can combine any of them regardless of category.
 
-Spatial relations and ranges have one authority: `rules[].trigger.relation`. Do not also store range/minimum/maximum/metric in a tile-level detection capability. A rule without a spatial trigger has no spatial range; a rule with one uses that rule's relation definition. The default metric remains pending approval in Section 7.
+Spatial relations and ranges have one authority: `rules[].trigger.relation`. Do not also store range/minimum/maximum/metric in a tile-level detection capability. A rule without a spatial trigger has no spatial range; a rule with one uses that rule's relation definition. Manhattan is the approved default metric and integer bounds are inclusive. Exact contact/beside geometry remains pending approval.
 
 ### Rule Record
 
@@ -317,13 +319,13 @@ Proposed dispatcher contract:
 1. Validate and identify the originating action. Assign one root `actionId` and record its `rollId` and action context.
 2. Apply all state mutations belonging to that originating action in deterministic order. For each die mutation, immediately append an event containing a fresh immutable dice snapshot. A multi-die spend orders mutations selected die first, then the other die. Other actions state their explicit target order. Rerolls emit an observable per-die reroll event even if `before` equals `after`; use `valueChanged: false` rather than suppressing the event.
 3. Do not execute rule consequences between the mutations of one action. Once that action is resolved, evaluate conditions for every captured event in ascending `sequence`, using that event's immutable `after` pair and captured action context. Evaluate all matching conditions for a given event against the same snapshot before applying any consequences from it.
-4. For each event snapshot, gather matches, then sort by higher `priority` first and lower `authorOrder` first. Proposed validation requires `authorOrder` to be unique within the applicable event-order scope; equal priority is therefore deterministic and author-controlled, not map-row order or tile-ID order.
+4. For each event snapshot, gather matches, then sort by higher `priority` first and lower `authorOrder` first. `authorOrder` is unique within the applicable event-order scope; equal priority is deterministic and author-controlled, never map-row order or tile-ID order.
 5. By default, the first matching event in sequence claims a consequence key `(actionId, ruleId, sourceInstanceId)`. A later snapshot from the same action may still be evaluated, but cannot repeat that consequence. Record processed `eventId`s and consequence keys so retry/replay is idempotent. An explicit per-event repeat option is a proposed advanced setting and must not bypass the automatic-attack guard.
 6. Apply queued consequences in the sorted match/action order after evaluation of the originating event batch. Damage takes effect synchronously when its consequence is applied, after its triggering action has resolved and before the next player input/action.
 7. If a consequence changes a die, enqueue it as a child action with its own `actionId`, `parentActionId`, sequence, and event batch. Finish the current batch first; then process child actions FIFO. Never interleave child mutations into a parent snapshot sequence.
 8. Independently key automatic attacks by `(playerRollId, attackerInstanceId)`. The first qualifying attack consumes that key, so repeated movement, multiple dice events, retries, or child actions do not cause a second automatic attack by that attacker in the same roll. This is the approved default.
 
-This makes every die change observable without collapsing it into `movement_resolved`. `movement_resolved` remains a separate action event after payment and movement resolution. Rule engine safety should include cycle detection and a bounded child-action queue. A concrete queue limit and behavior on limit exhaustion are proposals requiring approval because they affect extreme rule chains.
+This makes every die change observable without collapsing it into `movement_resolved`. `movement_resolved` remains a separate action event after payment and movement resolution. Rule engine safety includes cycle detection and a 64-child-action limit per root action. On overflow, stop queuing further child actions, retain already committed actions, and emit a diagnostic; never silently discard the condition.
 
 ## 5. Inventory and Placed-Instance Identity
 
@@ -350,7 +352,7 @@ Player statistics are independent from inventory. Stateless stack quantities use
 
 The catalog definition supplies item name, artwork, rules, use cost, stackability, and equipment eligibility. Inventory stores only `itemId`, quantity, and necessary changing instance state; it does not copy the item name or behavior. Equipped items are references to owned item records, not duplicate definitions. Statistics such as score, health, and XP are not item counts.
 
-### Proposed Placement IDs
+### Approved Placement IDs
 
 Recommend an opaque UUID per stateful/reward-capable placement, stored in an `instanceIds` grid parallel to `cells` and `variants`; use `null` for stateless cells. Instance identity is separate from the numeric catalog ID:
 
@@ -360,7 +362,7 @@ Recommend an opaque UUID per stateful/reward-capable placement, stored in an `in
 - IDs are persisted in authored maps and runtime saves; they are never reconstructed from the current coordinates during ordinary load.
 - For legacy migration, create missing UUIDs once and persist a migration manifest keyed by source document, level key, old coordinate, tile ID, and variant. Re-running the same migration reuses manifest values. After conversion, map-editor operations preserve or replace IDs according to move versus duplicate semantics.
 
-The exact UUID version and copy-level policy require review. Coordinates, names, categories, and tile IDs alone are not durable instance identity.
+Coordinates, names, categories, and tile IDs alone are not durable instance identity. UUID generation/migration is deterministic through a persisted manifest; once authored, IDs are stored and preserved rather than regenerated from coordinates.
 
 ### Proposed Map and Instance State
 
@@ -376,6 +378,8 @@ The exact UUID version and copy-level policy require review. Coordinates, names,
   "spawn": { "x": 0, "y": 0 }
 }
 ```
+
+The containing level record may also declare `diceCapacities`, for example `{ "die1": 8, "die2": 10 }`. These values override the registry's global setting independently per die; missing values inherit. This is authored configuration only in Phase 1 and does not alter runtime rolling.
 
 Save only non-default placed-instance state and source-scoped reward claims. A reward claim key is `(levelKey, instanceId, rewardId)`. The same `itemId` may be awarded by many sources; possessing that item never proves a specific source has been claimed.
 
@@ -403,27 +407,36 @@ Migration is preview-first, dual-read, single-write, and data-driven. Existing b
 | Snake and Lock variants | Continue resolving existing `monster` and `lock` variants during migration. Convert their stored fields to generic capabilities/rules in a preview, preserve original variant keys/data as compatibility extensions, and test equivalent behavior before retiring any adapter. Do not dispatch on the words Snake or Lock. |
 | Existing encounters and narrative events | Adapt current encounter rules and narrative events into generic event/condition/action interfaces. Preserve trigger fields, event order, once flags, rules, messages, and unknown properties. Do not merge their schemas destructively or change timing until parity is demonstrated. |
 | SVG artwork | Preserve source strings and variant artwork. Continue sanitizer behavior and use artwork only for rendering/catalog thumbnails, never collision. |
-| Local save v2 | Keep the v2 decoder and existing checkpoint semantics: restore the canonical level map/spawn and saved Runner/dice fields. v2 does not record midlevel placement or reward history; do not invent a source claim or infer one from inventory. Midlevel pickups may reappear after checkpoint restore as they do today. Begin source-scoped claim tracking only when a claim is actually observed and recorded in the new format. |
+| Local save v2 | Preserve the current prototype decoder/checkpoint semantics where compatibility is needed. There are no production player saves requiring migration. Do not migrate saves in Phase 1 or invent historical placement/reward state; midlevel pickups may reappear after checkpoint restore as they do today. |
 | Resume links | Continue reading `#map=`, `#mapv=1&map=`, `#st=`, and `#resume=1`. New portable state gets an explicit version marker. Do not claim old links contain midlevel map mutations or placement state that they never encoded. |
 | Current gameplay | Keep old readers and behavior behind adapters until migrated fixtures and browser tests pass. A migration preview must report changes and unresolved records; no unknown cell, variant, SVG, or property is silently discarded. |
 
 Unknown compatible properties must survive read/edit/save even if absent from the current form controls. Invalid recognized values should be diagnosed, not coerced silently. Migration output must be deterministic and repeatable.
 
-## 7. Proposed Defaults Requiring Approval
+## 7. Approved Decisions and Remaining Proposed Defaults
 
-These recommendations are not approved design decisions. Choices with likely gameplay impact are marked **material**.
+The following Phase 0 decisions are approved and are no longer proposals:
 
-| Question | Recommended default | Gameplay impact / approval note |
+- Dice capacities are configured globally per die, with optional level-specific per-die overrides. A level value overrides the global value; an omitted value inherits. Capacities are positive integers and may exceed six.
+- Gravity and automatic forced movement continue at zero remaining time. They are free unless independently configured with a whole-number cost.
+- Interaction costs are independent of movement costs and are never implicitly inherited from them.
+- Stable opaque UUID placement IDs are stored for stateful/reward-capable instances. Moves preserve IDs; new/duplicate placements and copied levels get new IDs. Legacy assignment is deterministic through a persisted manifest.
+- Rules execute higher priority first; ties use ascending author-defined order. Map row, tile name, category, and tile ID are never tie-breakers.
+- Manhattan distance is the default metric and integer range endpoints are inclusive.
+- Nested actions use FIFO processing and are capped at 64 child actions per root action. On overflow, emit a diagnostic and do not silently drop the condition.
+- Resume links use compressed, versioned payloads with an 8 KiB target and a downloadable file/bundle fallback. Never truncate state; existing formats remain readable.
+- No production player saves require migration. Preserve the current prototype checkpoint behavior and do not synthesize historical placement/reward state.
+
+The following choices remain proposed and require approval; gameplay-sensitive items are marked **material**.
+
+| Question | Recommended default | Approval note |
 | --- | --- | --- |
-| Gravity and forced movement | Free unless a capability configures a whole-number cost. Treat each completed grid displacement as a movement action; evaluate movement rules after its resolution. Costs, if configured, use selected-die-first spill. | **Material:** whether gravity happens at zero remaining time and whether every fall cell can trigger rules changes hazards/encounter frequency. Recommend resolve each discrete fall/forced step, but ask approval. |
-| Stable instance IDs | Opaque UUID per stateful/reward-capable placement; persist in `instanceIds`. Move preserves ID, duplicate/new placement creates one, copied level receives new IDs. Legacy conversion writes once and reuses a migration manifest. | **Material:** changing identity resets state/reward eligibility; map-editor copy/move semantics need explicit approval. |
-| Equal-priority rules | For each event snapshot, priority descending, then explicit `authorOrder` ascending. Require unique author order within the event scope. Never use map row, tile name, category, or tile ID to break ties. | **Material:** determines which state mutation/reward happens first. Priority direction and author-order scope must be approved. |
-| Legacy saves missing reward history | Preserve known v2 fields and current checkpoint reset behavior: restore the canonical map/spawn and saved Runner/dice state. Do not backfill source claims, synthesize claimed/unclaimed history, or infer claims from inventory/statistics. A midlevel pickup absent from v2 may reappear after restore, as it does today. Start source-scoped claims only for rewards actually observed and recorded after migration. | **Compatibility recommendation:** reappearance/re-award follows existing checkpoint semantics; the contract does not claim to know whether a source was collected before an old save. Any policy that suppresses or otherwise changes that behavior requires explicit approval. |
-| Resume-link size and fallback | Keep old hashes unchanged. New compact payload includes only required IDs, quantities, and non-default item instance state. Recommend an 8 KiB maximum encoded URL; if exceeded, do not truncate/drop inventory. Offer a downloadable versioned resume bundle and retain local `#resume=1` as a same-browser option. | **Material:** portable resume may require a bundle for large inventories. Confirm limit against target browsers/hosting. |
-| Spatial range/contact | Default distance metric Manhattan with inclusive integer min/max. `beside` means cardinal edge-adjacent; `contact` means same-cell overlap or shared edge; `on_top` means directly above and supported by the target; `above`/`below` are positional relations without support requirement. Diagonals require Chebyshev selection. | **Material:** changes attack/hazard reach. Confirm occupancy/overlap and whether “beside” should include diagonals. |
-| Nested dice effects | FIFO child-action queue. Finish the parent action's mutations and event evaluation before applying child dice changes. Detect repeated `(ruleId, sourceInstanceId, action signature, dice snapshot)` in one root chain. Recommend at most 64 child actions per root action; if exceeded, stop enqueueing children, keep already committed mutations, and surface a diagnostic. Never silently truncate. | **Material at pathological limits:** a numeric budget and overflow behavior can affect intentionally long chains; approve or revise the proposed 64-action limit. |
+| Interaction omitted-cost default | Keep interaction cost separate; recommend zero when omitted, with explicit per-action overrides. | **Material:** decide whether an unconfigured interaction costs zero or must be authored. |
+| Contact/beside geometry | Keep Manhattan/inclusive range. Recommend `beside` as cardinal edge adjacency and `contact` as same-cell overlap or shared edge; keep `on_top` as directly above and supported. | **Material:** changes interaction/detection reach; confirm diagonal and occupancy semantics. |
+| Resume compression codec | Use a standard compressed, versioned, URL-safe payload and fall back to a downloadable bundle above the 8 KiB target. | Confirm codec and file packaging; the size target/fallback policy itself is approved. |
+| Nested-action cycle detection | Detect repeated `(ruleId, sourceInstanceId, action signature, dice snapshot)` within a root chain in addition to the approved hard limit. | Confirm whether deduplication is needed beyond idempotency and the 64-child cap. |
 
-Other material decisions include whether blocked interactions pay time, whether a level's rules can override global die maxima, which item IDs are equippable, and how current Snake/Lock behavior is scheduled relative to the new post-payment event pipeline.
+Other pending decisions include whether blocked interactions pay their independent interaction cost, which item IDs are equippable, and how current Snake/Lock behavior is scheduled relative to the new post-payment event pipeline.
 
 ## 8. Validation Requirements
 
@@ -462,8 +475,11 @@ Phase 1 is schema, validator, codec, and migration-preview work only, after this
 5. Numeric map v1 round-trips cells, variants, spawn, and metadata. Proposed map v2 round-trips cells, variants, instance IDs, spawn, and metadata; migration manifests produce stable representations on repeated conversion.
 6. Inventory representations validate stack quantities, Item-ID references, optional per-item instance state, equipment references, and separation from player statistics. This is serialization/validation only; it does not execute item use.
 7. Rule and event representations validate unique IDs, event sequence fields, immutable before/after snapshot shapes, action/parent IDs, source references, and same-value reroll records. Codec tests preserve supplied event ordering; they do not execute the dispatcher.
-8. Legacy v2 save conversion preserves known fields and existing checkpoint reset semantics. It does not synthesize claimed/unclaimed placement history or infer claims from inventory. Old resume hash forms remain readable in compatibility fixtures.
-9. Migration preview reports unknown legacy map codes and ambiguous Snake/Lock variants without writing source files. Existing `tiles2.json`, `levels.json`, legacy backups, and save formats remain byte-for-byte untouched by Phase 1 tests.
+8. No player-save migration is required or performed. Preserve the prototype v2 checkpoint/reset behavior where compatibility is needed without converting saves or synthesizing placement/reward history. Old resume hash forms remain readable in compatibility fixtures.
+9. Global and partial level dice capacities validate with per-die override precedence; interaction costs validate independently from movement costs.
+10. A versioned dice-event-batch codec round-trips ordered immutable snapshots, including same-value reroll events; malformed sequence/action/snapshot representations are rejected. It does not dispatch rules.
+11. The standalone v2 resume codec round-trips gzip-compressed URL payloads within the 8 KiB target and returns a complete gzip file payload above the limit, without truncation. This codec is not wired into gameplay resume links during Phase 1.
+12. Migration preview reports unknown legacy map codes and ambiguous Snake/Lock variants without writing source files. Existing `tiles2.json`, `levels.json`, legacy backups, and save formats remain byte-for-byte untouched by Phase 1 tests.
 
 ## 10. Phase 2 Engine Acceptance Tests (Not Part of Phase 1)
 
@@ -474,21 +490,17 @@ These tests require gameplay/runtime implementation approval and belong to the s
 3. Item use preflight/commit is atomic: success consumes inventory and applies configured time/effects together before publishing ordered events; failure leaves inventory and dice unchanged and emits no committed `item_used`/`die_changed` event.
 4. Automatic attack limits are keyed by attacker instance and player roll, and cannot be bypassed by multiple actions/events in that roll.
 5. Nested dice effects process FIFO, preserve event snapshots, detect cycles, and report the approved queue-limit overflow without silently dropping work.
-6. A voluntary early reroll while time remains discards both remaining pools, consumes one player roll under the existing roll-limit mechanic, and emits both per-die reroll events even if values are unchanged. Regression tests preserve existing roll-limit accounting, persistence, and death conditions. Damage and other consequences apply after their triggering action resolves and before the next player action. Configured maximum die values, gravity, and forced movement follow the defaults approved from Section 7.
+6. A voluntary early reroll while time remains discards both remaining pools, consumes one player roll under the existing roll-limit mechanic, and emits both per-die reroll events even if values are unchanged. Runtime regression tests preserve existing roll-limit accounting, persistence, and death conditions. Gravity/automatic forced movement continues at zero time; global and per-level capacities follow the approved precedence. These are runtime-phase tests, not Phase 1 execution tests.
 7. Spatial detection uses only the authoritative rule trigger relation; no duplicate tile-level range can override it. Boundary and contact behavior match the approved spatial semantics.
 
-## 11. Decisions Requested Before Phase 1
+## 11. Remaining Decisions for Later Phases
 
 Approve or revise:
 
-- Registry/map/save version names and boundaries, and whether Item IDs share the tile namespace as proposed.
-- Capability vocabulary and common rule condition/action forms sufficient for the seven examples without special entity schemas.
-- Gravity/forced movement action boundaries and when their rules evaluate.
-- UUID placement identity, move/copy behavior, and migration-manifest scope.
-- Priority direction and global author-order scope.
-- Unknown legacy reward-history policy and accepted replay/loss tradeoff.
-- Resume URL size/fallback behavior.
-- Manhattan default, inclusive ranges, beside/contact/on-top definitions, and diagonal semantics.
-- Event sequence/snapshot contract and the child-action queue limit/overflow policy (proposed default: 64 child actions per root action).
+- Exact generic rule condition/action vocabulary beyond the validated Phase 1 representation.
+- The omitted-value default for independent interaction costs.
+- Exact contact/beside/on-top geometry and diagonal semantics beyond Manhattan inclusive ranges.
+- Compression codec and file/bundle packaging for resume links above the approved 8 KiB target.
+- Exact event type names, action-specific mutation-order encoding, and whether cycle detection supplements the approved 64-child limit.
 
-Until these are approved, this document remains a review proposal. Phase 1 and all gameplay/editor implementation remain unstarted.
+These details do not block Phase 1's schema/validation/codec/preview scope. Phase 2 and all gameplay/editor implementation remain unauthorized until separately approved.

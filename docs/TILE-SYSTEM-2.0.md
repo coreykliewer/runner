@@ -16,18 +16,20 @@ This document records the approved direction for the Runner Tile System 2.0 rede
 - Gameplay uses grid-based position and collision.
 - SVG artwork is visual and does not determine collision.
 - Spatial relationships include inside, above, on top, below, beside, contact, and configurable distance.
+- Manhattan distance is the default spatial range metric; configured integer ranges are inclusive.
 
 ## Checkpoint 3: Movement
 
 - Blocked movement costs no time by default.
-- Gravity and forced movement are free unless configured.
+- Gravity and automatic forced movement continue even when both dice have zero time. They cost no time unless configured with an independent cost.
 - Movement costs may combine both dice.
 - Movement costs are nonnegative whole numbers.
+- Interaction costs are configured independently of movement costs; one does not implicitly inherit from the other.
 
 ## Checkpoint 4: Dice and Time
 
 - Spend from the selected die first, then the other die.
-- Dice maximums are configurable and may exceed six.
+- Dice maximums are configurable globally and per level, and may exceed six. A level-specific capacity overrides the global capacity for that die; otherwise it inherits the global value.
 - Movement-triggered encounters evaluate after movement and time payment.
 - Both dice exhausted requires a new player roll.
 - Voluntary early rerolls are allowed while unused time remains. A reroll discards the remaining time on both dice, replaces both die values, and consumes exactly one player roll under the existing roll-limit mechanic.
@@ -53,8 +55,10 @@ This document records the approved direction for the Runner Tile System 2.0 rede
 
 - Custom named states with optional templates.
 - Placed-instance states persist within the current level, including save and resume.
+- Stateful/reward-capable placements use stable opaque placement IDs. Moving an instance preserves its ID; duplicating a placement or copying a level allocates new IDs.
 - Rewards activate once per placed instance by default.
-- Simultaneous rules execute by priority, then author-defined order.
+- Rules execute higher priority first, then author-defined order for equal priorities.
+- There are no production player saves requiring migration. Preserve the current prototype checkpoint behavior; do not invent historical placement/reward state.
 
 ## Checkpoint 8: Tile Builder Interface
 
@@ -82,19 +86,19 @@ This document records the approved direction for the Runner Tile System 2.0 rede
 - Inventory may use compact serialization in resume links where useful.
 - One-time rewards are tracked by stable placed-instance identity or an equivalent scoped marker. Possessing an Item ID does not establish that a particular chest or other source has already been collected; multiple sources may award the same Item ID.
 - The seven tile categories remain catalog metadata only. Every gameplay capability remains available regardless of tile name, category, or numeric ID.
+- Nested consequence actions are queued FIFO with a limit of 64 child actions per root action; exceeding the limit reports a diagnostic and does not silently discard the condition.
+- Resume links use compressed, versioned payloads with an 8 KiB target. If a payload cannot fit, provide a downloadable resume file/bundle rather than truncating state; preserve existing link formats.
 
 ## Boundaries and Open Questions
 
 The decisions above define the approved product direction, not every data field or runtime algorithm. In particular, they do not yet specify:
 
-- The exact meanings and coordinate conventions for each spatial relationship, or how configurable distance is measured.
+- The exact meanings and coordinate conventions for contact, beside, and other spatial relationships beyond the approved Manhattan/inclusive-range default.
 - The exact event type names and how action-defined ordering for non-spending multi-die changes is represented in the eventual schema. Per-change conditions, per-action consequence deduplication, queued consequence actions, and attack-per-roll limits are defined above.
 - Whether all player-triggered combat interactions count as encounters for the post-payment timing rule.
-- The stable identity scheme for placed instances across map edits, copies, level resets, and save migration.
-- How legacy saves without placed-instance reward state are migrated when prior midlevel collection cannot be recovered.
 - The named-state/template data model, state transition semantics, or the scope of reward-once ledgers.
-- How rule priority values are assigned or tie-broken beyond the approved priority-then-author-order sequence.
-- The compact resume-link encoding and size policy for inventory, if compact serialization is used.
+- Exact interaction-cost defaults and action-specific time-cost schema.
+- The compression codec and exact fallback packaging for resume payloads above the 8 KiB target.
 - The capability vocabulary, JSON schema/version, or migration representation.
 
 These are design and architecture questions for review. No additional mechanics should be treated as approved by implication. Tile names, catalog categories, and numeric IDs are organizational/identity data and must not be used as gameplay dispatch rules.
