@@ -279,7 +279,7 @@ export function validateDiceEventBatch(batch) {
       previousSequence = event.sequence;
       sequences.add(event.sequence);
     }
-    if (!["die_changed", "die_rerolled"].includes(event.type)) add(`${path}.type`, "type must be die_changed or die_rerolled.");
+    if (!["die_changed", "die_rerolled", "die_rolled"].includes(event.type)) add(`${path}.type`, "type must be die_changed, die_rerolled, or die_rolled.");
     if (!["die1", "die2"].includes(event.die)) add(`${path}.die`, "die must be die1 or die2.");
     if (!isPlainObject(event.before) || !isPlainObject(event.after)) add(`${path}.snapshot`, "before and after dice snapshots must be objects.");
     else for (const field of ["die1", "die2"]) {
@@ -292,6 +292,7 @@ export function validateDiceEventBatch(batch) {
       if (event.valueChanged !== changed) add(`${path}.valueChanged`, "valueChanged must match the changed die values; unchanged rerolls use false.");
       if (event.type === "die_changed" && !changed) add(`${path}.type`, "die_changed must represent an actual numeric change; same-value rerolls use die_rerolled.");
       if (event.type === "die_rerolled" && event.operation !== "reroll") add(`${path}.operation`, "die_rerolled operation must be reroll.");
+      if (event.type === "die_rolled" && event.operation !== "roll") add(`${path}.operation`, "die_rolled operation must be roll.");
     }
     if (typeof event.operation !== "string" || !event.operation.trim()) add(`${path}.operation`, "operation is required.");
     if (event.rollId !== batch.rollId) add(`${path}.rollId`, "event rollId must match its batch.");
