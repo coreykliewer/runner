@@ -1,6 +1,7 @@
 import { createTileSystemV2RuleDispatcher } from "./tileSystemV2RuleDispatcher.js";
 import { calculateEncounterDistance, encounterPositionMatches } from "./encounterRules.js";
 export { evaluateEncounterExpression } from "./encounterRules.js";
+export { createDevelopmentTrace, developmentTraceEnabled } from "./developmentTrace.js";
 
 // Enabled authored encounters explicitly replace automatic legacy attacks at this source.
 export function encounterOwner(definition) {
@@ -13,6 +14,7 @@ export function encounterDispatcherRules(sources, phase) {
     return (source.definition.encounterRules.rules || []).filter(rule => rule.trigger?.events?.includes(phase)).map(rule => ({
       id: `${source.instanceId}:${rule.id}`,
       sourceInstanceId: source.instanceId,
+      source: { tileId: source.tileId, name: source.name, x: source.x, y: source.y, authoredRuleId: rule.id },
       priority: rule.priority ?? 0,
       authorOrder: rule.order,
       trigger: { events: ["die_changed", "die_rerolled", "die_rolled"], relation: { ...rule.trigger, x: source.x, y: source.y } },
@@ -22,9 +24,10 @@ export function encounterDispatcherRules(sources, phase) {
   });
 }
 
-export function createEncounterDispatcher(damage) {
+export function createEncounterDispatcher(damage, observer = null) {
   return createTileSystemV2RuleDispatcher({
     effectHandlers: { damage },
+    observer,
     relationMatcher: (relation, event, context) => {
       const dx = context.player.x - relation.x;
       const dy = context.player.y - relation.y;

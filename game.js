@@ -50,6 +50,7 @@ let manualWaterEntry = false;
 let gameOver = false;
 let encounterDispatcher = null;
 let encounterBatchCursor = 0;
+let developmentTrace = null;
 let rollCount = 0;
 let dieValue1 = 0;
 let dieValue2 = 0;
@@ -477,6 +478,11 @@ function loadEncounterRulesModule() {
   return import("./src/encounterIntegration.js")
     .then(module => {
       EncounterRulesModule = module;
+      if (module.developmentTraceEnabled(window.location)) {
+        developmentTrace = module.createDevelopmentTrace();
+        window.getRunnerEventTrace = () => developmentTrace.snapshot();
+        window.clearRunnerEventTrace = () => developmentTrace.clear();
+      }
       console.log("[Runner] encounterRules.js loaded successfully.");
       return module;
     })
@@ -1847,12 +1853,19 @@ function synchronizeDiceEngineRollLimit() {
   });
 }
 
-function applyDiceEngineResult(result) {
+function applyDiceEngineResult(result, action = {}) {
+  developmentTrace?.record({ type: "player_action", ...action, ok: result.ok,
+    actionId: result.batch?.actionId, rollId: result.batch?.rollId,
+    error: result.code, diagnostics: result.diagnostics, spent: result.spent, discardedTime: result.discardedTime,
+    position: runner && { x: runner.x, y: runner.y } });
   if (!result.ok) return false;
   dieValue1 = result.state.dice.die1;
   dieValue2 = result.state.dice.die2;
   rollCount = result.state.playerRollCount;
-  if (result.batch) diceEventBatches.push(result.batch);
+  if (result.batch) {
+    diceEventBatches.push(result.batch);
+    for (const event of result.batch.events) developmentTrace?.record({ type: "dice_mutation", event });
+  }
   return true;
 }
 
@@ -1914,7 +1927,10 @@ function checkDeath() {
 }
 
 function takeDamage(n, sourceTile) {
+  const heartsBefore = runner.hearts;
   runner.hearts -= n;
+  developmentTrace?.record({ type: "damage_applied", amount: n, heartsBefore, heartsAfter: runner.hearts,
+    lethal: runner.hearts <= 0, message: sourceTile.deathMessage, ...sourceTile.traceContext });
   runner.damageFlashTimer = 10;
   deathReason = sourceTile.deathMessage;
   savePersistentGameState();
@@ -1953,7 +1969,7 @@ function spendMovement(cost) {
     cost,
     source: { kind: "movement" }
   });
-  if (!applyDiceEngineResult(result)) return false;
+  if (!applyDiceEngineResult(result, { action: "movement", timeCost: cost, selectedDie: selected, before: before.dice })) return false;
 
   if (cost > before.dice[selected]) {
     selectedDie = selected === "die1" ? "die2" : "die1";
@@ -2122,28 +2138,41 @@ function checkAdjacentMonsterAttacks() {
 }
 
 function dispatcherOwnsEncounterAt(x, y) {
-  return EncounterRulesModule?.encounterOwner(getTileContextAt(x, y).def) === "dispatcher";
+  const tile = getTileContextAt(x, y);
+  const owned = EncounterRulesModule?.encounterOwner(tile.def) === "dispatcher";
+  if (owned) developmentTrace?.record({ type: "legacy_hook_skipped", reason: "dispatcher_owned_source",
+    sourceInstanceId: currentLevelKey + ":" + x + ":" + y + ":" + tile.id, source: { tileId: tile.id, x, y } });
+  return owned;
 }
 function runEncounterRulesAtEvent(event) {
   const batches = diceEventBatches.slice(encounterBatchCursor);
   encounterBatchCursor = diceEventBatches.length;
   if (gameOver || !EncounterRulesModule || !runner || !grid?.length) return;
+  developmentTrace?.record({ type: "action_boundary", phase: event,
+    actionIds: batches.map(batch => batch.actionId), player: { x: runner.x, y: runner.y },
+    finalDice: { die1: dieValue1, die2: dieValue2 } });
   encounterDispatcher ||= EncounterRulesModule.createEncounterDispatcher((action, context) => {
     if (gameOver) return;
     const dice = context.event.after;
     const amount = action.amountExpression == null ? action.amount : EncounterRulesModule.evaluateEncounterExpression(action.amountExpression, { d1: dice.die1, d2: dice.die2 });
     if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid encounter damage");
     const message = action.message || "You take " + amount + " damage.";
-    takeDamage(amount, { deathMessage: message });
+    takeDamage(amount, { deathMessage: message, traceContext: {
+      actionId: context.actionId, rollId: context.rollId, eventId: context.event.eventId,
+      snapshot: dice, ruleId: context.rule.id, sourceInstanceId: context.sourceInstanceId,
+      source: context.rule.source, player: { x: runner.x, y: runner.y }
+    } });
     setMessage(message, { kind: "combat" });
     updateInfo();
     draw();
-  });
+    return { traceDetails: { amount, message, heartsAfter: runner.hearts, gameOver } };
+  }, developmentTrace ? record => developmentTrace.record(record) : null);
   const sources = [];
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
       const tile = getTileContextAt(x, y);
-      sources.push({ x, y, definition: tile.def, instanceId: currentLevelKey + ":" + x + ":" + y + ":" + tile.id });
+      sources.push({ x, y, tileId: tile.id, name: tile.record?.name, definition: tile.def,
+        instanceId: currentLevelKey + ":" + x + ":" + y + ":" + tile.id });
     }
   }
   encounterDispatcher.dispatch({ batches, rules: EncounterRulesModule.encounterDispatcherRules(sources, event), context: { player: { x: runner.x, y: runner.y } } });
@@ -2882,6 +2911,9 @@ function diagonalJump(dx) {
   }
 
   const attemptedMoveCost = isDiagonalJump ? 2 : (isFluidTile(here) ? target.moveCostInside : target.moveCostTop);
+  developmentTrace?.record({ type: "movement_attempt", from: { x: fromX, y: fromY },
+    to: { x: toX, y: toY }, timeCost: attemptedMoveCost, availableTime: totalMovementPoints(),
+    selectedDie: selectedDie || "die1", turbo: turboExecuting });
   const movementAchievementContext = buildMovementAchievementContext({
     dx,
     dy,
@@ -3250,15 +3282,21 @@ function enforceRollLimitBeforeNextRoll() {
   if (rollLimitState.rollLimit === null) return false;
   if (rollLimitState.rollsRemaining > 0) return false;
   if (isLevelObjectiveComplete()) return false;
-  if (totalMovementPoints() > 0) return true;
+  if (totalMovementPoints() > 0) {
+    developmentTrace?.record({ type: "roll_limit", outcome: "blocked_with_time_remaining", ...rollLimitState });
+    return true;
+  }
 
   deathReason = `Out of rolls: you used all ${rollLimitState.rollLimit} rolls without finishing the level.`;
+  developmentTrace?.record({ type: "roll_limit", outcome: "death", message: deathReason, ...rollLimitState });
   endGame();
   return true;
 }
 
 function rollDice() {
   if (gameOver) return;
+  developmentTrace?.record({ type: "roll_attempt", before: { die1: dieValue1, die2: dieValue2 },
+    rollCount, timeCost: 0 });
   if (enforceRollLimitBeforeNextRoll()) return;
   if (!diceEngine) initializeDiceEngine();
   synchronizeDiceEngineRollLimit();
@@ -3283,7 +3321,8 @@ function rollDice() {
       actionId: `roll-${crypto.randomUUID()}`,
       values: { die1: a, die2: b }
     });
-  if (!applyDiceEngineResult(result)) return;
+  if (!applyDiceEngineResult(result, { action: previousDice.die1 + previousDice.die2 > 0 ? "early_reroll" : "roll",
+    timeCost: 0, before: previousDice })) return;
   updateDiceDisplay(a, b, true);
   addRunnerCounter("dice_roll");
   runner.jumpCredits = 2;
@@ -3318,6 +3357,7 @@ function setupDieSelection() {
       dieElement.classList.remove("selected");
       selectedDie = null;
       diceEngine?.selectDie("die1");
+      developmentTrace?.record({ type: "die_selected", selectedDie: "die1", explicitSelection: false, timeCost: 0 });
       return;
     }
     die1.classList.remove("selected");
@@ -3325,6 +3365,7 @@ function setupDieSelection() {
     dieElement.classList.add("selected");
     selectedDie = dieElement.id;
     diceEngine?.selectDie(selectedDie);
+    developmentTrace?.record({ type: "die_selected", selectedDie, timeCost: 0 });
   }
   die1.addEventListener("click", () => selectDie(die1));
   die2.addEventListener("click", () => selectDie(die2));
@@ -3346,6 +3387,8 @@ function loop() {
 
 function endGame() {
   if (gameOver) return;
+  developmentTrace?.record({ type: "game_over", message: deathReason || "Reached the exit!",
+    remainingDice: { die1: dieValue1, die2: dieValue2 }, rollCount });
   gameOver = true;
     // NEW
   runner.dead = true;

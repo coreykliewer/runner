@@ -6,6 +6,7 @@ export const MAX_CHILD_ACTIONS_PER_ROOT = 64;
 export function createTileSystemV2RuleDispatcher({
   effectHandlers = {},
   relationMatcher = null,
+  observer = null,
   maxChildActions = MAX_CHILD_ACTIONS_PER_ROOT
 } = {}) {
   if (!Number.isSafeInteger(maxChildActions) || maxChildActions < 0 || maxChildActions > MAX_CHILD_ACTIONS_PER_ROOT) {
@@ -15,6 +16,19 @@ export function createTileSystemV2RuleDispatcher({
   const processedEventIds = new Set();
   const appliedConsequenceKeys = new Set();
   const attackerRollKeys = new Set();
+
+  // Diagnostics cannot mutate an event or interrupt encounter resolution.
+  function observe(type, details) {
+    if (typeof observer !== "function") return;
+    try { observer(freezeDeep(cloneJson({ type, ...details }))); } catch { /* Observers are optional. */ }
+  }
+
+  function ruleDetails(rule, event) {
+    return { actionId: event.actionId, rollId: event.rollId, eventId: event.eventId,
+      eventSequence: event.sequence, snapshot: event.after, ruleId: rule?.id,
+      sourceInstanceId: rule?.sourceInstanceId ?? event.source?.instanceId ?? null,
+      source: rule?.source ?? event.source, priority: rule?.priority, authorOrder: rule?.authorOrder };
+  }
 
   return Object.freeze({
     dispatch,
@@ -42,6 +56,7 @@ export function createTileSystemV2RuleDispatcher({
 
       for (const event of batch.events) {
         if (processedEventIds.has(event.eventId)) {
+          observe("event_suppressed", { eventId: event.eventId, actionId: event.actionId, reason: "duplicate_event" });
           diagnostics.push(diagnostic("duplicate_event", `Event '${event.eventId}' was already processed.`));
           continue;
         }
@@ -50,13 +65,18 @@ export function createTileSystemV2RuleDispatcher({
         const matchingRules = [];
         for (const [ruleIndex, rule] of (Array.isArray(activeRules) ? activeRules : []).entries()) {
           const match = matchRule(rule, event, queued.context ?? context, relationMatcher, diagnostics, ruleIndex);
+          observe("rule_evaluated", { ...ruleDetails(rule, event), matched: Boolean(match),
+            trigger: rule?.trigger, conditions: rule?.conditions, player: (queued.context ?? context)?.player });
           if (match) matchingRules.push({ rule, ruleIndex, sourceInstanceId: match.sourceInstanceId });
         }
         for (const matched of matchingRules) {
           const rule = matched.rule;
           const sourceInstanceId = matched.sourceInstanceId;
           const consequenceKey = `${batch.actionId}|${rule.id}|${sourceInstanceId ?? "global"}`;
-          if (appliedConsequenceKeys.has(consequenceKey) || candidateConsequenceKeys.has(consequenceKey)) continue;
+          if (appliedConsequenceKeys.has(consequenceKey) || candidateConsequenceKeys.has(consequenceKey)) {
+            observe("consequence_suppressed", { ...ruleDetails(rule, event), reason: "rule_already_queued_or_applied" });
+            continue;
+          }
           candidateConsequenceKeys.add(consequenceKey);
           pendingConsequences.push({
             actionId: batch.actionId,
@@ -77,8 +97,11 @@ export function createTileSystemV2RuleDispatcher({
         left.event.sequence - right.event.sequence ||
         left.ruleIndex - right.ruleIndex || left.effectIndex - right.effectIndex);
 
+      let executionOrder = 0;
       for (const consequence of pendingConsequences) {
         const rule = consequence.rule;
+        const details = ruleDetails(rule, consequence.event);
+        observe("consequence_ordered", { ...details, executionOrder: ++executionOrder });
         const sourceInstanceId = consequence.sourceInstanceId;
         const usesAttackGuard = rule.activation?.scope === "attacker_per_player_roll" ||
           (rule.activation?.scope == null && (rule.actions || []).some(action => action?.type === "damage" && (action.target == null || action.target === "runner")));
@@ -89,7 +112,10 @@ export function createTileSystemV2RuleDispatcher({
             diagnostics.push(diagnostic("missing_attacker_instance", `Rule '${rule.id}' requires a sourceInstanceId for attacker-per-roll activation.`, consequence));
             continue;
           }
-          if (attackerRollKeys.has(attackKey)) continue;
+          if (attackerRollKeys.has(attackKey)) {
+            observe("attack_suppressed", { ...details, reason: "attacker_per_player_roll" });
+            continue;
+          }
         }
         const cycleSignature = makeCycleSignature(consequence);
         if (cycleSignatures.has(cycleSignature)) {
@@ -121,6 +147,8 @@ export function createTileSystemV2RuleDispatcher({
             continue;
           }
           consequenceApplied = true;
+          observe("consequence_applied", { ...details, executionOrder, effectIndex, effect,
+            result: result.traceDetails ?? null });
           if (Object.hasOwn(result, "state")) currentState = cloneJson(result.state);
           for (const item of result.diagnostics || []) diagnostics.push({ severity: item.severity || "warning", ...item });
           applied.push({
@@ -167,6 +195,7 @@ export function createTileSystemV2RuleDispatcher({
       batchQueue.push(...childQueue);
     }
 
+    for (const item of diagnostics) observe("dispatcher_diagnostic", item);
     return freezeDeep({
       state: cloneJson(currentState),
       applied,
