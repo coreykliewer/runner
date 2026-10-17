@@ -10,6 +10,7 @@ import { renderJsonEditor } from "./fieldEditor.js";
 import { renderEncounterRuleEditor } from "./encounterRuleEditor.js";
 import { renderPropertyRuleEditor, collectPropertyNames } from "./propertyRuleEditor.js";
 import { VARIANT_BUCKETS } from "../shared/variants.js";
+import { validateTiles } from "../validation.js";
 
 const supportedNames = Object.keys(TILE_PROPERTY_DEFINITIONS);
 const variantBucketNames = new Set([...VARIANT_BUCKETS, "variants"]);
@@ -33,8 +34,10 @@ export function renderTilePropertyEditor(container, {
   let definition = cloneJson(value || {});
   const base = cloneJson(baseDefinition || {});
   const copyPreviewUpdaters = [];
+  const capabilityHeadingUpdaters = [];
   const commit = (next, rerender) => {
     definition = cloneJson(next);
+    for (const updateHeading of capabilityHeadingUpdaters) updateHeading();
     for (const updatePreview of copyPreviewUpdaters) updatePreview();
     onChange(cloneJson(definition), { refresh: Boolean(rerender) });
     for (const row of container.querySelectorAll(".tile-property-row.is-default")) {
@@ -91,13 +94,36 @@ export function renderTilePropertyEditor(container, {
   const capabilities = section("Capabilities");
   const sourceChoices = copySources.filter(tile => tile.id !== tileId);
   for (const capability of TILE_CAPABILITY_GROUPS) {
-    const group = document.createElement("section");
+    const group = document.createElement("details");
     group.className = "tile-capability-group";
+    group.dataset.capability = capability.id;
+    const summary = document.createElement("summary");
+    const label = document.createElement("span");
+    label.textContent = capability.label;
+    label.setAttribute("role", "heading");
+    label.setAttribute("aria-level", "4");
+    const status = document.createElement("small");
+    status.className = "tile-capability-status";
+    const errors = document.createElement("small");
+    errors.className = "tile-capability-errors";
+    errors.setAttribute("aria-live", "polite");
+    const updateHeading = () => {
+      const configured = capability.properties.filter(property => Object.hasOwn(definition, property)).length;
+      const inherited = isVariant ? capability.properties.filter(property => !Object.hasOwn(definition, property) && Object.hasOwn(base, property)).length : 0;
+      status.textContent = [configured ? `${configured} configured` : "", inherited ? `${inherited} inherited` : ""].filter(Boolean).join(" · ");
+      const issues = validateTiles({ T: { ...(isVariant ? base : {}), ...definition } }).filter(issue =>
+        issue.severity === "error" && capability.properties.some(property =>
+          issue.path === `tiles.T.${property}` || issue.path.startsWith(`tiles.T.${property}.`) || issue.path.startsWith(`tiles.T.${property}[`)));
+      errors.textContent = issues.length ? `${issues.length} error${issues.length === 1 ? "" : "s"}` : "";
+      errors.hidden = !issues.length;
+      errors.title = issues.map(issue => issue.message).join("\n");
+    };
+    capabilityHeadingUpdaters.push(updateHeading);
+    updateHeading();
+    summary.append(label, status, errors);
+    group.append(summary);
     const heading = document.createElement("div");
     heading.className = "tile-capability-heading";
-    const label = document.createElement("h4");
-    label.textContent = capability.label;
-    heading.append(label);
     let copyPreview = null;
     if (sourceChoices.length && capability.id !== "collision") {
       const copyControls = document.createElement("div");

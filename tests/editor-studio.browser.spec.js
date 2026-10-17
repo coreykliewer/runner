@@ -368,6 +368,7 @@ test("guided tile creation copies full definitions independently and saves them 
 
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   const copiedMoveCost = page.getByRole("spinbutton", { name: "Shared movement cost" });
   await expect(copiedMoveCost).toHaveValue("1");
   await copiedMoveCost.fill("7");
@@ -398,6 +399,7 @@ test("guided tile creation copies full definitions independently and saves them 
   await page.locator(`.tile-card[data-entry-key="numeric:${newTileId}"]`).click();
   const reloadedCapabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await reloadedCapabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   await expect(page.getByRole("spinbutton", { name: "Shared movement cost" })).toHaveValue("7");
 });
 
@@ -432,6 +434,7 @@ test("guided tile creation copies only selected capabilities on mobile", async (
 
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   const copiedMoveCost = page.getByRole("spinbutton", { name: "Shared movement cost" });
   await expect(copiedMoveCost).toHaveValue("1");
   await copiedMoveCost.fill("5");
@@ -506,6 +509,7 @@ test("Tile Builder configures and persists universal encounter rules on any tile
   await page.locator(`.tile-card[data-entry-key="numeric:${tileId}"]`).click();
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   const reloadedEncounter = page.locator('[data-property="encounterRules"] .encounter-rule-editor');
   await expect(reloadedEncounter.locator(".encounter-rule-card")).toHaveCount(3);
   await expect(reloadedEncounter.locator(".encounter-rule-card").first().getByLabel("Condition 1 expression")).toHaveValue("d1 + d2 <= 2");
@@ -536,6 +540,7 @@ test("Studio preserves runtime-only encounter settings and opaque rules through 
   await page.locator('.nav-document[data-document="numericTiles"]').click();
   await page.locator(`.tile-card[data-entry-key="numeric:${originalTile.id}"]`).click();
   await page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) }).locator(":scope > summary").click();
+  await openCapabilitySections(page);
   const editor = page.locator(".encounter-rule-editor");
   await expect(editor.getByLabel("Stored match policy (read-only)")).toBeDisabled();
   await expect(editor).toContainText("Runtime-only settings");
@@ -582,6 +587,7 @@ for (const shape of ["unknown event", "unknown condition", "unknown action", "ma
     await page.locator('.nav-document[data-document="numericTiles"]').click();
     await page.locator(`.tile-card[data-entry-key="numeric:${tileId}"]`).click();
     await page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) }).locator(":scope > summary").click();
+    await openCapabilitySections(page);
     const editor = page.locator(".encounter-rule-editor");
     await expect(editor).toContainText("Read-only: original JSON is preserved");
     await expect(editor.getByRole("button", { name: "Add rule" })).toHaveCount(0);
@@ -700,6 +706,7 @@ test("Tile Builder categories are editor-only and capability copies stay indepen
   await identity.locator(":scope > summary").click();
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   const collision = page.locator(".tile-capability-group").filter({ has: page.getByRole("heading", { name: "Collision" }) });
   await expect(collision.locator("select")).toHaveCount(0);
   await expect(collision.locator('[data-property="solid"]')).toBeVisible();
@@ -810,6 +817,7 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
 
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   await page.getByText("Add Property", { exact: true }).click();
   await page.getByLabel("Search supported properties").fill("solid");
   await page.locator('.tile-property-option[data-property-name="solid"]').click();
@@ -820,6 +828,7 @@ test("numeric registry authoring creates, duplicates, edits, and safely deletes 
   const duplicateId = newTileId + 1;
   await expect(page.locator("#inspectorTitle")).toHaveText(`Tile ${duplicateId} / Amber crawler copy`);
   await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   await expect(page.getByRole("checkbox", { name: "Solid (blocks movement)" })).toBeChecked();
   const identity = page.locator(".tile-builder-section").filter({ has: page.getByText("Identity", { exact: true }) });
   await identity.locator(":scope > summary").click();
@@ -910,6 +919,7 @@ test("selected numeric level can open as a standalone map with spawn data", asyn
 async function addSupportedProperty(page, name) {
   const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   if (!await capabilities.evaluate(section => section.open)) await capabilities.locator(":scope > summary").click();
+  await openCapabilitySections(page);
   await page.locator(".tile-add-property summary").click();
   await page.getByLabel("Search supported properties").fill(name);
   await page.locator(`.tile-property-option[data-property-name="${name}"]`).click();
@@ -955,4 +965,109 @@ async function prepareTileCreationPersistence(page, mutateRegistry = () => {}) {
     });
   });
   return { persist: registry => { persistedRegistry = registry; } };
+}
+
+test("Capability sections start collapsed, toggle by keyboard independently, and reset when selecting tiles", async ({ page }) => {
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const parent = page.locator(".tile-builder-section > summary").filter({ hasText: /^Capabilities$/ });
+  await parent.click();
+  const groups = page.locator(".tile-capability-group");
+  await expect(groups).toHaveCount(8);
+  expect(await groups.evaluateAll(nodes => nodes.every(node => !node.open))).toBe(true);
+  const collision = groups.filter({ has: page.getByRole("heading", { name: "Collision", exact: true }) });
+  const summary = collision.locator(":scope > summary");
+  await summary.focus();
+  await summary.press("Enter");
+  await expect(collision).toHaveAttribute("open", "");
+  await expect(summary).toBeFocused();
+  expect(await summary.evaluate(node => getComputedStyle(node).outlineStyle)).not.toBe("none");
+  const movement = page.locator('.tile-capability-group[data-capability="movement"]');
+  await movement.locator(":scope > summary").click();
+  await expect(collision).toHaveAttribute("open", "");
+  await expect(movement).toHaveAttribute("open", "");
+  await summary.focus();
+  await summary.press("Space");
+  await expect(collision).not.toHaveAttribute("open", "");
+  await expect(movement).toHaveAttribute("open", "");
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  await page.locator('.tile-card[data-entry-key="numeric:16"]').click();
+  expect(await groups.evaluateAll(nodes => nodes.every(node => !node.open))).toBe(true);
+  await page.locator('.tile-card[data-entry-key="numeric:1"]').click();
+  expect(await groups.evaluateAll(nodes => nodes.every(node => !node.open))).toBe(true);
+});
+
+test("Capability headings retain configured counts and errors while collapsed, and clear corrected errors", async ({ page }) => {
+  await prepareTileCreationPersistence(page, registry => {
+    registry.tiles.find(tile => tile.id === 1).definition.propertyRules = {
+      version: 1, blocks: [{ then: [{ operation: "set", property: "wet", value: null }] }]
+    };
+  });
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await page.locator(".tile-builder-section > summary").filter({ hasText: /^Capabilities$/ }).click();
+  const group = page.locator('.tile-capability-group[data-capability="propertyRules"]');
+  await expect(group.locator(":scope > summary")).toContainText("1 configured");
+  await expect(group.locator(".tile-capability-errors")).toHaveText("1 error");
+  await expect(group.locator(".tile-capability-errors")).toBeVisible();
+  await group.locator(":scope > summary").click();
+  const value = group.getByLabel("Block 1 effect 1 value", { exact: true });
+  await value.fill("5");
+  await expect(group.locator(".tile-capability-errors")).toBeHidden();
+  await value.fill("");
+  await group.getByLabel("Block 1 effect 1 property", { exact: true }).fill("damp");
+  await group.locator(":scope > summary").click();
+  await expect(group.locator(".tile-capability-errors")).toHaveText("1 error");
+  await expect(group.locator(".tile-capability-errors")).toBeVisible();
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#statusText")).toContainText("Save blocked");
+});
+
+test("Expanded capability controls survive structural edits and saving/reopening without data loss", async ({ page }) => {
+  const persistence = await prepareTileCreationPersistence(page, registry => {
+    const definition = registry.tiles.find(tile => tile.id === 1).definition;
+    definition.propertyRules = { version: 1, blocks: [{ if: { property: "wet", operator: ">", value: 0 },
+      then: [{ operation: "subtract", property: "wet", value: 1 }] }] };
+    definition.futureAccordionTest = { preserve: [0, "unchanged"] };
+  });
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await page.locator(".tile-builder-section > summary").filter({ hasText: /^Capabilities$/ }).click();
+  const movement = page.locator('.tile-capability-group[data-capability="movement"]');
+  const rules = page.locator('.tile-capability-group[data-capability="propertyRules"]');
+  await movement.locator(":scope > summary").click();
+  await rules.locator(":scope > summary").click();
+  await movement.getByLabel("Shared movement cost", { exact: true }).fill("3");
+  await movement.getByLabel("Shared movement cost", { exact: true }).dispatchEvent("change");
+  await movement.getByRole("button", { name: "Add Cost to enter from above", exact: true }).click();
+  await expect(movement).toHaveAttribute("open", "");
+  await expect(rules).toHaveAttribute("open", "");
+  await movement.getByLabel("Cost to enter from above", { exact: true }).fill("4");
+  await movement.getByLabel("Cost to enter from above", { exact: true }).dispatchEvent("change");
+  await rules.getByLabel("Block 1 IF value", { exact: true }).fill("2");
+  await movement.locator(":scope > summary").click();
+  await rules.locator(":scope > summary").click();
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  const saved = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+  const definition = saved.tiles.find(tile => tile.id === 1).definition;
+  expect(definition.moveCost).toBe(3);
+  expect(definition.moveCostTop).toBe(4);
+  expect(definition.propertyRules.blocks[0].if.value).toBe(2);
+  expect(definition.futureAccordionTest).toEqual({ preserve: [0, "unchanged"] });
+  persistence.persist(saved);
+  await page.reload();
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  expect(await page.locator(".tile-capability-group").evaluateAll(nodes => nodes.every(node => !node.open))).toBe(true);
+  await page.locator(".tile-builder-section > summary").filter({ hasText: /^Capabilities$/ }).click();
+  await movement.locator(":scope > summary").click();
+  await rules.locator(":scope > summary").click();
+  await expect(movement.getByLabel("Shared movement cost", { exact: true })).toHaveValue("3");
+  await expect(rules.getByLabel("Block 1 IF value", { exact: true })).toHaveValue("2");
+});
+
+async function openCapabilitySections(page) {
+  for (const group of await page.locator(".tile-capability-group").all()) {
+    if (!await group.evaluate(node => node.open)) await group.locator(":scope > summary").click();
+  }
 }

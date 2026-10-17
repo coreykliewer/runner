@@ -440,7 +440,7 @@ function selectedValue() {
 
 function renderInspector({ preserveTileBuilderState = false } = {}) {
   const tileBuilderState = preserveTileBuilderState
-    ? [...elements.inspectorFields.querySelectorAll(".tile-builder-section, .tile-custom-properties")].map(section => section.open)
+    ? [...elements.inspectorFields.querySelectorAll(".tile-builder-section, .tile-capability-group, .tile-custom-properties")].map(section => section.open)
     : null;
   const record = store.get(activeDocument);
   const value = selectedValue();
@@ -469,7 +469,7 @@ function renderInspector({ preserveTileBuilderState = false } = {}) {
   if ((activeDocument === "tiles" || activeDocument === "numericTiles") && selection.kind === "entry") {
     renderVisualTileInspector(value);
     if (tileBuilderState) {
-      elements.inspectorFields.querySelectorAll(".tile-builder-section, .tile-custom-properties").forEach((section, index) => {
+      elements.inspectorFields.querySelectorAll(".tile-builder-section, .tile-capability-group, .tile-custom-properties").forEach((section, index) => {
         if (index < tileBuilderState.length) section.open = tileBuilderState[index];
       });
     }

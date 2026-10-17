@@ -17,6 +17,8 @@ async function setup(page, mutate = () => {}) {
 async function openCapabilities(page) {
   const section = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
   if (!await section.evaluate(node => node.open)) await section.locator(":scope > summary").click();
+  const rules = page.locator('.tile-capability-group[data-capability="propertyRules"]');
+  if (!await rules.evaluate(node => node.open)) await rules.locator(":scope > summary").click();
 }
 async function select(page, id) {
   await page.locator(`.tile-card[data-entry-key="numeric:${id}"]`).click();
