@@ -888,6 +888,13 @@ function sameMapDocument(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+// Native entry effects require durable consumption even inside a Roll transaction.
+// Unlike routine saves, failure propagates and prevents the next native attempt.
+function checkpointPropertyRuleEntry() {
+  if (!StateModule || !runner || !window.localStorage) throw new Error("Property effect checkpoint unavailable");
+  StateModule.saveState(buildPersistentGameState(), window.localStorage);
+}
+
 function mapStateHash(map) {
   return typeof map === "string" ? map : map ? JSON.stringify(map) : "";
 }
@@ -1096,7 +1103,18 @@ function runTutorialNarrative(context) {
 
   applyNarrativeState(result.state);
 
-  for (const action of result.actions || []) {
+  deliverNarrativeActions(result.actions || []);
+
+  checkStatAchievements();
+
+  if ((result.actions || []).length > 0) {
+    updateInfo();
+    savePersistentGameState();
+  }
+}
+
+function deliverNarrativeActions(actions) {
+  for (const action of actions) {
     if (action.type === "message" && action.text) {
       setMessage(action.text, {
         kind: "tutorial",
@@ -1107,12 +1125,6 @@ function runTutorialNarrative(context) {
     }
   }
 
-  checkStatAchievements();
-
-  if ((result.actions || []).length > 0) {
-    updateInfo();
-    savePersistentGameState();
-  }
 }
 
 function formatAchievementMessage(action) {
@@ -2197,11 +2209,50 @@ function getRuleDispatcher() {
     return { traceDetails: { amount, message, heartsAfter: runner.hearts, gameOver } };
   }, developmentTrace ? record => developmentTrace.record(record) : null, restoredTurn?.ledger || {}, {
     property_rules: (action, context) => {
-      const result = EncounterRulesModule.applyTileEntry(action, context.event, runner.properties, runner.propertyEntry);
+      if (gameOver) return { applied: false };
+      const result = action.rules?.version === 2
+        ? EncounterRulesModule.executeTileEntry(action, context.event, runner, {
+          checkpoint: checkpointPropertyRuleEntry,
+          isTerminal: () => gameOver || runner.hearts <= 0,
+          observe: record => developmentTrace?.record(record),
+          handlers: {
+            lose_hearts: effect => {
+              const message = `You lose ${effect.amount} heart${effect.amount === 1 ? "" : "s"}.`;
+              takeDamage(effect.amount, { deathMessage: message, traceContext: {
+                eventId: context.event.eventId, source: context.event.source, ruleId: context.rule.id,
+                sourceInstanceId: context.sourceInstanceId, entrySnapshot: context.event.before
+              } });
+              if (!gameOver) setMessage(message, { kind: "combat" });
+            },
+            narrative: effect => {
+              if (!NarrativeEventsModule) throw new Error("Narrative adapter unavailable");
+              const output = NarrativeEventsModule.applyNarrativeAction({ type: "message", text: effect.text, html: false }, buildNarrativeState());
+              applyNarrativeState(output.state);
+              deliverNarrativeActions(output.output ? [output.output] : []);
+            },
+            achievement: effect => {
+              if (!NarrativeEventsModule) throw new Error("Achievement adapter unavailable");
+              const before = buildAchievementState();
+              const output = NarrativeEventsModule.applyNarrativeAction({ ...effect, type: "achievement" }, before);
+              const newlyUnlocked = output.state !== before;
+              applyAchievementState(output.state);
+              if (newlyUnlocked) {
+                checkpointPropertyRuleEntry(); // Persist acquisition before announcing it.
+                deliverNarrativeActions(output.output ? [output.output] : []);
+              }
+            }
+          }
+        })
+        : EncounterRulesModule.applyTileEntry(action, context.event, runner.properties, runner.propertyEntry);
       if (result.applied) {
         runner.properties = result.properties;
         runner.propertyEntry = result.entryState;
         updateInfo();
+        if (action.rules?.version === 2) draw();
+      }
+      if (result.diagnostics?.some(item => item.code?.startsWith("native_"))) {
+        if (!gameOver) setMessage("A tile effect could not finish. Its remaining effects were stopped.");
+        console.warn("[Runner] Property effect stopped", result.diagnostics);
       }
       developmentTrace?.record({ type: "property_rules", eventId: context.event.eventId,
         source: context.event.source, evaluation: result.evaluation, diagnostics: result.diagnostics, applied: result.applied });
@@ -2446,6 +2497,7 @@ function applyFullGravity() {
     if (below.solid) break;
 
     enterRunnerCell(runner.x, runner.y + 1, "gravity_full");
+    if (gameOver) return;
     fell = true;
 
     const thisTile = tileDataAt(runner.x, runner.y);
@@ -2523,6 +2575,7 @@ function applyGravityAfterMove() {
   // --------------------------
   if (totalMovementPoints() > 0) {
     enterRunnerCell(runner.x, runner.y + 1, "gravity_step");
+    if (gameOver) return;
 
     const nowHere = tileDataAt(runner.x, runner.y);
 
@@ -2582,6 +2635,7 @@ function checkStandingHazard() {
 }
 
 function doBounceStep() {
+  if (gameOver) return;
   if (!runner.bouncePending) return;
   if (runner.bounceHeightRemaining <= 0) {
     runner.bouncePending = false;
@@ -2597,6 +2651,7 @@ function doBounceStep() {
     return;
   }
   enterRunnerCell(runner.x, runner.y - 1, "bounce");
+  if (gameOver) return;
   runner.bounceHeightRemaining--;
   handlePickupsAtCurrent();
   updateInfo(`Bounce ↑ (${runner.bounceHeightRemaining} left)`);
@@ -2676,6 +2731,7 @@ function forceDown() {
   const wasInWater = inWater();
 
   enterRunnerCell(runner.x, runner.y + 1, "force_down");
+  if (gameOver) return;
 
   const thisTile = tileDataAt(runner.x, runner.y);
   const nowInWater = (thisTile.gravity === false);
@@ -2773,6 +2829,7 @@ if (target.solid) {
 
   // --- APPLY MOVE ---
   enterRunnerCell(toX, toY, "turbo");
+  if (gameOver) return false;
 
   if (dy === 0 && dx !== 0) {
     logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
@@ -3054,6 +3111,7 @@ if (target.solid && !target.slope) {
 // Apply movement
 // ======================================================
 enterRunnerCell(toX, toY, isDiagonalJump ? "diagonal_jump" : dy === -1 ? "jump" : "walk");
+if (gameOver) return;
 
 // Movement logging
 if (dy === 0 && dx !== 0) {

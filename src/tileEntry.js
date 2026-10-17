@@ -1,10 +1,90 @@
-import { evaluatePropertyRules, validateRunnerProperties } from "./propertyRules.js";
+import { evaluatePropertyRules, createPropertyRuleExecution, validateRunnerProperties } from "./propertyRules.js";
 
 export function restorePropertyEntry(value, runId) {
+  const execution = restoreExecution(value?.execution);
   return value && typeof value.runId === "string" && value.runId.trim() &&
     Number.isSafeInteger(value.sequence) && value.sequence >= 0
-    ? { runId: value.runId, sequence: value.sequence }
+    ? { runId: value.runId, sequence: value.sequence, ...(execution ? { execution } : {}) }
     : typeof runId === "string" && runId.trim() ? { runId, sequence: 0 } : null;
+}
+
+function restoreExecution(value) {
+  if (!value || typeof value.eventId !== "string" ||
+      !["pending", "completed", "failed", "uncertain", "terminal"].includes(value.status)) return null;
+  const diagnostics = Array.isArray(value.diagnostics) ? value.diagnostics.filter(item =>
+    item && typeof item.code === "string" && typeof item.message === "string")
+    .map(item => ({ code: item.code, message: item.message })) : [];
+  if (value.status === "pending") diagnostics.unshift({ code: "native_outcome_uncertain_restore",
+    message: "A pending native attempt was restored; its entry remains consumed and will not be retried." });
+  return { eventId: value.eventId, status: value.status === "pending" ? "uncertain" : value.status,
+    effectKey: typeof value.effectKey === "string" ? value.effectKey : null,
+    diagnostics };
+}
+
+// Adapts the existing interpreter to authoritative state and strict checkpoints.
+// This function schedules no effects and never retries a consumed entry.
+export function executeTileEntry(action, event, runner, { checkpoint, handlers, isTerminal = () => false, observe = () => {} }) {
+  const previous = runner.propertyEntry;
+  if (event.runId !== previous.runId || event.entrySequence !== previous.sequence + 1) {
+    return { applied: false, diagnostics: [{ code: "entry_replay_or_out_of_order", eventId: event.eventId }] };
+  }
+  const execution = createPropertyRuleExecution(action.rules, event.before);
+  let step = execution.next();
+  const entry = { runId: event.runId, sequence: event.entrySequence,
+    execution: { eventId: event.eventId, status: "completed", effectKey: null, diagnostics: [] } };
+  runner.propertyEntry = entry;
+  const diagnostics = entry.execution.diagnostics;
+  let uncertain = false;
+  const report = (code, error) => {
+    const item = { code, message: String(error?.message || error) };
+    diagnostics.push(item);
+    try { observe({ type: "property_native_diagnostic", eventId: event.eventId, ...item }); } catch { /* Diagnostic only. */ }
+  };
+  while (!step.done) {
+    const request = step.value.effect;
+    runner.properties = step.value.evaluation.properties;
+    entry.execution.effectKey = request.effectKey;
+    entry.execution.status = "pending";
+    let status;
+    try {
+      checkpoint(); // Must succeed before a handler can cause any side effect.
+    } catch (error) {
+      report("native_checkpoint_before_failed", error);
+      status = "failed";
+    }
+    if (!status) {
+      try {
+        const handler = handlers[request.type];
+        if (typeof handler !== "function") throw new Error(`No native adapter for ${request.type}`);
+        handler(request.effect, request);
+        status = isTerminal() ? "terminal" : "applied";
+      } catch (error) {
+        uncertain = true;
+        report("native_effect_uncertain", error);
+        status = "failed";
+      }
+    }
+    entry.execution.status = uncertain ? "uncertain" : status === "applied" ? "completed" : status;
+    try { checkpoint(); } catch (error) {
+      uncertain = true;
+      entry.execution.status = "uncertain";
+      report("native_checkpoint_after_failed", error);
+      status = "failed";
+    }
+    try { observe({ type: "property_native_effect", eventId: event.eventId, source: event.source,
+      effectKey: request.effectKey, effect: request.effect, status: entry.execution.status, terminal: isTerminal() }); } catch { /* Diagnostic only. */ }
+    step = execution.next({ status });
+  }
+  const evaluation = step.value;
+  // Invalid definitions have no prefix to commit; runtime failures retain their prefix.
+  if (evaluation.status !== "invalid") runner.properties = evaluation.properties;
+  entry.execution.status = uncertain ? "uncertain" : evaluation.status === "completed" ? "completed" : evaluation.status === "terminal" ? "terminal" : "failed";
+  diagnostics.push(...evaluation.diagnostics.map(item => ({ code: item.code, message: item.message })));
+  try { checkpoint(); } catch (error) {
+    entry.execution.status = "uncertain";
+    report("native_checkpoint_final_failed", error);
+  }
+  return { applied: true, evaluation, diagnostics: [...diagnostics], entryState: entry, properties: runner.properties };
 }
 
 export function createTileEntryBatch({ entryState, from, to, cause, source, properties, rollId = null }) {

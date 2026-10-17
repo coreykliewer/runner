@@ -2,7 +2,7 @@ import { createTileSystemV2RuleDispatcher } from "./tileSystemV2RuleDispatcher.j
 import { calculateEncounterDistance, encounterPositionMatches } from "./encounterRules.js";
 export { evaluateEncounterExpression } from "./encounterRules.js";
 export { createDevelopmentTrace, developmentTraceEnabled } from "./developmentTrace.js";
-export { createTileEntryBatch, tileEntryRule, applyTileEntry, restorePropertyEntry } from "./tileEntry.js";
+export { createTileEntryBatch, tileEntryRule, applyTileEntry, executeTileEntry, restorePropertyEntry } from "./tileEntry.js";
 
 // Enabled authored encounters explicitly replace automatic legacy attacks at this source.
 export function encounterOwner(definition) {
