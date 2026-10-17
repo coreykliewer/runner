@@ -1,6 +1,7 @@
 import { decodeDiceEventBatch } from "./tileSystemV2.js";
 import { encounterConditionMatches } from "./encounterRules.js";
 import { decodeTurnEventBatch } from "./turnEvents.js";
+import { decodeTileEntryBatch } from "./tileEntry.js";
 
 export const MAX_CHILD_ACTIONS_PER_ROOT = 64;
 
@@ -264,6 +265,8 @@ export function conditionMatches(condition, event, context = {}) {
   if (!condition || typeof condition !== "object" || !event?.after) return false;
   const dice = event.after;
   switch (condition.type) {
+    case "tile_entry":
+      return event.type === "tile_entered";
     case "encounter":
       return encounterConditionMatches(condition.condition, { d1: dice.die1, d2: dice.die2 });
     case "dice_sum":
@@ -316,7 +319,8 @@ function normalizeBatches(batches) {
 
 function decodeAndFreezeBatch(batch, diagnostics) {
   try {
-    return freezeDeep(batch?.format === "runner.turn-event-batch" ? decodeTurnEventBatch(batch) : decodeDiceEventBatch(batch));
+    return freezeDeep(batch?.format === "runner.tile-entry-batch" ? decodeTileEntryBatch(batch)
+      : batch?.format === "runner.turn-event-batch" ? decodeTurnEventBatch(batch) : decodeDiceEventBatch(batch));
   } catch (error) {
     diagnostics.push(diagnostic("invalid_event_batch", error.message));
     return null;

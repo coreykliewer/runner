@@ -1,6 +1,7 @@
 # Runner Property Rules 1.0 — Stage A
 
-Baseline: `13818bf`. This milestone supplies a standalone JSON contract, validator,
+Baseline: `13818bf`; Stage A committed at `988ace8`. Stage B integration is described
+in [runner-property-rules-stage-b.md](runner-property-rules-stage-b.md). This milestone supplies a standalone JSON contract, validator,
 and deterministic evaluator. It does not activate property rules in gameplay or
 Studio, change production tiles, or alter saves. Existing encounters, dice and turn
 lifecycle retain their current owners.
@@ -15,11 +16,12 @@ An optional `propertyRules` field may be authored on a tile definition:
   "propertyRules": {
     "version": 1,
     "blocks": [
+      { "then": [{ "operation": "set", "property": "burning", "value": 1 }] },
       {
-        "if": { "property": "Wet", "operator": ">=", "value": 2 },
+        "if": { "property": "wet", "operator": ">=", "value": 2 },
         "then": [
-          { "operation": "subtract", "property": "Wet", "value": 2 },
-          { "operation": "add", "property": "Steam", "value": 1 }
+          { "operation": "subtract", "property": "burning", "value": 1 },
+          { "operation": "subtract", "property": "wet", "value": 2 }
         ]
       }
     ]
@@ -31,7 +33,7 @@ Property IDs are authored data, with no catalog or built-in environmental names.
 They are case-sensitive ASCII identifiers of 1–64 characters: a letter or
 underscore first, followed by letters, digits, underscores or hyphens. Whitespace,
 paths and the JavaScript prototype keys `__proto__`, `prototype`, `constructor` are
-rejected. `Wet`, `wet`, and any other valid identifier are distinct. These rules
+rejected. `charge`, `Charge`, and any other valid identifier are distinct. These rules
 describe numeric properties only; there is no implicit connection to native
 Runner fields such as hearts, counters, or inventory.
 
@@ -116,9 +118,10 @@ getters, cyclic structures, and unbounded hostile input are outside this contrac
 ## Fixtures and verification
 
 `fixtures/property-rules.json` contains Water, Air and Fire solely as test data:
-Water sets Wet to 3, Air reduces positive Wet by 1, and Fire consumes 2 Wet and
-adds Steam when entry Wet is sufficient. Fire's separate insufficient-Wet block
-sets Scorched. Absent Wet does not satisfy either conditional block.
+Water sets `wet` to 5. Air subtracts 1 when entry `wet > 0`. Fire first sets
+`burning` to 1, then subtracts 1 from `burning` and 2 from `wet` only when entry
+`wet >= 2`. At `wet = 1` there is no partial protection. Absent `wet` fails the IF.
+These fixture definitions supersede the initial Stage A examples.
 
 `tests/propertyRules.test.js` covers repeated entries, insufficient wetness,
 zero-clamping, all comparisons, cross-property writes, snapshot semantics, both

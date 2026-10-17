@@ -13,26 +13,25 @@ const enter = (name, properties) => evaluatePropertyRules(fixtures.tiles[name].p
 
 test("Water, Air and Fire are fixture-only data and repeated entries capture fresh snapshots", () => {
   const wet = enter("Water", {});
-  assert.deepEqual(wet.properties, { Wet: 3 });
-  assert.deepEqual(enter("Water", wet.properties).properties, { Wet: 3 });
+  assert.deepEqual(wet.properties, { wet: 5 });
+  assert.deepEqual(enter("Water", wet.properties).properties, { wet: 5 });
   const burning = enter("Fire", wet.properties);
-  assert.deepEqual(burning.entrySnapshot, { Wet: 3 });
-  assert.deepEqual(burning.properties, { Wet: 1, Steam: 1 });
-  assert.deepEqual(burning.blocks.map(item => item.matched), [true, false]);
-  // The second IF sees entry Wet=3, not the working Wet=1 left by the first block.
+  assert.deepEqual(burning.entrySnapshot, { wet: 5 });
+  assert.deepEqual(burning.properties, { wet: 3, burning: 0 });
+  assert.deepEqual(burning.blocks.map(item => item.matched), [true, true]);
   const nextEntry = enter("Fire", burning.properties);
-  assert.deepEqual(nextEntry.properties, { Wet: 1, Steam: 1, Scorched: 1 });
+  assert.deepEqual(nextEntry.properties, { wet: 1, burning: 0 });
   const dry = enter("Air", burning.properties);
-  assert.deepEqual(dry.properties, { Wet: 0, Steam: 1 });
-  assert.deepEqual(enter("Air", dry.properties).effects, []);
+  assert.deepEqual(dry.properties, { wet: 2, burning: 0 });
+  assert.deepEqual(enter("Air", { wet: 0 }).effects, []);
   assert.deepEqual(enter("Air", {}).properties, {});
 });
 
-test("insufficient wetness never consumes it or grants steam; absence does not satisfy a numeric IF", () => {
-  assert.deepEqual(enter("Fire", { Wet: 1 }).properties, { Wet: 1, Scorched: 1 });
-  assert.deepEqual(enter("Fire", { Wet: 0 }).properties, { Wet: 0, Scorched: 1 });
-  assert.deepEqual(enter("Fire", {}).properties, {});
-  assert.deepEqual(enter("Fire", { Wet: 2 }).properties, { Wet: 0, Steam: 1 });
+test("Fire sets burning first; insufficient wetness offers no partial protection", () => {
+  assert.deepEqual(enter("Fire", { wet: 1 }).properties, { wet: 1, burning: 1 });
+  assert.deepEqual(enter("Fire", { wet: 0 }).properties, { wet: 0, burning: 1 });
+  assert.deepEqual(enter("Fire", {}).properties, { burning: 1 });
+  assert.deepEqual(enter("Fire", { wet: 2 }).properties, { wet: 0, burning: 0 });
 });
 
 test("arbitrary property identifiers require no catalog or tile identity", () => {
@@ -40,10 +39,10 @@ test("arbitrary property identifiers require no catalog or tile identity", () =>
   assert.deepEqual(result.properties, { "arbitrary_charge-7": 4, _custom: 2 });
   const renamed = structuredClone(fixtures.tiles.Fire.propertyRules);
   for (const rule of renamed.blocks) {
-    rule.if.property = "a_new_property";
-    for (const action of rule.then) action.property = { Wet: "a_new_property", Steam: "another", Scorched: "third" }[action.property];
+    if (rule.if) rule.if.property = "a_new_property";
+    for (const action of rule.then) action.property = { wet: "a_new_property", burning: "another" }[action.property];
   }
-  assert.deepEqual(evaluatePropertyRules(renamed, { a_new_property: 3 }).properties, { a_new_property: 1, another: 1 });
+  assert.deepEqual(evaluatePropertyRules(renamed, { a_new_property: 3 }).properties, { a_new_property: 1, another: 0 });
 });
 
 test("Set, Add and Subtract clamp each result and subsequent effects use the clamped working value", () => {
@@ -112,7 +111,7 @@ test("equal boundary comparisons and acquired zero are explicit, including no-ch
 
 test("inputs remain untouched and results are independent, frozen, deterministic JSON", () => {
   const rules = structuredClone(fixtures.tiles.Fire.propertyRules);
-  const properties = { Wet: 3, other: 8 };
+  const properties = { wet: 3, other: 8 };
   const originalRules = structuredClone(rules);
   const originalProperties = structuredClone(properties);
   const result = evaluatePropertyRules(rules, properties);
@@ -122,12 +121,12 @@ test("inputs remain untouched and results are independent, frozen, deterministic
   assert.equal(Object.isFrozen(properties), false);
   assert.equal(Object.isFrozen(rules), false);
   rules.blocks[0].then[0].value = 99;
-  properties.Wet = 99;
-  assert.equal(result.entrySnapshot.Wet, 3);
-  assert.equal(result.effects[0].operand, 2);
-  assert.throws(() => { result.entrySnapshot.Wet = 0; }, TypeError);
-  assert.throws(() => { result.properties.Steam = 0; }, TypeError);
-  assert.throws(() => { result.blocks[0].comparison.actual = 0; }, TypeError);
+  properties.wet = 99;
+  assert.equal(result.entrySnapshot.wet, 3);
+  assert.equal(result.effects[0].operand, 1);
+  assert.throws(() => { result.entrySnapshot.wet = 0; }, TypeError);
+  assert.throws(() => { result.properties.burning = 9; }, TypeError);
+  assert.throws(() => { result.blocks[1].comparison.actual = 0; }, TypeError);
   assert.throws(() => { result.effects[0].after.value = 99; }, TypeError);
   assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
 });

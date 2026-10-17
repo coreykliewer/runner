@@ -1306,6 +1306,8 @@ runner = {
   achievements: carried.achievements || [],
   storyFlags: carried.storyFlags || {},
   narrativeEventsSeen: carried.narrativeEventsSeen || [],
+  properties: carried.properties || {},
+  propertyEntry: carried.propertyEntry || null,
   dead: false
 };
 
@@ -1327,6 +1329,7 @@ if (savedGameState?.runner) {
 
 ensureRunnerStats();
 ensureRunnerCounters();
+runner.propertyEntry = EncounterRulesModule?.restorePropertyEntry(runner.propertyEntry, crypto.randomUUID()) ?? runner.propertyEntry;
 
 if (savedGameState?.dice) {
   dieValue1 = savedGameState.dice.dieValue1 || 0;
@@ -2166,14 +2169,8 @@ function dispatcherOwnsEncounterAt(x, y) {
     sourceInstanceId: currentLevelKey + ":" + x + ":" + y + ":" + tile.id, source: { tileId: tile.id, x, y } });
   return owned;
 }
-function runEncounterRulesAtEvent(event, explicitBatches = null) {
-  const batches = explicitBatches ?? diceEventBatches.slice(encounterBatchCursor);
-  encounterBatchCursor = diceEventBatches.length;
-  if (gameOver || !EncounterRulesModule || !runner || !grid?.length) return;
-  developmentTrace?.record({ type: "action_boundary", phase: event,
-    actionIds: batches.map(batch => batch.actionId), player: { x: runner.x, y: runner.y },
-    finalDice: { die1: dieValue1, die2: dieValue2 } });
-  encounterDispatcher ||= EncounterRulesModule.createEncounterDispatcher((action, context) => {
+function getRuleDispatcher() {
+  return encounterDispatcher ||= EncounterRulesModule.createEncounterDispatcher((action, context) => {
     if (gameOver) return { applied: false };
     const dice = context.event.after;
     const amount = action.amountExpression == null ? action.amount : EncounterRulesModule.evaluateEncounterExpression(action.amountExpression, { d1: dice.die1, d2: dice.die2 });
@@ -2188,7 +2185,45 @@ function runEncounterRulesAtEvent(event, explicitBatches = null) {
     updateInfo();
     draw();
     return { traceDetails: { amount, message, heartsAfter: runner.hearts, gameOver } };
-  }, developmentTrace ? record => developmentTrace.record(record) : null, restoredTurn?.ledger || {});
+  }, developmentTrace ? record => developmentTrace.record(record) : null, restoredTurn?.ledger || {}, {
+    property_rules: (action, context) => {
+      const result = EncounterRulesModule.applyTileEntry(action, context.event, runner.properties, runner.propertyEntry);
+      if (result.applied) {
+        runner.properties = result.properties;
+        runner.propertyEntry = result.entryState;
+      }
+      developmentTrace?.record({ type: "property_rules", eventId: context.event.eventId,
+        source: context.event.source, evaluation: result.evaluation, diagnostics: result.diagnostics, applied: result.applied });
+      return { applied: result.applied, diagnostics: result.diagnostics, traceDetails: result.evaluation };
+    }
+  });
+}
+
+// The sole committed-cell boundary. Initialization and rollback are not entries.
+function enterRunnerCell(x, y, cause) {
+  if (runner.x === x && runner.y === y) return;
+  const from = { x: runner.x, y: runner.y };
+  runner.x = x;
+  runner.y = y;
+  if (!EncounterRulesModule) return;
+  const tile = getTileContextAt(x, y);
+  const source = { instanceId: `${currentLevelKey}:${x}:${y}:${tile.id}`, level: currentLevelKey,
+    tileId: tile.id, variant: tile.variant, x, y };
+  const batch = EncounterRulesModule.createTileEntryBatch({ entryState: runner.propertyEntry,
+    from, to: { x, y }, cause, source, properties: runner.properties, rollId: diceEngine?.getState().currentRollId ?? null });
+  developmentTrace?.record({ type: "tile_entry", batch });
+  getRuleDispatcher().dispatch({ batches: batch, rules: [EncounterRulesModule.tileEntryRule(source, tile.def)] });
+  savePersistentGameState({ checkpoint: true });
+}
+
+function runEncounterRulesAtEvent(event, explicitBatches = null) {
+  const batches = explicitBatches ?? diceEventBatches.slice(encounterBatchCursor);
+  encounterBatchCursor = diceEventBatches.length;
+  if (gameOver || !EncounterRulesModule || !runner || !grid?.length) return;
+  developmentTrace?.record({ type: "action_boundary", phase: event,
+    actionIds: batches.map(batch => batch.actionId), player: { x: runner.x, y: runner.y },
+    finalDice: { die1: dieValue1, die2: dieValue2 } });
+  getRuleDispatcher();
   const sources = [];
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
@@ -2399,7 +2434,7 @@ function applyFullGravity() {
 
     if (below.solid) break;
 
-    runner.y += 1;
+    enterRunnerCell(runner.x, runner.y + 1, "gravity_full");
     fell = true;
 
     const thisTile = tileDataAt(runner.x, runner.y);
@@ -2476,7 +2511,7 @@ function applyGravityAfterMove() {
   // Step Gravity (1 tile)
   // --------------------------
   if (totalMovementPoints() > 0) {
-    runner.y += 1;
+    enterRunnerCell(runner.x, runner.y + 1, "gravity_step");
 
     const nowHere = tileDataAt(runner.x, runner.y);
 
@@ -2550,7 +2585,7 @@ function doBounceStep() {
     runner.bouncePending = false;
     return;
   }
-  runner.y -= 1;
+  enterRunnerCell(runner.x, runner.y - 1, "bounce");
   runner.bounceHeightRemaining--;
   handlePickupsAtCurrent();
   updateInfo(`Bounce ↑ (${runner.bounceHeightRemaining} left)`);
@@ -2629,7 +2664,7 @@ function forceDown() {
   // ---------------------------------------------------
   const wasInWater = inWater();
 
-  runner.y += 1;
+  enterRunnerCell(runner.x, runner.y + 1, "force_down");
 
   const thisTile = tileDataAt(runner.x, runner.y);
   const nowInWater = (thisTile.gravity === false);
@@ -2726,8 +2761,7 @@ if (target.solid) {
   const prevY = runner.y;
 
   // --- APPLY MOVE ---
-  runner.x = toX;
-  runner.y = toY;
+  enterRunnerCell(toX, toY, "turbo");
 
   if (dy === 0 && dx !== 0) {
     logMessage(dx < 0 ? "Left" : "Right", { type: "move" });
@@ -3008,8 +3042,7 @@ if (target.solid && !target.slope) {
  // ======================================================
 // Apply movement
 // ======================================================
-runner.x = toX;
-runner.y = toY;
+enterRunnerCell(toX, toY, isDiagonalJump ? "diagonal_jump" : dy === -1 ? "jump" : "walk");
 
 // Movement logging
 if (dy === 0 && dx !== 0) {

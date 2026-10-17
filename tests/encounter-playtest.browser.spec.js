@@ -42,7 +42,8 @@ test("development scenario explains snapshots, boundaries, suppression, rerolls 
   expect(damage).toMatchObject({ actionId: action.actionId, amount: 1, snapshot: { die1: 0, die2: 3 }, source: { x: 2, y: 0, authoredRuleId: "second-high" } });
   expect(damage.sourceInstanceId).toBeTruthy();
   expect(trace.some(r => r.type === "legacy_hook_skipped" && r.sourceInstanceId === damage.sourceInstanceId)).toBe(true);
-  expect(trace.filter(r => r.type === "consequence_ordered").map(r => [r.priority, r.authorOrder])).toEqual([[10, 2], [0, 1]]);
+  // Entry-property consequences have their own action; retain the dice-action priority assertion.
+  expect(trace.filter(r => r.type === "consequence_ordered" && r.actionId === action.actionId).map(r => [r.priority, r.authorOrder])).toEqual([[10, 2], [0, 1]]);
   await page.locator("#btn-left").click();
   await expect(page.locator("#info")).toContainText("Hearts: 4");
   trace = await records(page);

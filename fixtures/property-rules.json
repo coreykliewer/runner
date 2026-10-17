@@ -4,23 +4,21 @@
     "Water": {
       "displayOnly": "An unrelated field retained by validation",
       "propertyRules": { "version": 1, "blocks": [
-        { "then": [{ "operation": "set", "property": "Wet", "value": 3 }] }
+        { "then": [{ "operation": "set", "property": "wet", "value": 5 }] }
       ] }
     },
     "Air": {
       "propertyRules": { "version": 1, "blocks": [
-        { "if": { "property": "Wet", "operator": ">", "value": 0 },
-          "then": [{ "operation": "subtract", "property": "Wet", "value": 1 }] }
+        { "if": { "property": "wet", "operator": ">", "value": 0 },
+          "then": [{ "operation": "subtract", "property": "wet", "value": 1 }] }
       ] }
     },
     "Fire": {
       "propertyRules": { "version": 1, "blocks": [
-        { "if": { "property": "Wet", "operator": ">=", "value": 2 }, "then": [
-          { "operation": "subtract", "property": "Wet", "value": 2 },
-          { "operation": "add", "property": "Steam", "value": 1 }
-        ] },
-        { "if": { "property": "Wet", "operator": "<", "value": 2 }, "then": [
-          { "operation": "set", "property": "Scorched", "value": 1 }
+        { "then": [{ "operation": "set", "property": "burning", "value": 1 }] },
+        { "if": { "property": "wet", "operator": ">=", "value": 2 }, "then": [
+          { "operation": "subtract", "property": "burning", "value": 1 },
+          { "operation": "subtract", "property": "wet", "value": 2 }
         ] }
       ] }
     }

@@ -1,3 +1,6 @@
+import { validateRunnerProperties } from "./propertyRules.js";
+import { restorePropertyEntry } from "./tileEntry.js";
+
 export const STATE_VERSION = 2;
 export const STORAGE_KEY = "runner:v2:state";
 
@@ -37,7 +40,9 @@ export function createInitialState(overrides = {}) {
       counters: {},
       stats: {},
       achievements: [],
-      storyFlags: {}
+      storyFlags: {},
+      properties: {},
+      propertyEntry: null
     },
     dice: {
       dieValue1: 0,
@@ -70,7 +75,9 @@ export function createCheckpointState(levelKey, runner = {}, dice = {}) {
     "stats",
     "achievements",
     "storyFlags",
-    "narrativeEventsSeen"
+    "narrativeEventsSeen",
+    "properties",
+    "propertyEntry"
   ]) {
     if (runner[key] !== undefined) persistentRunner[key] = runner[key];
   }
@@ -149,6 +156,8 @@ function encodeCarryProgress(runner) {
   if (Number(runner?.xp || 0) > 0) payload.xp = Number(runner.xp || 0);
   if (hasObjectEntries(runner?.counters)) payload.counters = runner.counters;
   if (hasObjectEntries(runner?.stats)) payload.stats = runner.stats;
+  if (hasObjectEntries(runner?.properties)) payload.properties = runner.properties;
+  if (runner?.propertyEntry) payload.propertyEntry = runner.propertyEntry;
   if (Array.isArray(runner?.achievements) && runner.achievements.length > 0) payload.achievements = runner.achievements;
   if (hasObjectEntries(runner?.storyFlags)) payload.storyFlags = runner.storyFlags;
   if (Array.isArray(runner?.narrativeEventsSeen) && runner.narrativeEventsSeen.length > 0) {
@@ -168,6 +177,8 @@ function decodeCarryProgress(value) {
 
   return {
     xp: Number.isFinite(xp) && xp >= 0 ? xp : 0,
+    ...(Object.hasOwn(payload, "properties") ? { properties: validProperties(payload.properties) } : {}),
+    ...(Object.hasOwn(payload, "propertyEntry") ? { propertyEntry: restorePropertyEntry(payload.propertyEntry, null) } : {}),
     counters: plainObjectOrEmpty(payload.counters),
     stats: plainObjectOrEmpty(payload.stats),
     achievements: Array.isArray(payload.achievements) ? payload.achievements : [],
@@ -262,7 +273,9 @@ export function migrateState(value) {
     version: STATE_VERSION,
     runner: {
       ...base.runner,
-      ...(value.runner || {})
+      ...(value.runner || {}),
+      properties: validProperties(value.runner?.properties ?? {}),
+      propertyEntry: restorePropertyEntry(value.runner?.propertyEntry, null)
     },
     dice: {
       ...base.dice,
@@ -274,3 +287,5 @@ export function migrateState(value) {
     }
   };
 }
+
+function validProperties(value) { return validateRunnerProperties(value).length ? {} : { ...value }; }
