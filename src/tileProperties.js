@@ -23,7 +23,8 @@ export const TILE_CAPABILITY_GROUPS = [
   { id: "hazards", label: "Damage and Hazards", properties: ["insideDamage", "topDamage"] },
   { id: "rewards", label: "Items and Rewards", properties: ["pickupType", "effects", "grantStats", "tags"] },
   { id: "messaging", label: "Text and Messaging", properties: ["hint", "signMessage", "signHtml", "deathMessage", "pickupMessage", "logKind", "logHtml"] },
-  { id: "encounters", label: "Encounter Rules", properties: ["encounterRules"] }
+  { id: "encounters", label: "Encounter Rules", properties: ["encounterRules"] },
+  { id: "propertyRules", label: "Property Rules", properties: ["propertyRules"] }
 ];
 
 const property = (category, type, initialValue, runtimeDefault, status, description, options = {}) => ({
@@ -103,6 +104,8 @@ export const TILE_PROPERTY_DEFINITIONS = {
     "The runtime normalizes this identifier, but no current gameplay effect is confirmed.", { label: "Auto-push target" }),
   encounterRules: property("advanced", "object", createDefaultEncounterRules(), "disabled", ACTIVE,
     "Optional, reusable trigger-condition-action rules for this tile. No encounter behavior runs unless enabled.", { label: "Encounter rules" }),
+  propertyRules: property("advanced", "object", { version: 1, blocks: [] }, "no entry effects", ACTIVE,
+    "Ordered Runner property changes on successful tile entry, including movement and gravity. IF reads the entry snapshot.", { label: "Property rules" }),
 };
 
 export function getTilePropertyStatusLabel(status) {

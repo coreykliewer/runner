@@ -8,6 +8,7 @@ import {
 } from "../tileProperties.js";
 import { renderJsonEditor } from "./fieldEditor.js";
 import { renderEncounterRuleEditor } from "./encounterRuleEditor.js";
+import { renderPropertyRuleEditor, collectPropertyNames } from "./propertyRuleEditor.js";
 import { VARIANT_BUCKETS } from "../shared/variants.js";
 
 const supportedNames = Object.keys(TILE_PROPERTY_DEFINITIONS);
@@ -285,6 +286,11 @@ export function renderTilePropertyEditor(container, {
       preview.textContent = inherited
         ? `Inherited value: ${formatValue(currentValue)}`
         : `Runtime default: ${effectiveDefault(propertyName, metadata, baseDefinition, definition)}`;
+      if (propertyName === "propertyRules" && inherited) {
+        preview.textContent = "Inherited property rules from the base tile. Override to edit; removing the override restores inheritance.";
+        renderPropertyRuleEditor(row, { value: currentValue, readOnly: true,
+          propertyNames: collectPropertyNames([...copySources.map(tile => tile.definition), base, definition]) });
+      }
       row.append(preview);
       const add = document.createElement("button");
       add.type = "button";
@@ -308,6 +314,14 @@ export function renderTilePropertyEditor(container, {
       next[propertyName] = cloneJson(nextValue);
       commit(next, rerender);
     };
+    if (propertyName === "propertyRules") {
+      const editor = document.createElement("div");
+      renderPropertyRuleEditor(editor, { value: currentValue,
+        propertyNames: collectPropertyNames([...copySources.map(tile => tile.definition), base, definition]),
+        onChange: (nextValue, rerender) => update(nextValue, rerender) });
+      parent.append(editor);
+      return;
+    }
     if (propertyName === "encounterRules") {
       const editor = document.createElement("div");
       editor.className = "tile-nested-editor encounter-property-editor";

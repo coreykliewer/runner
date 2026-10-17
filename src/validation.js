@@ -6,6 +6,7 @@ import { validateNumericTileRegistry } from "./numericTileRegistry.js";
 import { NUMERIC_MAP_FORMAT, validateNumericMap } from "./numericMapCodec.js";
 import { TILE_PROPERTY_DEFINITIONS } from "./tileProperties.js";
 import { validateEncounterRules as validateEncounterRuleData } from "./encounterRules.js";
+import { validateTilePropertyRules } from "./propertyRules.js";
 
 export function validateTiles(tiles) {
   if (tiles?.format === "runner.numeric-tile-registry") {
@@ -79,6 +80,7 @@ export function validateTiles(tiles) {
 
 function validateTileProperties(def, path) {
   const issues = [];
+  issues.push(...validateTilePropertyRules(def, path));
   if (def.encounterRules != null) {
     try {
       for (const encounterIssue of validateEncounterRuleData(def.encounterRules, `${path}.encounterRules`)) {

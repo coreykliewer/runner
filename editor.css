@@ -421,3 +421,22 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 }
 
 .encounter-preserved pre { max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.property-rule-editor { min-width: 0; }
+.property-rule-builder { min-width: 0; padding: 10px; border: 1px solid var(--line, #ccc); }
+.property-rule-block, .property-rule-effect, .property-rule-preview { min-width: 0; margin: 10px 0; padding: 10px; border: 1px solid var(--line, #ccc); border-radius: 5px; }
+.property-rule-effect { background: rgba(128, 128, 128, .04); }
+.property-rule-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.property-rule-field { display: grid; gap: 4px; margin: 8px 0; min-width: 0; }
+.property-rule-field input, .property-rule-field select, .property-rule-sample > input { width: 100%; min-width: 0; }
+.property-rule-toggle { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+.property-rule-toggle input { width: auto; }
+.property-rule-error { color: #9d2424; overflow-wrap: anywhere; }
+.property-rule-field [aria-invalid="true"] { outline: 2px solid #9d2424; }
+.property-rule-help, .property-rule-status { font-size: 12px; line-height: 1.5; }
+.property-rule-editor pre { max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.property-rule-sample { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(60px, .6fr); gap: 6px; align-items: center; margin: 8px 0; }
+.property-rule-sample button { grid-column: 1 / -1; justify-self: start; }
+.property-rule-results { width: 100%; border-collapse: collapse; font-size: 12px; }
+.property-rule-results th, .property-rule-results td { border: 1px solid var(--line, #ccc); padding: 5px; overflow-wrap: anywhere; }
+.property-rule-preview-result { overflow-wrap: anywhere; }
