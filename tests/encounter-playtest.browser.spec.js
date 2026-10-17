@@ -52,9 +52,7 @@ test("development scenario explains snapshots, boundaries, suppression, rerolls 
   await expect(page.locator("#info")).toContainText("Times rolled: 2");
   await expect(page.locator("#log")).toContainText("Final roll!");
   trace = await records(page);
-  expect(trace.find(r => r.type === "player_action" && r.action === "early_reroll")).toMatchObject({ discardedTime: 2, timeCost: 0 });
-  await page.locator("#roll").click();
-  expect((await records(page)).some(r => r.type === "roll_limit" && r.outcome === "blocked_with_time_remaining")).toBe(true);
+  expect(trace.find(r => r.type === "player_action" && r.action === "end_turn" && r.discardedTime > 0)).toMatchObject({ discardedTime: 2, timeCost: 0 });
   await page.locator("#btn-right").click();
   await expect(page.locator("#info")).toContainText("Hearts: 3");
   await expect(page.locator("#info")).toContainText("Moves: 0");
@@ -100,13 +98,13 @@ test("generic damage feedback omits an intermediate triggering condition", async
   expect(damage.message).toBe("You take 1 damage.");
 });
 
-test("early reroll can attack from a mixed old/new snapshot that differs from the displayed roll", async ({ page }) => {
+test("end-turn zeroing can attack from an intermediate snapshot before the new roll", async ({ page }) => {
   const { registry } = createEncounterPlaytest(JSON.parse(await readFile("tiles2.legacy.json", "utf8")));
   const creature = registry.tiles.find(tile => tile.name === "Snapshot sentinel");
   const rule = creature.definition.encounterRules.rules[1];
-  rule.trigger.events = ["after_roll"];
-  rule.conditions = [{ type: "expression", expression: "d1 == 1 && d2 == 4" }];
-  rule.actions[0].message = "Sentinel catches the reroll at (1,4).";
+  rule.trigger.events = ["dice_changed"];
+  rule.conditions = [{ type: "expression", expression: "d1 == 0 && d2 == 4" }];
+  rule.actions[0].message = "Sentinel catches the closing turn at (0,4).";
   creature.definition.encounterRules.rules = [rule];
   await page.route("**/tiles2.json*", route => route.fulfill({ json: registry }));
   await open(page);
@@ -118,11 +116,11 @@ test("early reroll can attack from a mixed old/new snapshot that differs from th
   await expect(page.locator("#die2")).toHaveText("2");
   const trace = await records(page);
   const damage = trace.find(r => r.type === "damage_applied");
-  expect(damage.snapshot).toEqual({ die1: 1, die2: 4 });
+  expect(damage.snapshot).toEqual({ die1: 0, die2: 4 });
   const boundary = trace.find(r => r.type === "action_boundary" && r.actionIds.includes(damage.actionId));
   expect(boundary.traceSequence).toBeLessThan(damage.traceSequence);
   expect(trace.filter(r => r.type === "damage_applied")).toHaveLength(1);
-  expect(trace.find(r => r.type === "player_action" && r.action === "early_reroll").discardedTime).toBe(6);
+  expect(trace.find(r => r.type === "player_action" && r.action === "end_turn" && r.discardedTime > 0).discardedTime).toBe(6);
 });
 
 test("lethal encounter uses the existing death flow once at the resolved movement boundary", async ({ page }) => {

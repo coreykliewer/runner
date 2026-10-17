@@ -217,8 +217,8 @@ test("voluntary rerolls discard remaining time and increment the existing roll c
   await expect(page.locator("#info")).toContainText("Times rolled: 2");
   await expect(page.locator("#info")).toContainText("Rolls used: 2 (67%)");
   const rerollBatch = await page.evaluate(() => window.getRunnerDiceEventBatches().at(-1));
-  expect(rerollBatch.events.map(event => event.type)).toEqual(["die_rerolled", "die_rerolled"]);
-  expect(rerollBatch.events[0].before).toEqual({ die1: 6, die2: 6 });
+  expect(rerollBatch.events.map(event => event.type)).toEqual(["die_rolled", "die_rolled"]);
+  expect(rerollBatch.events[0].before).toEqual({ die1: 0, die2: 0 });
   expect(rerollBatch.events[1].after).toEqual({ die1: 1, die2: 1 });
 });
 
@@ -391,7 +391,7 @@ test("the final permitted roll grants movement and can complete the level", asyn
   await expect(page.locator("#info")).toContainText("Moves: 2");
   await expect(page.locator("#info")).toContainText("Rolls used: 1 (100%)");
   await expect(page.locator("#log")).not.toContainText("Game over");
-  await page.getByRole("button", { name: "Roll Dice" }).click();
+
   await expect(page.locator("#info")).toContainText("Moves: 2");
   await expect(page.locator("#info")).toContainText("Times rolled: 1");
   await expect(page.locator("#log")).not.toContainText("Game over");
@@ -404,9 +404,15 @@ test("the final permitted roll grants movement and can complete the level", asyn
   await page.locator("#btn-right").click();
   await expect(page.locator("#log")).toContainText("Right");
   await expect(page.locator("#info")).toContainText("Moves: 1");
-  await page.locator("#btn-right").click();
+  await Promise.all([page.waitForEvent("load"), page.locator("#btn-right").click()]);
   await page.waitForURL(/level=destination/);
   await expect(page.locator("#log")).not.toContainText("Out of rolls");
+  // Movement exits route to the destination; they do not terminate via Roll's objective branch.
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
+  const destinationCheckpoint = await page.evaluate(() => JSON.parse(localStorage.getItem("runner:v2:state")));
+  expect(destinationCheckpoint.levelKey).toBe("destination");
+  expect(destinationCheckpoint.turn.outcome).toBeNull();
+  await expect(page.locator("#log")).not.toContainText("Level complete.");
 });
 
 test("death occurs once when another roll is needed and none remain", async ({ page }) => {

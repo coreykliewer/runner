@@ -1,4 +1,5 @@
 import { resolveDiceCapacities, validateDiceEventBatch } from "./tileSystemV2.js";
+import { createTurnEndedBatch } from "./turnEvents.js";
 
 const DICE = ["die1", "die2"];
 
@@ -9,7 +10,8 @@ export function createTileSystemV2DiceEngine({
   selectedDie = "die1",
   playerRollLimit = null,
   playerRollCount = 0,
-  currentRollId = null
+  currentRollId = null,
+  turnPhase = null
 } = {}) {
   const capacities = resolveDiceCapacities(registry, level);
   validateCapacities(capacities);
@@ -22,13 +24,16 @@ export function createTileSystemV2DiceEngine({
   }
 
   const startingDice = validateDiceRecord(initialDice, capacities, { allowZero: true });
+  if (turnPhase != null && !["idle", "active", "closed"].includes(turnPhase)) throw new TypeError("Invalid turn phase.");
+  if (turnPhase === "closed" && sumDice(startingDice) !== 0) throw new TypeError("A closed turn must have zero remaining time.");
   let state = freezeDeep({
     dice: startingDice,
     capacities: { ...capacities },
     selectedDie,
     playerRollCount,
     playerRollLimit,
-    currentRollId: currentRollId ?? (sumDice(startingDice) > 0 ? "initial-roll" : null)
+    currentRollId: currentRollId ?? (sumDice(startingDice) > 0 || playerRollCount > 0 ? "initial-roll" : null),
+    turnPhase: turnPhase ?? (sumDice(startingDice) > 0 || playerRollCount > 0 ? "active" : "idle")
   });
 
   function getState() {
@@ -40,6 +45,7 @@ export function createTileSystemV2DiceEngine({
     selectDie,
     spendTime,
     changeDice,
+    endTurn,
     startRoll,
     earlyReroll,
     canStartRoll
@@ -52,7 +58,20 @@ export function createTileSystemV2DiceEngine({
   }
 
   function canStartRoll() {
-    return sumDice(state.dice) === 0 && !rollLimitReached(state);
+    return state.turnPhase !== "active" && sumDice(state.dice) === 0 && !rollLimitReached(state);
+  }
+
+  function endTurn({ actionId } = {}) {
+    const valid = validateActionIdentity(actionId, null);
+    if (valid) return failure("invalid-action", valid);
+    if (state.turnPhase !== "active") return success(null, { lifecycleBatch: null, discardedTime: 0 });
+    const discardedTime = sumDice(state.dice);
+    const result = changeDice({ actionId, source: { kind: "end_turn" },
+      changes: DICE.map(die => ({ die, operation: "set", value: 0 })) });
+    if (!result.ok) return result;
+    state = freezeDeep({ ...state, turnPhase: "closed" });
+    return success(result.batch, { discardedTime,
+      lifecycleBatch: createTurnEndedBatch(`${actionId}:lifecycle`, state.currentRollId, state.dice) });
   }
 
   function spendTime({ actionId, cost, source = { kind: "time_spend" }, parentActionId = null } = {}) {
@@ -124,7 +143,8 @@ export function createTileSystemV2DiceEngine({
   function startRoll({ actionId, values, source = { kind: "player_roll" } } = {}) {
     const valid = validateActionIdentity(actionId, null);
     if (valid) return failure("invalid-action", valid);
-    if (sumDice(state.dice) > 0) return failure("unused-time-remains", "Use earlyReroll while unused time remains.");
+    if (sumDice(state.dice) > 0) return failure("unused-time-remains", "End the current turn before rolling again.");
+    if (state.turnPhase === "active") return failure("end-turn-required", "Resolve the current turn before rolling again.");
     if (rollLimitReached(state)) return failure("roll-limit-reached", "The configured player roll limit has been reached.");
     const newValues = validateRolledDice(values, state.capacities);
     if (newValues.error) return failure("invalid-roll", newValues.error);
@@ -138,7 +158,7 @@ export function createTileSystemV2DiceEngine({
     if (rollLimitReached(state)) return failure("roll-limit-reached", "The configured player roll limit has been reached.");
     const newValues = validateRolledDice(values, state.capacities);
     if (newValues.error) return failure("invalid-roll", newValues.error);
-    return commitRoll({ actionId, values: newValues.dice, source, eventType: "die_rerolled" });
+    return failure("end-turn-required", "End the current turn and resolve its consequences before starting a new roll.");
   }
 
   function commitRoll({ actionId, values, source, eventType }) {
@@ -168,7 +188,7 @@ export function createTileSystemV2DiceEngine({
     const batch = makeBatch({ actionId, parentActionId: null, rollId, events });
     const batchIssues = validateDiceEventBatch(batch);
     if (batchIssues.length) return failure("invalid-event-batch", batchIssues.map(item => `${item.path}: ${item.message}`).join("; "));
-    state = freezeDeep({ ...state, dice: nextDice, playerRollCount: nextRollCount, currentRollId: rollId });
+    state = freezeDeep({ ...state, dice: nextDice, playerRollCount: nextRollCount, currentRollId: rollId, turnPhase: "active" });
     return success(batch, { playerRollCount: nextRollCount, remainingTime: sumDice(state.dice), discardedTime: eventType === "die_rerolled" ? sumDice(batch.events[0].before) : 0 });
   }
 

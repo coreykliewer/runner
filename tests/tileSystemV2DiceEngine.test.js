@@ -84,24 +84,16 @@ describe("Phase 2A dice/time transaction engine", () => {
     assert.equal(engine.changeDice({ actionId: "receive-2", changes: [{ die: "die2", operation: "add", amount: 1 }] }).ok, false);
   });
 
-  it("emits two ordered reroll events when a value is unchanged and charges one roll", () => {
-    const engine = createTileSystemV2DiceEngine({
-      registry: registry(),
-      initialDice: { die1: 4, die2: 2 },
-      playerRollCount: 1,
-      playerRollLimit: 3,
-      currentRollId: "roll-1"
-    });
-    const result = engine.earlyReroll({ actionId: "reroll-1", values: { die1: 4, die2: 5 } });
-    assert.equal(result.ok, true);
-    assert.equal(result.discardedTime, 6);
+  it("requires resolved end-turn consequences before a new roll", () => {
+    const engine = createTileSystemV2DiceEngine({ registry: registry(), initialDice: { die1: 4, die2: 2 }, playerRollCount: 1 });
+    assert.equal(engine.earlyReroll({ actionId: "direct", values: { die1: 4, die2: 5 } }).code, "end-turn-required");
+    const closing = engine.endTurn({ actionId: "close" });
+    assert.equal(closing.discardedTime, 6);
+    assert.deepEqual(closing.batch.events.map(e => e.after), [{ die1: 0, die2: 2 }, { die1: 0, die2: 0 }]);
+    const result = engine.startRoll({ actionId: "next", values: { die1: 4, die2: 5 } });
     assert.equal(result.state.playerRollCount, 2);
-    assert.equal(result.batch.events.length, 2);
-    assert.deepEqual(result.batch.events.map(event => event.type), ["die_rerolled", "die_rerolled"]);
-    assert.deepEqual(result.batch.events.map(event => event.valueChanged), [false, true]);
-    assert.deepEqual(result.batch.events[0].before, { die1: 4, die2: 2 });
-    assert.deepEqual(result.batch.events[0].after, { die1: 4, die2: 2 });
-    assert.deepEqual(result.batch.events[1].after, { die1: 4, die2: 5 });
+    assert.deepEqual(result.batch.events.map(e => e.type), ["die_rolled", "die_rolled"]);
+    assert.deepEqual(result.batch.events[0].before, { die1: 0, die2: 0 });
   });
 
   it("enforces roll limit and distinguishes normal rolls from early rerolls", () => {

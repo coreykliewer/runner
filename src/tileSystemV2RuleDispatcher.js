@@ -1,5 +1,6 @@
 import { decodeDiceEventBatch } from "./tileSystemV2.js";
 import { encounterConditionMatches } from "./encounterRules.js";
+import { decodeTurnEventBatch } from "./turnEvents.js";
 
 export const MAX_CHILD_ACTIONS_PER_ROOT = 64;
 
@@ -7,15 +8,17 @@ export function createTileSystemV2RuleDispatcher({
   effectHandlers = {},
   relationMatcher = null,
   observer = null,
+  initialLedger = {},
   maxChildActions = MAX_CHILD_ACTIONS_PER_ROOT
 } = {}) {
   if (!Number.isSafeInteger(maxChildActions) || maxChildActions < 0 || maxChildActions > MAX_CHILD_ACTIONS_PER_ROOT) {
     throw new TypeError(`maxChildActions must be an integer from 0 to ${MAX_CHILD_ACTIONS_PER_ROOT}.`);
   }
 
-  const processedEventIds = new Set();
-  const appliedConsequenceKeys = new Set();
-  const attackerRollKeys = new Set();
+  const processedEventIds = new Set(initialLedger.processedEventIds || []);
+  const appliedConsequenceKeys = new Set(initialLedger.appliedConsequenceKeys || []);
+  const attackerRollKeys = new Set(initialLedger.attackerRollKeys || []);
+  const turnActivationKeys = new Set(initialLedger.turnActivationKeys || []);
 
   // Diagnostics cannot mutate an event or interrupt encounter resolution.
   function observe(type, details) {
@@ -106,6 +109,11 @@ export function createTileSystemV2RuleDispatcher({
         const usesAttackGuard = rule.activation?.scope === "attacker_per_player_roll" ||
           (rule.activation?.scope == null && (rule.actions || []).some(action => action?.type === "damage" && (action.target == null || action.target === "runner")));
         const attackKey = `${consequence.rollId}|${sourceInstanceId ?? ""}`;
+        const turnKey = `${consequence.rollId}|${rule.id}|${sourceInstanceId ?? "global"}`;
+        if (rule.activation?.scope === "once_per_turn" && turnActivationKeys.has(turnKey)) {
+          observe("consequence_suppressed", { ...details, reason: "once_per_turn" });
+          continue;
+        }
         if (appliedConsequenceKeys.has(consequence.consequenceKey)) continue;
         if (usesAttackGuard) {
           if (!sourceInstanceId) {
@@ -144,6 +152,10 @@ export function createTileSystemV2RuleDispatcher({
             })) || {};
           } catch (error) {
             diagnostics.push(diagnostic("effect_handler_error", `Effect '${effect?.type}' failed: ${error.message}`, consequence));
+            continue;
+          }
+          if (result.applied === false) {
+            observe("consequence_suppressed", { ...details, effectIndex, reason: "handler_declined" });
             continue;
           }
           consequenceApplied = true;
@@ -190,7 +202,10 @@ export function createTileSystemV2RuleDispatcher({
             });
           }
         }
-        if (consequenceApplied) appliedConsequenceKeys.add(consequence.consequenceKey);
+        if (consequenceApplied) {
+          appliedConsequenceKeys.add(consequence.consequenceKey);
+          if (rule.activation?.scope === "once_per_turn") turnActivationKeys.add(turnKey);
+        }
       }
       batchQueue.push(...childQueue);
     }
@@ -210,7 +225,8 @@ export function createTileSystemV2RuleDispatcher({
     return freezeDeep({
       processedEventIds: [...processedEventIds],
       appliedConsequenceKeys: [...appliedConsequenceKeys],
-      attackerRollKeys: [...attackerRollKeys]
+      attackerRollKeys: [...attackerRollKeys],
+      turnActivationKeys: [...turnActivationKeys]
     });
   }
 }
@@ -300,7 +316,7 @@ function normalizeBatches(batches) {
 
 function decodeAndFreezeBatch(batch, diagnostics) {
   try {
-    return freezeDeep(decodeDiceEventBatch(batch));
+    return freezeDeep(batch?.format === "runner.turn-event-batch" ? decodeTurnEventBatch(batch) : decodeDiceEventBatch(batch));
   } catch (error) {
     diagnostics.push(diagnostic("invalid_event_batch", error.message));
     return null;

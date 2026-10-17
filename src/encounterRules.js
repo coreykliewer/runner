@@ -1,4 +1,4 @@
-export const ENCOUNTER_EVENTS = ["after_move", "after_roll"];
+export const ENCOUNTER_EVENTS = ["after_move", "after_roll", "dice_changed", "turn_ended"];
 export const ENCOUNTER_DISTANCE_MODES = ["manhattan", "chebyshev"];
 export const ENCOUNTER_POSITIONS = ["any", "player_above", "player_below", "player_left", "player_right"];
 export const ENCOUNTER_REPEAT_MODES = ["every_event", "once_per_roll"];
@@ -156,6 +156,11 @@ export function validateEncounterRules(value, path = "encounterRules") {
     if (typeof rule.id !== "string" || !rule.id.trim()) add(`${rulePath}.id`, "Rule id is required.");
     else if (ids.has(rule.id)) add(`${rulePath}.id`, "Rule id must be unique.");
     else ids.add(rule.id);
+    if (rule.activation != null && (!isPlainObject(rule.activation) ||
+        !["once_per_turn", "attacker_per_player_roll"].includes(rule.activation.scope) ||
+        (rule.activation.scope === "once_per_turn" && !rule.trigger?.events?.every(event => event === "turn_ended")))) {
+      add(`${rulePath}.activation`, "Use attacker_per_player_roll, or once_per_turn for explicit turn_ended effects only.");
+    }
     if (rule.priority != null && !Number.isSafeInteger(rule.priority)) add(`${rulePath}.priority`, "Rule priority must be an integer.");
     if (!Number.isSafeInteger(rule.order) || rule.order < 1) add(`${rulePath}.order`, "Rule order must be a positive integer.");
     else if (orders.has(rule.order)) add(`${rulePath}.order`, "Rule order must be unique.");

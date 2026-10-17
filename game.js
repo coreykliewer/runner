@@ -3,7 +3,9 @@
 // ================================================ = == = ========
 // Dice display + spin
 // ============================================================
+let diceDisplayRevision = 0;
 window.updateDiceDisplay = function(a, b, shouldSpin = true) {
+  const revision = ++diceDisplayRevision;
   const die1 = document.getElementById("die1");
   const die2 = document.getElementById("die2");
 
@@ -18,6 +20,7 @@ window.updateDiceDisplay = function(a, b, shouldSpin = true) {
   }
 
   setTimeout(() => {
+    if (revision !== diceDisplayRevision) return;
     die1.textContent = a;
     die2.textContent = b;
   }, shouldSpin ? 250 : 0);
@@ -51,6 +54,9 @@ let gameOver = false;
 let encounterDispatcher = null;
 let encounterBatchCursor = 0;
 let developmentTrace = null;
+let turnTransaction = false;
+let turnOutcome = null;
+let restoredTurn = null;
 let rollCount = 0;
 let dieValue1 = 0;
 let dieValue2 = 0;
@@ -838,16 +844,24 @@ function parseCarryNumber(value, fallback) {
 
 function buildPersistentGameState() {
   if (!StateModule?.createCheckpointState || !runner) return null;
-  return StateModule.createCheckpointState(currentLevelKey || "default", runner, {
+  const checkpoint = StateModule.createCheckpointState(currentLevelKey || "default", runner, {
     dieValue1,
     dieValue2,
     selectedDie,
     rollCount
   });
+  const diceState = diceEngine?.getState();
+  checkpoint.turn = {
+    rollId: diceState?.currentRollId ?? null,
+    phase: diceState?.turnPhase ?? "idle",
+    outcome: turnOutcome,
+    ledger: encounterDispatcher?.getLedgerSnapshot() ?? restoredTurn?.ledger ?? {}
+  };
+  return checkpoint;
 }
 
 function savePersistentGameState({ checkpoint = false } = {}) {
-  if (!checkpoint) return;
+  if (!checkpoint || turnTransaction) return;
   if (!StateModule || !runner) return;
   if (!sameMapDocument(getLevelMap(currentLevelKey), currentMapString)) return;
 
@@ -1324,7 +1338,11 @@ if (savedGameState?.dice) {
   updateDiceDisplay(dieValue1, dieValue2, false);
 }
 
+restoredTurn = savedGameState?.turn || null;
+turnOutcome = restoredTurn?.outcome || null;
+if (!turnOutcome && runner.hearts <= 0) turnOutcome = { kind: "death", message: "Run ended." };
 initializeDiceEngine();
+if (turnOutcome) { gameOver = true; runner.dead = turnOutcome.kind === "death"; }
 
 runTutorialNarrative({
   type: "level_start",
@@ -1334,7 +1352,7 @@ runTutorialNarrative({
 if (isFogEnabled()) initFogForCurrentGrid();
 else fog = null;
 
-updateInfo();
+updateInfo(turnOutcome?.message || "");
 savePersistentGameState({ checkpoint: true });
 const resumeLinkButton = document.getElementById("create-resume-link");
 if (resumeLinkButton) resumeLinkButton.disabled = false;
@@ -1794,6 +1812,7 @@ function createGameDiceEngine({
   selected = selectedDie || "die1",
   playerRollCount = rollCount,
   currentRollId = null,
+  turnPhase = null,
   playerRollLimit = isLevelObjectiveComplete() ? null : getLevelRollLimit()
 } = {}) {
   const sourceRegistry = NormalizedTileRegistry?.registry || {};
@@ -1824,7 +1843,8 @@ function createGameDiceEngine({
     selectedDie: ["die1", "die2"].includes(selected) ? selected : "die1",
     playerRollLimit,
     playerRollCount,
-    currentRollId
+    currentRollId,
+    turnPhase
   });
 }
 
@@ -1832,7 +1852,7 @@ function initializeDiceEngine() {
   diceEventBatches.length = 0;
   encounterBatchCursor = 0;
   encounterDispatcher = null;
-  diceEngine = createGameDiceEngine();
+  diceEngine = createGameDiceEngine({ currentRollId: restoredTurn?.rollId, turnPhase: restoredTurn?.phase });
   const state = diceEngine.getState();
   dieValue1 = state.dice.die1;
   dieValue2 = state.dice.die2;
@@ -1849,13 +1869,15 @@ function synchronizeDiceEngineRollLimit() {
     selected: state.selectedDie,
     playerRollCount: state.playerRollCount,
     currentRollId: state.currentRollId,
+    turnPhase: state.turnPhase,
     playerRollLimit
   });
 }
 
 function applyDiceEngineResult(result, action = {}) {
   developmentTrace?.record({ type: "player_action", ...action, ok: result.ok,
-    actionId: result.batch?.actionId, rollId: result.batch?.rollId,
+    actionId: result.batch?.actionId ?? result.lifecycleBatch?.actionId,
+    rollId: result.batch?.rollId ?? result.lifecycleBatch?.rollId,
     error: result.code, diagnostics: result.diagnostics, spent: result.spent, discardedTime: result.discardedTime,
     position: runner && { x: runner.x, y: runner.y } });
   if (!result.ok) return false;
@@ -2144,15 +2166,15 @@ function dispatcherOwnsEncounterAt(x, y) {
     sourceInstanceId: currentLevelKey + ":" + x + ":" + y + ":" + tile.id, source: { tileId: tile.id, x, y } });
   return owned;
 }
-function runEncounterRulesAtEvent(event) {
-  const batches = diceEventBatches.slice(encounterBatchCursor);
+function runEncounterRulesAtEvent(event, explicitBatches = null) {
+  const batches = explicitBatches ?? diceEventBatches.slice(encounterBatchCursor);
   encounterBatchCursor = diceEventBatches.length;
   if (gameOver || !EncounterRulesModule || !runner || !grid?.length) return;
   developmentTrace?.record({ type: "action_boundary", phase: event,
     actionIds: batches.map(batch => batch.actionId), player: { x: runner.x, y: runner.y },
     finalDice: { die1: dieValue1, die2: dieValue2 } });
   encounterDispatcher ||= EncounterRulesModule.createEncounterDispatcher((action, context) => {
-    if (gameOver) return;
+    if (gameOver) return { applied: false };
     const dice = context.event.after;
     const amount = action.amountExpression == null ? action.amount : EncounterRulesModule.evaluateEncounterExpression(action.amountExpression, { d1: dice.die1, d2: dice.die2 });
     if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid encounter damage");
@@ -2166,7 +2188,7 @@ function runEncounterRulesAtEvent(event) {
     updateInfo();
     draw();
     return { traceDetails: { amount, message, heartsAfter: runner.hearts, gameOver } };
-  }, developmentTrace ? record => developmentTrace.record(record) : null);
+  }, developmentTrace ? record => developmentTrace.record(record) : null, restoredTurn?.ledger || {});
   const sources = [];
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
@@ -2176,6 +2198,7 @@ function runEncounterRulesAtEvent(event) {
     }
   }
   encounterDispatcher.dispatch({ batches, rules: EncounterRulesModule.encounterDispatcherRules(sources, event), context: { player: { x: runner.x, y: runner.y } } });
+  savePersistentGameState({ checkpoint: true });
 }
 
 // ============================================================
@@ -3277,74 +3300,73 @@ function isLevelObjectiveComplete() {
   return !!(here?.exit || exitVariant);
 }
 
-function enforceRollLimitBeforeNextRoll() {
-  const rollLimitState = calculateCurrentRollLimitState();
-  if (rollLimitState.rollLimit === null) return false;
-  if (rollLimitState.rollsRemaining > 0) return false;
-  if (isLevelObjectiveComplete()) return false;
-  if (totalMovementPoints() > 0) {
-    developmentTrace?.record({ type: "roll_limit", outcome: "blocked_with_time_remaining", ...rollLimitState });
-    return true;
-  }
-
-  deathReason = `Out of rolls: you used all ${rollLimitState.rollLimit} rolls without finishing the level.`;
-  developmentTrace?.record({ type: "roll_limit", outcome: "death", message: deathReason, ...rollLimitState });
-  endGame();
-  return true;
-}
-
 function rollDice() {
-  if (gameOver) return;
-  developmentTrace?.record({ type: "roll_attempt", before: { die1: dieValue1, die2: dieValue2 },
-    rollCount, timeCost: 0 });
-  if (enforceRollLimitBeforeNextRoll()) return;
+  if (gameOver || turnTransaction) return;
   if (!diceEngine) initializeDiceEngine();
-  synchronizeDiceEngineRollLimit();
-
-  runner.turbo = false;
-  if (inWater()) {
-    const tile = tileDataAt(runner.x, runner.y);
-    takeDamage(1, tile);
-    setMessage("Drowning, took damage");
-  }
-
-  const capacities = diceEngine.getState().capacities;
-  const a = Math.floor(Math.random() * Math.min(6, capacities.die1)) + 1;
-  const b = Math.floor(Math.random() * Math.min(6, capacities.die2)) + 1;
-  const previousDice = diceEngine.getState().dice;
-  const result = previousDice.die1 + previousDice.die2 > 0
-    ? diceEngine.earlyReroll({
-      actionId: `reroll-${crypto.randomUUID()}`,
-      values: { die1: a, die2: b }
-    })
-    : diceEngine.startRoll({
-      actionId: `roll-${crypto.randomUUID()}`,
-      values: { die1: a, die2: b }
-    });
-  if (!applyDiceEngineResult(result, { action: previousDice.die1 + previousDice.die2 > 0 ? "early_reroll" : "roll",
-    timeCost: 0, before: previousDice })) return;
-  updateDiceDisplay(a, b, true);
-  addRunnerCounter("dice_roll");
-  runner.jumpCredits = 2;
-  runner.movementLeft = totalMovementPoints();
-
-  const here = tileDataAt(runner.x, runner.y);
-  if (!isFluidTile(here)) {
-    const below = tileDataAt(runner.x, runner.y + 1);
-    if (!below.solid) {
-      applyFullGravity();
+  turnTransaction = true;
+  try {
+    const before = diceEngine.getState();
+    developmentTrace?.record({ type: "roll_attempt", before: before.dice, rollCount, timeCost: 0 });
+    const closing = diceEngine.endTurn({ actionId: `end-${before.currentRollId || crypto.randomUUID()}` });
+    if (!applyDiceEngineResult(closing, { action: "end_turn", timeCost: 0, before: before.dice })) return;
+    updateDiceDisplay(dieValue1, dieValue2, false);
+    runner.movementLeft = totalMovementPoints();
+    // Each dispatch drains its child queue before the next boundary begins.
+    runEncounterRulesAtEvent("dice_changed");
+    if (!gameOver && closing.lifecycleBatch) {
+      developmentTrace?.record({ type: "turn_ended", batch: closing.lifecycleBatch });
+      runEncounterRulesAtEvent("turn_ended", [closing.lifecycleBatch]);
+      // Existing Roll-time drowning becomes an explicit once-per-turn effect.
+      if (!gameOver && inWater()) {
+        takeDamage(1, { ...tileDataAt(runner.x, runner.y), deathMessage: "Drowning, took damage" });
+        if (!gameOver) setMessage("Drowning, took damage");
+      }
+    } else if (!gameOver && before.turnPhase === "idle" && inWater()) {
+      // Preserve initial-roll drowning without inventing a completed turn.
+      takeDamage(1, { ...tileDataAt(runner.x, runner.y), deathMessage: "Drowning, took damage" });
+      if (!gameOver) setMessage("Drowning, took damage");
     }
+    if (gameOver || runner.hearts <= 0) return;
+    if (isLevelObjectiveComplete()) {
+      turnOutcome = { kind: "success", message: "Level complete." };
+      gameOver = true;
+      runner.dead = false;
+      setMessage(turnOutcome.message);
+      developmentTrace?.record({ type: "objective_complete", rollCount });
+      return;
+    }
+    const budget = calculateCurrentRollLimitState();
+    if (budget.rollLimit !== null && budget.rollsRemaining === 0) {
+      deathReason = `Out of rolls: you used all ${budget.rollLimit} rolls without finishing the level.`;
+      developmentTrace?.record({ type: "roll_limit", outcome: "death", ...budget });
+      endGame();
+      return;
+    }
+    synchronizeDiceEngineRollLimit();
+    runner.turbo = false;
+    const capacities = diceEngine.getState().capacities;
+    const a = Math.floor(Math.random() * Math.min(6, capacities.die1)) + 1;
+    const b = Math.floor(Math.random() * Math.min(6, capacities.die2)) + 1;
+    const result = diceEngine.startRoll({ actionId: `roll-${crypto.randomUUID()}`, values: { die1: a, die2: b } });
+    if (!applyDiceEngineResult(result, { action: "roll", timeCost: 0, before: result.batch?.events[0]?.before })) return;
+    updateDiceDisplay(a, b, true);
+    addRunnerCounter("dice_roll");
+    runner.jumpCredits = 2;
+    runner.movementLeft = totalMovementPoints();
+    const here = tileDataAt(runner.x, runner.y);
+    if (!isFluidTile(here) && !tileDataAt(runner.x, runner.y + 1).solid) applyFullGravity();
+    logMessage(`Rolled ${a}+${b} = ${a + b}`, { type: "roll" });
+    const remaining = calculateCurrentRollLimitState();
+    if (remaining.rollLimit !== null && remaining.rollsRemaining === 0 && !isLevelObjectiveComplete()) {
+      setMessage("Final roll! No rolls remaining after this one. Clicking Roll ends your turn and your run unless you finish the level.", { kind: "message" });
+    }
+    runEncounterRulesAtEvent("after_roll");
+  } finally {
+    turnTransaction = false;
+    updateInfo();
+    draw();
+    savePersistentGameState({ checkpoint: true });
   }
-
-  updateInfo();
-  const rollText = `Rolled ${a}+${b} = ${a + b}`;
-  logMessage(rollText, { type: "roll" });
-  const rollLimitState = calculateCurrentRollLimitState();
-  if (rollLimitState.rollLimit !== null && rollLimitState.rollsRemaining === 0 && !isLevelObjectiveComplete()) {
-    setMessage("Final roll! No rolls remaining after this one.", { kind: "message" });
-  }
-  runEncounterRulesAtEvent("after_roll");
-  savePersistentGameState({ checkpoint: true });
 }
 
 function setupDieSelection() {
@@ -3389,6 +3411,7 @@ function endGame() {
   if (gameOver) return;
   developmentTrace?.record({ type: "game_over", message: deathReason || "Reached the exit!",
     remainingDice: { die1: dieValue1, die2: dieValue2 }, rollCount });
+  turnOutcome = { kind: "death", message: deathReason };
   gameOver = true;
     // NEW
   runner.dead = true;
@@ -3401,11 +3424,13 @@ function endGame() {
       initialDice: { die1: 0, die2: 0 },
       selected: selectedDie || "die1",
       playerRollCount: rollCount,
+      turnPhase: "closed",
       currentRollId: diceEngine.getState().currentRollId
     });
   }
   runner.movementLeft = 0;
   updateDiceDisplay(0, 0, false);
   setMessage("Game over");
+  savePersistentGameState({ checkpoint: true });
   
 }

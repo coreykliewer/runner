@@ -11,23 +11,26 @@ export function encounterOwner(definition) {
 export function encounterDispatcherRules(sources, phase) {
   return sources.flatMap(source => {
     if (encounterOwner(source.definition) !== "dispatcher") return [];
-    return (source.definition.encounterRules.rules || []).filter(rule => rule.trigger?.events?.includes(phase)).map(rule => ({
+    return (source.definition.encounterRules.rules || []).filter(rule => rule.trigger?.events?.includes(phase) ||
+      (phase !== "turn_ended" && rule.trigger?.events?.includes("dice_changed"))).map(rule => ({
       id: `${source.instanceId}:${rule.id}`,
       sourceInstanceId: source.instanceId,
       source: { tileId: source.tileId, name: source.name, x: source.x, y: source.y, authoredRuleId: rule.id },
       priority: rule.priority ?? 0,
       authorOrder: rule.order,
-      trigger: { events: ["die_changed", "die_rerolled", "die_rolled"], relation: { ...rule.trigger, x: source.x, y: source.y } },
+      ...(rule.activation ? { activation: rule.activation } : {}),
+      trigger: { events: phase === "turn_ended" ? ["turn_ended"] : ["die_changed", "die_rerolled", "die_rolled"], relation: { ...rule.trigger, x: source.x, y: source.y } },
       conditions: (rule.conditions || []).map(condition => ({ type: "encounter", condition })),
       actions: rule.actions
     }));
   });
 }
 
-export function createEncounterDispatcher(damage, observer = null) {
+export function createEncounterDispatcher(damage, observer = null, initialLedger = {}) {
   return createTileSystemV2RuleDispatcher({
     effectHandlers: { damage },
     observer,
+    initialLedger,
     relationMatcher: (relation, event, context) => {
       const dx = context.player.x - relation.x;
       const dy = context.player.y - relation.y;
