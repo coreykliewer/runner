@@ -25,16 +25,50 @@ async function boot(page, options) {
 const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem("runner:v2:state")));
 const trace = page => page.evaluate(() => window.getRunnerEventTrace().records);
 const move = (page, direction) => page.locator(`#btn-${direction}`).click();
+const propertyStats = page => page.locator("#info .runner-property-stat");
+
+test("stats read arbitrary acquired properties immediately at the entry boundary and reset on a fresh run", async ({ page }) => {
+  await boot(page, { properties: { zeta: 0, alpha: 7 } });
+  await expect(propertyStats(page)).toHaveText(["alpha: 7", "zeta: 0"]);
+  // Inspect before movement's later UI refresh to verify the rule handler updates it.
+  const rows = await page.evaluate(() => {
+    enterRunnerCell(2, 1, "stats_test");
+    return [...document.querySelectorAll(".runner-property-stat")].map(row => row.textContent);
+  });
+  expect(rows).toEqual(["alpha: 7", "wet: 5", "zeta: 0"]);
+  await expect(page.locator("#info")).toContainText("Hearts: 5");
+  await page.evaluate(() => { deathReason = "Stats reset test"; endGame(); });
+  await expect(propertyStats(page)).toHaveText(rows);
+  await expect(page.locator("#info")).toContainText("Moves: 0");
+  await page.reload();
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
+  await expect(propertyStats(page)).toHaveText(rows);
+  await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
+  await expect(propertyStats(page)).toHaveCount(0);
+});
+
+test("stats render property names as text without interpreting markup", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => {
+    runner.properties = { "<img src=x onerror=alert(1)>": 2 };
+    updateInfo();
+  });
+  await expect(propertyStats(page)).toHaveText(["<img src=x onerror=alert(1)>: 2"]);
+  await expect(page.locator("#info img")).toHaveCount(0);
+});
 
 test("Water → repeated Air → Fire uses entry snapshots and no stationary or blocked entries", async ({ page }) => {
   await boot(page);
   expect((await saved(page)).runner.propertyEntry.sequence).toBe(0);
+  await expect(propertyStats(page)).toHaveCount(0);
   await move(page, "left"); // solid boundary
   await page.locator("#die2").click();
   await page.locator("#roll").click(); // dice changes only on supported spawn
   expect((await trace(page)).filter(r => r.type === "tile_entry")).toHaveLength(0);
   await move(page, "right");
   expect((await saved(page)).runner.properties).toEqual({ wet: 5 });
+  await expect(propertyStats(page)).toHaveText(["wet: 5"]);
   await move(page, "right");
   expect((await saved(page)).runner.properties).toEqual({ wet: 4 });
   await move(page, "right");
@@ -59,6 +93,7 @@ test("sufficient wetness extinguishes burning fully; repeated Air retains acquir
   expect((await saved(page)).runner.properties).toEqual({ wet: 1, burning: 0 });
   await move(page, "left");
   expect((await saved(page)).runner.properties).toEqual({ wet: 0, burning: 0 });
+  await expect(propertyStats(page)).toHaveText(["burning: 0", "wet: 0"]);
   await move(page, "left");
   expect((await saved(page)).runner.properties).toEqual({ wet: 0, burning: 0 });
   const result = (await trace(page)).filter(r => r.type === "property_rules").at(-1).evaluation;
@@ -67,6 +102,7 @@ test("sufficient wetness extinguishes burning fully; repeated Air retains acquir
   await expect(page.locator("#create-resume-link")).toBeEnabled();
   expect((await saved(page)).runner.properties).toEqual({ wet: 0, burning: 0 });
   expect((await trace(page)).filter(r => r.type === "tile_entry")).toEqual([]);
+  await expect(propertyStats(page)).toHaveText(["burning: 0", "wet: 0"]);
 });
 
 for (const dice of [[6, 6], [1, 0]]) {
@@ -149,6 +185,7 @@ test("local and fresh-browser portable resume retain property values and entry s
   const destination = await saved(page);
   expect(destination.levelKey).toBe("destination");
   expect(destination.runner.properties).toEqual({ wet: 1, burning: 0 });
+  await expect(propertyStats(page)).toHaveText(["burning: 0", "wet: 1"]);
   const metadata = destination.runner.propertyEntry;
   await page.locator("#create-resume-link").click();
   const url = await page.locator("#resume-link").inputValue();
@@ -158,6 +195,7 @@ test("local and fresh-browser portable resume retain property values and entry s
   await fresh.goto(url);
   await expect(fresh.locator("#create-resume-link")).toBeEnabled();
   expect((await saved(fresh)).runner.properties).toEqual(destination.runner.properties);
+  await expect(propertyStats(fresh)).toHaveText(["burning: 0", "wet: 1"]);
   expect((await saved(fresh)).runner.propertyEntry).toEqual(metadata);
   const fixtureRules = JSON.parse(await readFile("fixtures/property-rules.json", "utf8")).tiles.Water.propertyRules;
   // Portable links carry the high-water marker, not the old dispatcher's ledger.
@@ -173,6 +211,7 @@ test("local and fresh-browser portable resume retain property values and entry s
   await fresh.locator("#roll").click(); // Portable checkpoints start without an active dice roll.
   await move(fresh, "right");
   expect((await saved(fresh)).runner.properties).toEqual({ wet: 5, burning: 0 });
+  await expect(propertyStats(fresh)).toHaveText(["burning: 0", "wet: 5"]);
   expect((await saved(fresh)).runner.propertyEntry.sequence).toBe(metadata.sequence + 1);
   await context.close();
 });

@@ -275,6 +275,7 @@ const ACHIEVEMENTS_URL = "achievements.json";
 const GAME_VARIANT_BUCKETS = ["monster", "lock", "sign", "exit", "platform", "pickup", "decor"];
 let LEVELS = null;
 let StateModule = null;
+let RunnerPropertyStatsModule = null;
 let ResumeLinksModule = null;
 let LevelRoutingModule = null;
 let GameMapRuntimeModule = null;
@@ -383,6 +384,12 @@ function isMapDocument(value) {
 
 function getDefaultLevelKey() {
   return LEVELS?.defaultLevel || "default";
+}
+
+function loadRunnerPropertyStatsModule() {
+  return import("./src/runnerPropertyStats.js")
+    .then(module => { RunnerPropertyStatsModule = module; return module; })
+    .catch(error => { console.warn("Property stats unavailable", error); return null; });
 }
 
 function loadStateModule() {
@@ -567,6 +574,7 @@ tryFetch([...TILE_URLS])
     return Promise.all([
       loadLevels(),
       loadStateModule(),
+      loadRunnerPropertyStatsModule(),
       loadResumeLinksModule(),
       loadLevelRoutingModule(),
       loadGameMapRuntimeModule(),
@@ -591,6 +599,7 @@ tryFetch([...TILE_URLS])
     await Promise.all([
       loadLevels(),
       loadStateModule(),
+      loadRunnerPropertyStatsModule(),
       loadResumeLinksModule(),
       loadLevelRoutingModule(),
       loadGameMapRuntimeModule(),
@@ -1928,6 +1937,7 @@ function updateInfo(label = "") {
   el.innerHTML = lines.filter(Boolean).join("<br>");
 
   el.innerHTML = lines.join("<br>");
+  RunnerPropertyStatsModule?.appendRunnerPropertyStats(el, runner.properties);
   savePersistentGameState();
 }
 
@@ -2191,6 +2201,7 @@ function getRuleDispatcher() {
       if (result.applied) {
         runner.properties = result.properties;
         runner.propertyEntry = result.entryState;
+        updateInfo();
       }
       developmentTrace?.record({ type: "property_rules", eventId: context.event.eventId,
         source: context.event.source, evaluation: result.evaluation, diagnostics: result.diagnostics, applied: result.applied });
@@ -3464,6 +3475,7 @@ function endGame() {
   runner.movementLeft = 0;
   updateDiceDisplay(0, 0, false);
   setMessage("Game over");
+  updateInfo();
   savePersistentGameState({ checkpoint: true });
   
 }
