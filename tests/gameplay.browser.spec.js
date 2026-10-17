@@ -98,6 +98,139 @@ async function openMovementMap(page, movementPoints) {
   await page.locator("#btn-right").click();
 }
 
+async function installDiceEngineFixture(page, {
+  die1 = 2,
+  die2 = 4,
+  selectedDie = "die1",
+  rollCount = 0,
+  rollLimit = null,
+  movementCost = 3,
+  globalCapacities = null,
+  levelCapacities = null
+} = {}) {
+  await page.route("**/tiles2.json*", async route => {
+    const response = await route.fetch();
+    const tiles = await response.json();
+    if (tiles.format === "runner.numeric-tile-registry") {
+      const water = tiles.tiles.find(tile => tile.legacyCode === "W");
+      water.definition.moveCost = movementCost;
+      water.definition.moveCostTop = movementCost;
+      water.definition.moveCostInside = movementCost;
+      if (globalCapacities) {
+        tiles.settings = {
+          ...tiles.settings,
+          dice: Object.fromEntries(Object.entries(globalCapacities).map(([die, maximum]) => [die, { maximum }]))
+        };
+      }
+    } else {
+      tiles.W.moveCost = movementCost;
+    }
+    await route.fulfill({ response, json: tiles });
+  });
+  await page.route("**/levels.json*", async route => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: {
+        defaultLevel: "default",
+        levels: {
+          default: {
+            map: movementMap,
+            ...(rollLimit == null ? {} : { rollLimit }),
+            ...(levelCapacities ? { diceCapacities: levelCapacities } : {})
+          }
+        }
+      }
+    });
+  });
+  await page.addInitScript(state => {
+    Math.random = () => 0;
+    localStorage.setItem("runner:v2:state", JSON.stringify({
+      version: 2,
+      levelKey: "default",
+      runner: { hearts: 5, score: 0, kills: 0, turbo: false, turboMultiplier: 2 },
+      dice: state,
+      world: {}
+    }));
+  }, { dieValue1: die1, dieValue2: die2, selectedDie, rollCount });
+}
+
+test("game movement delegates selected-first spending and captures immutable dice snapshots", async ({ page }) => {
+  await installDiceEngineFixture(page);
+  await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await page.locator("#btn-right").click();
+  await expect(page.locator("#info")).toContainText("Moves: 3");
+
+  const captured = await page.evaluate(() => {
+    const batch = window.getRunnerDiceEventBatches().at(-1);
+    return {
+      events: batch.events.map(event => ({ die: event.die, before: event.before, after: event.after })),
+      snapshotsFrozen: Object.isFrozen(batch.events[0].before) && Object.isFrozen(batch.events[1].after)
+    };
+  });
+  expect(captured.events).toEqual([
+    { die: "die1", before: { die1: 2, die2: 4 }, after: { die1: 0, die2: 4 } },
+    { die: "die2", before: { die1: 0, die2: 4 }, after: { die1: 0, die2: 3 } }
+  ]);
+  expect(captured.snapshotsFrozen).toBe(true);
+});
+
+test("selecting Die 2 spends it first, and unaffordable movement spends nothing", async ({ page }) => {
+  await installDiceEngineFixture(page, { selectedDie: "die2" });
+  await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await page.locator("#btn-right").click();
+  await expect(page.locator("#info")).toContainText("Moves: 3");
+  const selectedDieBatch = await page.evaluate(() => window.getRunnerDiceEventBatches().at(-1));
+  expect(selectedDieBatch.events.map(event => [event.die, event.after])).toEqual([
+    ["die2", { die1: 2, die2: 1 }]
+  ]);
+});
+
+test("unaffordable movement leaves both dice and movement position unchanged", async ({ page }) => {
+  await installDiceEngineFixture(page, { die1: 1, die2: 0, selectedDie: "die1" });
+  await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await expect(page.locator("#info")).toContainText("Moves: 1");
+  await page.locator("#btn-right").click();
+  await expect(page.locator("#info")).toContainText("Moves: 1");
+  await expect(page.locator("#log")).not.toContainText("Right");
+  expect(await page.evaluate(() => window.getRunnerDiceEventBatches())).toEqual([]);
+});
+
+test("voluntary rerolls discard remaining time and increment the existing roll count once", async ({ page }) => {
+  await installDiceEngineFixture(page, { die1: 0, die2: 0, rollLimit: 3 });
+  await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await page.evaluate(() => { Math.random = () => 0.999; });
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  await expect(page.locator("#info")).toContainText("Moves: 12");
+
+  await page.evaluate(() => { Math.random = () => 0; });
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  const rerollState = await page.evaluate(() => window.getRunnerDiceEngineState());
+  expect(rerollState.playerRollCount).toBe(2);
+  expect(rerollState.dice).toEqual({ die1: 1, die2: 1 });
+  await expect(page.locator("#info")).toContainText("Moves: 2");
+  await expect(page.locator("#info")).toContainText("Times rolled: 2");
+  await expect(page.locator("#info")).toContainText("Rolls used: 2 (67%)");
+  const rerollBatch = await page.evaluate(() => window.getRunnerDiceEventBatches().at(-1));
+  expect(rerollBatch.events.map(event => event.type)).toEqual(["die_rerolled", "die_rerolled"]);
+  expect(rerollBatch.events[0].before).toEqual({ die1: 6, die2: 6 });
+  expect(rerollBatch.events[1].after).toEqual({ die1: 1, die2: 1 });
+});
+
+test("dice rolls respect global and level-specific capacities", async ({ page }) => {
+  await installDiceEngineFixture(page, {
+    die1: 0,
+    die2: 0,
+    globalCapacities: { die1: 4, die2: 3 },
+    levelCapacities: { die1: 2 }
+  });
+  await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await page.evaluate(() => { Math.random = () => 0.999; });
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  await expect(page.locator("#die1")).toHaveText("2");
+  await expect(page.locator("#die2")).toHaveText("3");
+});
+
 test("numeric registry and versioned numeric URL map preserve current movement behavior", async ({ page }) => {
   const legacyTiles = JSON.parse(await readFile("tiles2.legacy.json", "utf8"));
   legacyTiles.W.moveCost = 2;

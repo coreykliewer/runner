@@ -52,6 +52,10 @@ let rollCount = 0;
 let dieValue1 = 0;
 let dieValue2 = 0;
 let selectedDie = null;
+let diceEngine = null;
+const diceEventBatches = [];
+let TileSystemV2Module = null;
+let TileSystemV2DiceEngineModule = null;
 let deathReason = "";
 let bounceHeight = [];
 let sinkDelayMap = [];
@@ -66,6 +70,9 @@ let currentMapString = "";
 let runnerArtTileId = null;
 let turboGravityUsed = false;
 let kills = 0;
+
+window.getRunnerDiceEventBatches = () => diceEventBatches.slice();
+window.getRunnerDiceEngineState = () => diceEngine?.getState() || null;
 
 function getLevelRollLimit(levelKey = currentLevelKey) {
   const level = LEVELS?.levels?.[levelKey];
@@ -431,6 +438,24 @@ function loadGameMapRuntimeModule() {
     });
 }
 
+function loadTileSystemV2DiceModule() {
+  return Promise.all([
+    import("./src/tileSystemV2.js"),
+    import("./src/tileSystemV2DiceEngine.js")
+  ])
+    .then(([tileSystem, diceEngineModule]) => {
+      TileSystemV2Module = tileSystem;
+      TileSystemV2DiceEngineModule = diceEngineModule;
+      return diceEngineModule;
+    })
+    .catch(error => {
+      TileSystemV2Module = null;
+      TileSystemV2DiceEngineModule = null;
+      console.warn("[Runner] Failed to load the Tile System 2.0 dice engine.", error);
+      return null;
+    });
+}
+
 function loadNarrativeEventsModule() {
   return import("./src/events.js")
     .then(module => {
@@ -518,7 +543,8 @@ tryFetch([...TILE_URLS])
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
       loadNarrativeData(),
-      loadAchievementsModule().then(() => loadAchievementRules())
+      loadAchievementsModule().then(() => loadAchievementRules()),
+      loadTileSystemV2DiceModule()
     ]).then(() => initGame());
   })
   .catch(async err => {
@@ -540,7 +566,8 @@ tryFetch([...TILE_URLS])
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
       loadNarrativeData(),
-      loadAchievementsModule().then(() => loadAchievementRules())
+      loadAchievementsModule().then(() => loadAchievementRules()),
+      loadTileSystemV2DiceModule()
     ]);
     initGame();
   });
@@ -1263,10 +1290,14 @@ ensureRunnerCounters();
 if (savedGameState?.dice) {
   dieValue1 = savedGameState.dice.dieValue1 || 0;
   dieValue2 = savedGameState.dice.dieValue2 || 0;
-  selectedDie = savedGameState.dice.selectedDie || null;
+  selectedDie = ["die1", "die2"].includes(savedGameState.dice.selectedDie)
+    ? savedGameState.dice.selectedDie
+    : null;
   rollCount = savedGameState.dice.rollCount || 0;
   updateDiceDisplay(dieValue1, dieValue2, false);
 }
+
+initializeDiceEngine();
 
 runTutorialNarrative({
   type: "level_start",
@@ -1731,6 +1762,77 @@ function resolveSolidInteractionAt(x, y, options = {}) {
 
 function totalMovementPoints() { return dieValue1 + dieValue2; }
 
+function createGameDiceEngine({
+  initialDice = { die1: dieValue1, die2: dieValue2 },
+  selected = selectedDie || "die1",
+  playerRollCount = rollCount,
+  currentRollId = null,
+  playerRollLimit = isLevelObjectiveComplete() ? null : getLevelRollLimit()
+} = {}) {
+  const sourceRegistry = NormalizedTileRegistry?.registry || {};
+  const sourceSettings = sourceRegistry.settings || {};
+  const sourceCapacities = sourceSettings.dice || {};
+  const registry = {
+    ...sourceRegistry,
+    settings: {
+      ...sourceSettings,
+      dice: {
+        ...sourceCapacities,
+        die1: { ...sourceCapacities.die1, maximum: sourceCapacities.die1?.maximum ?? 6 },
+        die2: { ...sourceCapacities.die2, maximum: sourceCapacities.die2?.maximum ?? 6 }
+      }
+    }
+  };
+  const level = LEVELS?.levels?.[currentLevelKey] || {};
+  const capacities = TileSystemV2Module.resolveDiceCapacities(registry, level);
+  const boundedDice = {
+    die1: Math.min(capacities.die1, Math.max(0, initialDice.die1)),
+    die2: Math.min(capacities.die2, Math.max(0, initialDice.die2))
+  };
+
+  return TileSystemV2DiceEngineModule.createTileSystemV2DiceEngine({
+    registry,
+    level,
+    initialDice: boundedDice,
+    selectedDie: ["die1", "die2"].includes(selected) ? selected : "die1",
+    playerRollLimit,
+    playerRollCount,
+    currentRollId
+  });
+}
+
+function initializeDiceEngine() {
+  diceEventBatches.length = 0;
+  diceEngine = createGameDiceEngine();
+  const state = diceEngine.getState();
+  dieValue1 = state.dice.die1;
+  dieValue2 = state.dice.die2;
+  rollCount = state.playerRollCount;
+  updateDiceDisplay(dieValue1, dieValue2, false);
+}
+
+function synchronizeDiceEngineRollLimit() {
+  const state = diceEngine.getState();
+  const playerRollLimit = isLevelObjectiveComplete() ? null : getLevelRollLimit();
+  if (state.playerRollLimit === playerRollLimit) return;
+  diceEngine = createGameDiceEngine({
+    initialDice: state.dice,
+    selected: state.selectedDie,
+    playerRollCount: state.playerRollCount,
+    currentRollId: state.currentRollId,
+    playerRollLimit
+  });
+}
+
+function applyDiceEngineResult(result) {
+  if (!result.ok) return false;
+  dieValue1 = result.state.dice.die1;
+  dieValue2 = result.state.dice.die2;
+  rollCount = result.state.playerRollCount;
+  if (result.batch) diceEventBatches.push(result.batch);
+  return true;
+}
+
 function updateInfo(label = "") {
   const el = document.getElementById("info");
   if (!el) return;
@@ -1818,44 +1920,25 @@ function defaultFarClickMessage(tx, ty, max = 5) {
 // ============================================================
 // Dice spending
 // ============================================================
-function useMovementPoint() {
-  if (!selectedDie) selectedDie = "die1";
-
-  if (selectedDie === "die1") {
-    if (dieValue1 > 0) {
-      dieValue1--;
-    } else if (dieValue2 > 0) {
-      selectedDie = "die2";
-      dieValue2--;
-    } else {
-      return; 
-    }
-  } else if (selectedDie === "die2") {
-    if (dieValue2 > 0) {
-      dieValue2--;
-    } else if (dieValue1 > 0) {
-      selectedDie = "die1";
-      dieValue1--;
-    } else {
-      return;
-    }
-  }
-
-  updateDiceDisplay(dieValue1, dieValue2, false);
-  const die1 = document.getElementById("die1");
-  const die2 = document.getElementById("die2");
-  die1.classList.toggle("selected", selectedDie === "die1");
-  die2.classList.toggle("selected", selectedDie === "die2");
-}
-
 function spendMovement(cost) {
-  if (totalMovementPoints() < cost) return false;
-  let remaining = cost;
-  while (remaining > 0) {
-    useMovementPoint();
-    remaining -= 1;
-    if (totalMovementPoints() <= 0 && remaining > 0) return false;
+  if (!diceEngine) initializeDiceEngine();
+  const selected = selectedDie || "die1";
+  diceEngine.selectDie(selected);
+  const before = diceEngine.getState();
+  const result = diceEngine.spendTime({
+    actionId: `movement-${crypto.randomUUID()}`,
+    cost,
+    source: { kind: "movement" }
+  });
+  if (!applyDiceEngineResult(result)) return false;
+
+  if (cost > before.dice[selected]) {
+    selectedDie = selected === "die1" ? "die2" : "die1";
+    diceEngine.selectDie(selectedDie);
   }
+  updateDiceDisplay(dieValue1, dieValue2, false);
+  document.getElementById("die1")?.classList.toggle("selected", selectedDie === "die1");
+  document.getElementById("die2")?.classList.toggle("selected", selectedDie === "die2");
   runner.movementLeft = totalMovementPoints();
   savePersistentGameState({ checkpoint: true });
   return true;
@@ -3125,6 +3208,8 @@ function enforceRollLimitBeforeNextRoll() {
 function rollDice() {
   if (gameOver) return;
   if (enforceRollLimitBeforeNextRoll()) return;
+  if (!diceEngine) initializeDiceEngine();
+  synchronizeDiceEngineRollLimit();
 
   runner.turbo = false;
   if (inWater()) {
@@ -3133,12 +3218,20 @@ function rollDice() {
     setMessage("Drowning, took damage");
   }
 
-  const a = Math.floor(Math.random() * 6) + 1;
-  const b = Math.floor(Math.random() * 6) + 1;
-
-  rollCount++;
-  dieValue1 = a;
-  dieValue2 = b;
+  const capacities = diceEngine.getState().capacities;
+  const a = Math.floor(Math.random() * Math.min(6, capacities.die1)) + 1;
+  const b = Math.floor(Math.random() * Math.min(6, capacities.die2)) + 1;
+  const previousDice = diceEngine.getState().dice;
+  const result = previousDice.die1 + previousDice.die2 > 0
+    ? diceEngine.earlyReroll({
+      actionId: `reroll-${crypto.randomUUID()}`,
+      values: { die1: a, die2: b }
+    })
+    : diceEngine.startRoll({
+      actionId: `roll-${crypto.randomUUID()}`,
+      values: { die1: a, die2: b }
+    });
+  if (!applyDiceEngineResult(result)) return;
   updateDiceDisplay(a, b, true);
   addRunnerCounter("dice_roll");
   runner.jumpCredits = 2;
@@ -3152,6 +3245,7 @@ function rollDice() {
     }
   }
 
+  updateInfo();
   const rollText = `Rolled ${a}+${b} = ${a + b}`;
   logMessage(rollText, { type: "roll" });
   const rollLimitState = calculateCurrentRollLimitState();
@@ -3170,12 +3264,14 @@ function setupDieSelection() {
     if (selectedDie === dieElement.id) {
       dieElement.classList.remove("selected");
       selectedDie = null;
+      diceEngine?.selectDie("die1");
       return;
     }
     die1.classList.remove("selected");
     die2.classList.remove("selected");
     dieElement.classList.add("selected");
     selectedDie = dieElement.id;
+    diceEngine?.selectDie(selectedDie);
   }
   die1.addEventListener("click", () => selectDie(die1));
   die2.addEventListener("click", () => selectDie(die2));
@@ -3204,6 +3300,14 @@ function endGame() {
   else setMessage("Reached the exit!");
   dieValue1 = 0;
   dieValue2 = 0;
+  if (diceEngine) {
+    diceEngine = createGameDiceEngine({
+      initialDice: { die1: 0, die2: 0 },
+      selected: selectedDie || "die1",
+      playerRollCount: rollCount,
+      currentRollId: diceEngine.getState().currentRollId
+    });
+  }
   runner.movementLeft = 0;
   updateDiceDisplay(0, 0, false);
   setMessage("Game over");
