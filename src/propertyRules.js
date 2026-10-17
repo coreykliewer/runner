@@ -1,5 +1,8 @@
 // Standalone Stage A contract. No gameplay, persistence, or editor dependencies.
 export const PROPERTY_RULES_VERSION = 1;
+export const PROPERTY_RULES_VERSIONS = Object.freeze([1, 2]);
+export const PROPERTY_CONDITION_MODES = Object.freeze(["entry", "current"]);
+export const PROPERTY_NATIVE_EFFECTS = Object.freeze(["lose_hearts", "narrative", "achievement"]);
 export const PROPERTY_OPERATIONS = Object.freeze(["set", "add", "subtract"]);
 export const PROPERTY_COMPARISONS = Object.freeze(["=", "!=", ">", "<", ">=", "<="]);
 export const PROPERTY_ID_PATTERN = "^[A-Za-z_][A-Za-z0-9_-]{0,63}(?![\\s\\S])";
@@ -9,7 +12,8 @@ const propertyId = new RegExp(PROPERTY_ID_PATTERN);
 export function validatePropertyRules(value, path = "propertyRules") {
   const issues = [];
   if (!object(value, path, ["version", "blocks"], issues)) return issues;
-  if (value.version !== PROPERTY_RULES_VERSION) issues.push(error(`${path}.version`, "unsupported_version", "version must be 1."));
+  if (!PROPERTY_RULES_VERSIONS.includes(value.version)) issues.push(error(`${path}.version`, "unsupported_version", "version must be 1 or 2."));
+  const v2 = value.version === 2;
   if (!Array.isArray(value.blocks)) {
     issues.push(error(`${path}.blocks`, "invalid_structure", "blocks must be an array."));
     return issues;
@@ -20,10 +24,18 @@ export function validatePropertyRules(value, path = "propertyRules") {
     if (Object.hasOwn(block, "if")) {
       const condition = block.if;
       const conditionPath = `${blockPath}.if`;
-      if (object(condition, conditionPath, ["property", "operator", "value"], issues)) {
+      const existence = v2 && ["exists", "not_exists"].includes(condition?.type);
+      const fields = v2 ? ["type", "mode", "property", ...(existence ? [] : ["operator", "value"])] : ["property", "operator", "value"];
+      if (object(condition, conditionPath, fields, issues)) {
         validateId(condition.property, `${conditionPath}.property`, issues);
-        if (!PROPERTY_COMPARISONS.includes(condition.operator)) issues.push(error(`${conditionPath}.operator`, "invalid_operator", "Use =, !=, >, <, >= or <=."));
-        validateNumber(condition.value, `${conditionPath}.value`, issues);
+        if (v2) {
+          if (!["comparison", "exists", "not_exists"].includes(condition.type)) issues.push(error(`${conditionPath}.type`, "unsupported_condition", "Use comparison, exists or not_exists."));
+          if (Object.hasOwn(condition, "mode") && !PROPERTY_CONDITION_MODES.includes(condition.mode)) issues.push(error(`${conditionPath}.mode`, "invalid_mode", "Use entry or current."));
+        }
+        if (!existence) {
+          if (!PROPERTY_COMPARISONS.includes(condition.operator)) issues.push(error(`${conditionPath}.operator`, "invalid_operator", "Use =, !=, >, <, >= or <=."));
+          validateNumber(condition.value, `${conditionPath}.value`, issues);
+        }
       }
     }
     if (!Array.isArray(block.then) || block.then.length === 0) {
@@ -32,7 +44,11 @@ export function validatePropertyRules(value, path = "propertyRules") {
     }
     block.then.forEach((effect, effectIndex) => {
       const effectPath = `${blockPath}.then[${effectIndex}]`;
-      if (!object(effect, effectPath, ["operation", "property", "value"], issues)) return;
+      if (v2 && effect?.type !== "property") {
+        validateNativeEffect(effect, effectPath, issues);
+        return;
+      }
+      if (!object(effect, effectPath, [...(v2 ? ["type"] : []), "operation", "property", "value"], issues)) return;
       validateId(effect.property, `${effectPath}.property`, issues);
       if (!PROPERTY_OPERATIONS.includes(effect.operation)) issues.push(error(`${effectPath}.operation`, "unsupported_operation", "Use set, add or subtract."));
       validateNumber(effect.value, `${effectPath}.value`, issues);
@@ -62,40 +78,94 @@ export function validateRunnerProperties(properties, path = "properties") {
 
 // One invocation represents one entry. The caller owns entry identity and replay prevention.
 export function evaluatePropertyRules(rules, properties = {}) {
+  const execution = createPropertyRuleExecution(rules, properties);
+  const step = execution.next();
+  if (step.done) return step.value;
+  execution.return();
+  return freeze({ ...step.value.evaluation, ok: false, status: "native_effect_required",
+    pendingEffect: step.value.effect,
+    diagnostics: [error(step.value.path, "native_effect_required", "A native adapter must acknowledge this effect before execution can continue.")] });
+}
+
+// One ordered interpreter. Native instructions suspend; this module performs no I/O.
+// Each yielded instruction requires exactly one applied/terminal/failed acknowledgement.
+export function* createPropertyRuleExecution(rules, properties = {}) {
   const stateIssues = validateRunnerProperties(properties);
   const diagnostics = [...validatePropertyRules(rules), ...stateIssues];
   const entrySnapshot = stateIssues.length ? null : freeze({ ...properties });
   const result = { format: "runner.property-rule-evaluation", version: 1, ok: false,
     entrySnapshot, properties: entrySnapshot, blocks: [], effects: [], diagnostics };
+  const v2 = rules?.version === 2;
+  if (v2) Object.assign(result, { rulesVersion: 2, status: "invalid", records: [] });
   if (diagnostics.length) return freeze(result);
 
+  // Own the entire definition before yielding: caller edits cannot change a suspended entry.
+  if (v2) rules = { ...rules, blocks: rules.blocks.map(block => ({ ...block,
+    ...(block.if ? { if: { ...block.if } } : {}), then: block.then.map(effect => ({ ...effect })) })) };
   const working = { ...entrySnapshot };
+  const snapshot = () => ({ ...working });
+  const record = details => { if (v2) result.records.push({ sequence: result.records.length + 1, ...details }); };
   for (const [blockIndex, block] of rules.blocks.entries()) {
-    const comparison = Object.hasOwn(block, "if") ? compare(block.if, entrySnapshot) : null;
+    const mode = v2 ? block.if?.mode || "entry" : "entry";
+    const comparison = Object.hasOwn(block, "if") ? compare(block.if, mode === "current" ? working : entrySnapshot) : null;
     const matched = comparison === null || comparison.matched;
     result.blocks.push({ blockIndex, matched, comparison, effectCount: matched ? block.then.length : 0 });
+    record({ kind: "block", blockIndex, blockNumber: blockIndex + 1, mode, matched, comparison,
+      snapshot: mode === "current" ? snapshot() : { ...entrySnapshot } });
     if (!matched) continue;
     for (const [effectIndex, effect] of block.then.entries()) {
+      const location = { blockIndex, effectIndex, blockNumber: blockIndex + 1, effectNumber: effectIndex + 1,
+        effectKey: `block:${blockIndex + 1}/effect:${effectIndex + 1}` };
+      const path = `propertyRules.blocks[${blockIndex}].then[${effectIndex}]`;
+      if (v2 && effect.type !== "property") {
+        const request = freeze({ ...location, type: effect.type, effect: { ...effect }, before: snapshot() });
+        const acknowledgement = yield freeze({ effect: request, path,
+          evaluation: JSON.parse(JSON.stringify({ ...result, properties: working, status: "awaiting_native" })) });
+        const status = acknowledgement?.status;
+        const valid = ["applied", "terminal", "failed"].includes(status);
+        const outcome = valid ? status : "failed";
+        result.effects.push({ sequence: result.effects.length + 1, ...location, type: effect.type, effect: { ...effect }, status: outcome });
+        record({ kind: "effect", ...location, type: effect.type, effect: { ...effect }, status: outcome, before: snapshot(), after: snapshot() });
+        if (outcome !== "applied") {
+          result.properties = working;
+          result.ok = outcome === "terminal";
+          result.status = outcome;
+          if (outcome === "failed") result.diagnostics.push(error(path, valid ? "native_effect_failed" : "invalid_native_acknowledgement",
+            "Execution stopped. Earlier effects remain applied; the failed native action must not be retried automatically."));
+          return freeze(result);
+        }
+        continue;
+      }
       const present = Object.hasOwn(working, effect.property);
       const before = present ? working[effect.property] : 0;
       const raw = effect.operation === "set" ? effect.value
         : effect.operation === "add" ? before + effect.value : before - effect.value;
       if (!Number.isFinite(raw)) {
-        // No partial commit or applied-effect output on arithmetic failure.
-        result.diagnostics.push(error(`propertyRules.blocks[${blockIndex}].then[${effectIndex}]`, "numeric_overflow", "Arithmetic must produce a finite number; the entry was not applied."));
-        result.effects = [];
+        // V1 rolls back atomically; V2 retains an already executed prefix.
+        result.diagnostics.push(error(path, "numeric_overflow", v2
+          ? "Arithmetic must produce a finite number; execution stopped with earlier effects retained."
+          : "Arithmetic must produce a finite number; the entry was not applied."));
+        if (v2) {
+          result.properties = working;
+          result.status = "failed";
+          record({ kind: "effect", ...location, type: "property", status: "failed", before: snapshot(), after: snapshot() });
+        } else result.effects = [];
         return freeze(result);
       }
       const after = Math.max(0, raw);
+      const beforeSnapshot = v2 ? snapshot() : null;
       working[effect.property] = after;
-      result.effects.push({ sequence: result.effects.length + 1, blockIndex, effectIndex,
+      result.effects.push({ ...(v2 ? { ...location, type: "property", status: "applied" } : {}),
+        sequence: result.effects.length + 1, blockIndex, effectIndex,
         property: effect.property, operation: effect.operation, operand: effect.value,
         before: { present, value: present ? before : null }, after: { present: true, value: after },
         acquired: !present, valueChanged: !present || before !== after, clamped: raw < 0 });
+      record({ kind: "effect", ...location, type: "property", status: "applied", effect: { ...effect }, before: beforeSnapshot, after: snapshot() });
     }
   }
   result.ok = true;
   result.properties = working;
+  if (v2) result.status = "completed";
   return freeze(result);
 }
 
@@ -103,7 +173,9 @@ function compare(condition, snapshot) {
   const present = Object.hasOwn(snapshot, condition.property);
   const actual = present ? snapshot[condition.property] : null;
   let matched = false;
-  if (present) {
+  if (condition.type === "exists") matched = present;
+  else if (condition.type === "not_exists") matched = !present;
+  else if (present) {
     switch (condition.operator) {
       case "=": matched = actual === condition.value; break;
       case "!=": matched = actual !== condition.value; break;
@@ -113,7 +185,25 @@ function compare(condition, snapshot) {
       case "<=": matched = actual <= condition.value; break;
     }
   }
+  if (["exists", "not_exists"].includes(condition.type)) return { type: condition.type, property: condition.property, present, actual, matched };
   return { property: condition.property, operator: condition.operator, expected: condition.value, present, actual, matched };
+}
+
+function validateNativeEffect(effect, path, issues) {
+  const fields = { lose_hearts: ["type", "amount"], narrative: ["type", "text"], achievement: ["type", "id", "title", "body"] };
+  const type = effect?.type;
+  if (!object(effect, path, Object.hasOwn(fields, type) ? fields[type] : ["type"], issues)) return;
+  if (!PROPERTY_NATIVE_EFFECTS.includes(type)) {
+    issues.push(error(`${path}.type`, "unsupported_effect", "Use property, lose_hearts, narrative or achievement."));
+  } else if (type === "lose_hearts") {
+    validateNumber(effect.amount, `${path}.amount`, issues);
+    if (typeof effect.amount === "number" && effect.amount <= 0) issues.push(error(`${path}.amount`, "invalid_amount", "Heart loss must be positive."));
+  } else {
+    const required = type === "narrative" ? ["text"] : ["id", "title"];
+    for (const field of [...required, ...(Object.hasOwn(effect, "body") ? ["body"] : [])]) {
+      if (typeof effect[field] !== "string" || !effect[field].trim()) issues.push(error(`${path}.${field}`, "invalid_text", "Use non-empty text."));
+    }
+  }
 }
 
 function validateId(value, path, issues) {

@@ -156,7 +156,7 @@ test("JSON Schema and validator agree on operation/comparison vocabulary and ID 
 
 test("malformed structures, IDs, operations, operators, values and extra fields fail atomically without rewriting", () => {
   const valid = document(block(effect("set", "p", 2)));
-  const malformed = [null, [], {}, { version: 2, blocks: [] }, { version: 1, blocks: {} },
+  const malformed = [null, [], {}, { version: 3, blocks: [] }, { version: 1, blocks: {} },
     document(null), document({}), document({ then: [] }), document({ then: [null] }),
     document({ if: null, then: valid.blocks[0].then }), document({ then: [{ property: "p", value: 2 }] }),
     { ...valid, unknown: true }, document({ ...valid.blocks[0], typo: 1 })];

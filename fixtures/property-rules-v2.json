@@ -1,0 +1,29 @@
+{
+  "Burning": {
+    "version": 2,
+    "blocks": [
+      { "then": [{ "type": "property", "operation": "add", "property": "burning", "value": 1 }] },
+      {
+        "if": { "type": "comparison", "mode": "current", "property": "burning", "operator": ">=", "value": 3 },
+        "then": [
+          { "type": "property", "operation": "set", "property": "burning", "value": 0 },
+          { "type": "lose_hearts", "amount": 1 },
+          { "type": "narrative", "text": "The accumulated heat hurts." }
+        ]
+      }
+    ]
+  },
+  "Poison": {
+    "version": 2,
+    "blocks": [
+      { "then": [{ "type": "property", "operation": "add", "property": "poison", "value": 1 }] },
+      {
+        "if": { "type": "comparison", "mode": "current", "property": "poison", "operator": ">=", "value": 4 },
+        "then": [
+          { "type": "property", "operation": "set", "property": "poison", "value": 0 },
+          { "type": "lose_hearts", "amount": 2 }
+        ]
+      }
+    ]
+  }
+}

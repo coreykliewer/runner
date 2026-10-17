@@ -1,47 +1,306 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Runner Property Rules 1.0",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["version", "blocks"],
-  "properties": {
-    "version": { "const": 1 },
-    "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
-  },
+  "title": "Runner Property Rules 1.0 and 2.0",
   "$defs": {
     "propertyId": {
       "type": "string",
       "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}(?![\\s\\S])",
-      "not": { "enum": ["__proto__", "prototype", "constructor"] }
+      "not": {
+        "enum": [
+          "__proto__",
+          "prototype",
+          "constructor"
+        ]
+      }
     },
     "condition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["property", "operator", "value"],
+      "required": [
+        "property",
+        "operator",
+        "value"
+      ],
       "properties": {
-        "property": { "$ref": "#/$defs/propertyId" },
-        "operator": { "enum": ["=", "!=", ">", "<", ">=", "<="] },
-        "value": { "type": "number" }
+        "property": {
+          "$ref": "#/$defs/propertyId"
+        },
+        "operator": {
+          "enum": [
+            "=",
+            "!=",
+            ">",
+            "<",
+            ">=",
+            "<="
+          ]
+        },
+        "value": {
+          "type": "number"
+        }
       }
     },
     "effect": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operation", "property", "value"],
+      "required": [
+        "operation",
+        "property",
+        "value"
+      ],
       "properties": {
-        "operation": { "enum": ["set", "add", "subtract"] },
-        "property": { "$ref": "#/$defs/propertyId" },
-        "value": { "type": "number" }
+        "operation": {
+          "enum": [
+            "set",
+            "add",
+            "subtract"
+          ]
+        },
+        "property": {
+          "$ref": "#/$defs/propertyId"
+        },
+        "value": {
+          "type": "number"
+        }
       }
     },
     "block": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["then"],
+      "required": [
+        "then"
+      ],
       "properties": {
-        "if": { "$ref": "#/$defs/condition" },
-        "then": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/effect" } }
+        "if": {
+          "$ref": "#/$defs/condition"
+        },
+        "then": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/effect"
+          }
+        }
+      }
+    },
+    "v2Condition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "property",
+            "operator",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "comparison"
+            },
+            "mode": {
+              "enum": [
+                "entry",
+                "current"
+              ],
+              "default": "entry"
+            },
+            "property": {
+              "$ref": "#/$defs/propertyId"
+            },
+            "operator": {
+              "enum": [
+                "=",
+                "!=",
+                ">",
+                "<",
+                ">=",
+                "<="
+              ]
+            },
+            "value": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "property"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "exists",
+                "not_exists"
+              ]
+            },
+            "mode": {
+              "enum": [
+                "entry",
+                "current"
+              ],
+              "default": "entry"
+            },
+            "property": {
+              "$ref": "#/$defs/propertyId"
+            }
+          }
+        }
+      ]
+    },
+    "v2Effect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operation",
+            "property",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "property"
+            },
+            "operation": {
+              "enum": [
+                "set",
+                "add",
+                "subtract"
+              ]
+            },
+            "property": {
+              "$ref": "#/$defs/propertyId"
+            },
+            "value": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "amount"
+          ],
+          "properties": {
+            "type": {
+              "const": "lose_hearts"
+            },
+            "amount": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "narrative"
+            },
+            "text": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "title"
+          ],
+          "properties": {
+            "type": {
+              "const": "achievement"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "title": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "body": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      ]
+    },
+    "v2Block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "then"
+      ],
+      "properties": {
+        "if": {
+          "$ref": "#/$defs/v2Condition"
+        },
+        "then": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/v2Effect"
+          }
+        }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "blocks"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "blocks"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2Block"
+          }
+        }
+      }
+    }
+  ]
 }
