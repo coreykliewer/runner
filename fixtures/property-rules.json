@@ -1,0 +1,28 @@
+{
+  "description": "Standalone test definitions only; names never select evaluator behavior.",
+  "tiles": {
+    "Water": {
+      "displayOnly": "An unrelated field retained by validation",
+      "propertyRules": { "version": 1, "blocks": [
+        { "then": [{ "operation": "set", "property": "Wet", "value": 3 }] }
+      ] }
+    },
+    "Air": {
+      "propertyRules": { "version": 1, "blocks": [
+        { "if": { "property": "Wet", "operator": ">", "value": 0 },
+          "then": [{ "operation": "subtract", "property": "Wet", "value": 1 }] }
+      ] }
+    },
+    "Fire": {
+      "propertyRules": { "version": 1, "blocks": [
+        { "if": { "property": "Wet", "operator": ">=", "value": 2 }, "then": [
+          { "operation": "subtract", "property": "Wet", "value": 2 },
+          { "operation": "add", "property": "Steam", "value": 1 }
+        ] },
+        { "if": { "property": "Wet", "operator": "<", "value": 2 }, "then": [
+          { "operation": "set", "property": "Scorched", "value": 1 }
+        ] }
+      ] }
+    }
+  }
+}
