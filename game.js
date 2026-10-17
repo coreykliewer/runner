@@ -48,6 +48,8 @@ const COLS = 25;
 
 let manualWaterEntry = false;
 let gameOver = false;
+let encounterDispatcher = null;
+let encounterBatchCursor = 0;
 let rollCount = 0;
 let dieValue1 = 0;
 let dieValue2 = 0;
@@ -272,6 +274,7 @@ let GameMapRuntimeModule = null;
 let TileCompatibilityModule = null;
 let NormalizedTileRegistry = null;
 let NarrativeEventsModule = null;
+let EncounterRulesModule = null;
 let AchievementsModule = null;
 let NARRATIVE_EVENTS = [];
 let ACHIEVEMENT_RULES = [];
@@ -470,6 +473,20 @@ function loadNarrativeEventsModule() {
     });
 }
 
+function loadEncounterRulesModule() {
+  return import("./src/encounterIntegration.js")
+    .then(module => {
+      EncounterRulesModule = module;
+      console.log("[Runner] encounterRules.js loaded successfully.");
+      return module;
+    })
+    .catch(error => {
+      EncounterRulesModule = null;
+      console.warn("[Runner] Failed to load encounterRules.js; universal encounter rules are disabled.", error);
+      return null;
+    });
+}
+
 function loadNarrativeData() {
   return fetch(addCacheBust(NARRATIVE_URL), { cache: "no-store" })
     .then(res => {
@@ -542,6 +559,7 @@ tryFetch([...TILE_URLS])
       loadLevelRoutingModule(),
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
+      loadEncounterRulesModule(),
       loadNarrativeData(),
       loadAchievementsModule().then(() => loadAchievementRules()),
       loadTileSystemV2DiceModule()
@@ -565,6 +583,7 @@ tryFetch([...TILE_URLS])
       loadLevelRoutingModule(),
       loadGameMapRuntimeModule(),
       loadNarrativeEventsModule(),
+      loadEncounterRulesModule(),
       loadNarrativeData(),
       loadAchievementsModule().then(() => loadAchievementRules()),
       loadTileSystemV2DiceModule()
@@ -1118,6 +1137,8 @@ function decodeMap(encoded) {
   if (typeof encoded !== "string" && !normalizedMap.spawn) {
     throw new Error("Numeric gameplay maps require explicit spawn coordinates.");
   }
+  encounterDispatcher = null;
+  encounterBatchCursor = diceEventBatches.length;
   currentMapSpawn = normalizedMap.spawn || null;
   const runtime = GameMapRuntimeModule.buildNumericGameMap(normalizedMap, NormalizedTileRegistry);
   signVariantMap = runtime.signVariantMap;
@@ -1803,6 +1824,8 @@ function createGameDiceEngine({
 
 function initializeDiceEngine() {
   diceEventBatches.length = 0;
+  encounterBatchCursor = 0;
+  encounterDispatcher = null;
   diceEngine = createGameDiceEngine();
   const state = diceEngine.getState();
   dieValue1 = state.dice.die1;
@@ -2027,7 +2050,7 @@ function tryFightMonsterAt(x, y) {
   }
 
   // ---------- MONSTER ATTACK ----------
-  if (hp > 0 && monster.monsterHit) {
+  if (hp > 0 && monster.monsterHit && !dispatcherOwnsEncounterAt(x, y)) {
 
     const monsterHitResult = evaluateDiceRule(monster.monsterHit);
    
@@ -2070,7 +2093,7 @@ function checkAdjacentMonsterAttacks() {
   for (const pos of adjacent) {
     const tile = tileDataAt(pos.x, pos.y);
     const monster = tile.monster;
-    if (!monster?.monsterHit) continue;
+    if (!monster?.monsterHit || dispatcherOwnsEncounterAt(pos.x, pos.y)) continue;
 
     // Monster attack roll
     const hit = evaluateDiceRule(monster.monsterHit);
@@ -2098,7 +2121,33 @@ function checkAdjacentMonsterAttacks() {
   }
 }
 
-
+function dispatcherOwnsEncounterAt(x, y) {
+  return EncounterRulesModule?.encounterOwner(getTileContextAt(x, y).def) === "dispatcher";
+}
+function runEncounterRulesAtEvent(event) {
+  const batches = diceEventBatches.slice(encounterBatchCursor);
+  encounterBatchCursor = diceEventBatches.length;
+  if (gameOver || !EncounterRulesModule || !runner || !grid?.length) return;
+  encounterDispatcher ||= EncounterRulesModule.createEncounterDispatcher((action, context) => {
+    if (gameOver) return;
+    const dice = context.event.after;
+    const amount = action.amountExpression == null ? action.amount : EncounterRulesModule.evaluateEncounterExpression(action.amountExpression, { d1: dice.die1, d2: dice.die2 });
+    if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid encounter damage");
+    const message = action.message || "You take " + amount + " damage.";
+    takeDamage(amount, { deathMessage: message });
+    setMessage(message, { kind: "combat" });
+    updateInfo();
+    draw();
+  });
+  const sources = [];
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[y].length; x++) {
+      const tile = getTileContextAt(x, y);
+      sources.push({ x, y, definition: tile.def, instanceId: currentLevelKey + ":" + x + ":" + y + ":" + tile.id });
+    }
+  }
+  encounterDispatcher.dispatch({ batches, rules: EncounterRulesModule.encounterDispatcherRules(sources, event), context: { player: { x: runner.x, y: runner.y } } });
+}
 
 // ============================================================
 // Pickups
@@ -2560,6 +2609,7 @@ function forceDown() {
 
   // Combat checks after movement settles
   checkAdjacentMonsterAttacks();
+  runEncounterRulesAtEvent("after_move");
 
   updateInfo("Force-down");
   draw();
@@ -2774,6 +2824,7 @@ turboExecuting = false;
 runAttributeCheck();
 applyGravityAfterMove();
 checkAdjacentMonsterAttacks();
+runEncounterRulesAtEvent("after_move");
 
 updateInfo(secondCanMove ? "Turbo Move (2 steps!)" : "Turbo Move (1 step)");
 draw();
@@ -2973,6 +3024,7 @@ if (isFluidTile(tileAfterPickups)) {
 
 // Combat checks after movement settles
 checkAdjacentMonsterAttacks();
+runEncounterRulesAtEvent("after_move");
 
 updateInfo(runner.fallDistance);
 draw();
@@ -3252,6 +3304,7 @@ function rollDice() {
   if (rollLimitState.rollLimit !== null && rollLimitState.rollsRemaining === 0 && !isLevelObjectiveComplete()) {
     setMessage("Final roll! No rolls remaining after this one.", { kind: "message" });
   }
+  runEncounterRulesAtEvent("after_roll");
   savePersistentGameState({ checkpoint: true });
 }
 

@@ -1,4 +1,5 @@
 import { decodeDiceEventBatch } from "./tileSystemV2.js";
+import { encounterConditionMatches } from "./encounterRules.js";
 
 export const MAX_CHILD_ACTIONS_PER_ROOT = 64;
 
@@ -218,6 +219,8 @@ export function conditionMatches(condition, event, context = {}) {
   if (!condition || typeof condition !== "object" || !event?.after) return false;
   const dice = event.after;
   switch (condition.type) {
+    case "encounter":
+      return encounterConditionMatches(condition.condition, { d1: dice.die1, d2: dice.die2 });
     case "dice_sum":
       return compare(dice.die1 + dice.die2, condition.operator, condition.value);
     case "dice_value":

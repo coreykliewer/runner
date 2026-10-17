@@ -94,6 +94,7 @@ async function openMovementMap(page, movementPoints) {
   await installGameFixtures(page, { movementPoints });
   const map = encodeURIComponent(movementMap);
   await page.goto(`/#resume=1&map=${map}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await expect(page.locator("#die1")).toHaveText(String(movementPoints));
   await page.locator("#btn-right").click();
 }
@@ -158,6 +159,7 @@ async function installDiceEngineFixture(page, {
 test("game movement delegates selected-first spending and captures immutable dice snapshots", async ({ page }) => {
   await installDiceEngineFixture(page);
   await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.locator("#btn-right").click();
   await expect(page.locator("#info")).toContainText("Moves: 3");
 
@@ -178,6 +180,7 @@ test("game movement delegates selected-first spending and captures immutable dic
 test("selecting Die 2 spends it first, and unaffordable movement spends nothing", async ({ page }) => {
   await installDiceEngineFixture(page, { selectedDie: "die2" });
   await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.locator("#btn-right").click();
   await expect(page.locator("#info")).toContainText("Moves: 3");
   const selectedDieBatch = await page.evaluate(() => window.getRunnerDiceEventBatches().at(-1));
@@ -189,6 +192,7 @@ test("selecting Die 2 spends it first, and unaffordable movement spends nothing"
 test("unaffordable movement leaves both dice and movement position unchanged", async ({ page }) => {
   await installDiceEngineFixture(page, { die1: 1, die2: 0, selectedDie: "die1" });
   await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await expect(page.locator("#info")).toContainText("Moves: 1");
   await page.locator("#btn-right").click();
   await expect(page.locator("#info")).toContainText("Moves: 1");
@@ -199,6 +203,7 @@ test("unaffordable movement leaves both dice and movement position unchanged", a
 test("voluntary rerolls discard remaining time and increment the existing roll count once", async ({ page }) => {
   await installDiceEngineFixture(page, { die1: 0, die2: 0, rollLimit: 3 });
   await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.evaluate(() => { Math.random = () => 0.999; });
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await expect(page.locator("#info")).toContainText("Moves: 12");
@@ -225,6 +230,7 @@ test("dice rolls respect global and level-specific capacities", async ({ page })
     levelCapacities: { die1: 2 }
   });
   await page.goto(`/#resume=1&map=${encodeURIComponent(movementMap)}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.evaluate(() => { Math.random = () => 0.999; });
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await expect(page.locator("#die1")).toHaveText("2");
@@ -264,6 +270,7 @@ test("numeric registry and versioned numeric URL map preserve current movement b
 
   const mapParameter = encodeURIComponent(JSON.stringify(numericMap));
   await page.goto(`/#resume=1&mapv=1&map=${mapParameter}`);
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await expect(page.locator("#die1")).toHaveText("3");
   await page.locator("#btn-right").click();
   await expect(page.locator("#info")).toContainText("Moves: 1");
@@ -274,6 +281,7 @@ test("gameplay falls back to the legacy tile backup when tiles2.json is empty", 
   await page.route("**/tiles2.json*", route => route.fulfill({ status: 200, contentType: "application/json", body: "" }));
   await page.addInitScript(() => { Math.random = () => 0; });
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await expect(page.locator("#log")).not.toContainText("BOOT ERROR");
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await expect(page.locator("#die1")).not.toHaveText("0");
@@ -299,6 +307,7 @@ test("numeric JSON-grid maps in levels.json load through the legacy gameplay ada
   await page.addInitScript(() => { Math.random = () => 0; });
 
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await expect(page.locator("#log")).not.toContainText("BOOT ERROR");
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await page.locator("#btn-right").click();
@@ -329,6 +338,7 @@ test("movement costs block zero and insufficient points, but allow sufficient po
 test("pickup rewards carry into a mapped exit checkpoint and portable link", async ({ page, browser }) => {
   await installGameFixtures(page, { routeLevels: true });
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await expect(page.locator("#die1")).toHaveText("1");
 
@@ -347,6 +357,7 @@ test("pickup rewards carry into a mapped exit checkpoint and portable link", asy
   expect(savedCheckpoint.world.pickupsCollected).toEqual([]);
 
   await page.goto("/#resume=1");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.reload();
   await expect(page.locator("#info")).toContainText("Diamonds: 1");
   await expect(page.locator("#log")).not.toContainText("My precious!");
@@ -375,6 +386,7 @@ test("the final permitted roll grants movement and can complete the level", asyn
   const exitMap = bottomMap("P1R1A1E{finish}1A21");
   await installRollLimitFixture(page, exitMap, { finish: "destination" });
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await expect(page.locator("#info")).toContainText("Moves: 2");
   await expect(page.locator("#info")).toContainText("Rolls used: 1 (100%)");
@@ -400,6 +412,7 @@ test("the final permitted roll grants movement and can complete the level", asyn
 test("death occurs once when another roll is needed and none remain", async ({ page }) => {
   await installRollLimitFixture(page, bottomMap("P1R1A23"));
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await expect(page.locator("#info")).toContainText("Moves: 2");
   await page.locator("#btn-right").click();
@@ -419,6 +432,7 @@ test("death occurs once when another roll is needed and none remain", async ({ p
 test("reloading during the final roll restores movement points and roll count", async ({ page }) => {
   await installRollLimitFixture(page, bottomMap("P1R1A23"));
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await page.getByRole("button", { name: "Roll Dice" }).click();
   await page.locator("#btn-right").click();
 
@@ -426,6 +440,7 @@ test("reloading during the final roll restores movement points and roll count", 
   expect(savedDice).toMatchObject({ dieValue1: 0, dieValue2: 1, rollCount: 1 });
 
   await page.goto("/#resume=1");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
   await expect(page.locator("#die1")).toHaveText("0");
   await expect(page.locator("#die2")).toHaveText("1");
   await expect(page.locator("#info")).toContainText("Moves: 1");
@@ -445,6 +460,7 @@ test("responsive layouts keep panels accessible and the board proportional acros
   ];
 
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
 
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });

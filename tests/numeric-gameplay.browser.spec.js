@@ -44,6 +44,7 @@ async function launchNumericLevel(page, registry, levels, { narrative = null, ac
   if (achievements) await page.route("**/achievements.json*", route => route.fulfill({ json: achievements }));
   await page.addInitScript(() => { Math.random = () => 0; });
   await page.goto("/");
+  await expect(page.locator("#create-resume-link")).toBeEnabled();
 }
 
 test("different numeric monster IDs use their own variants, art, and defeat replacements", async ({ page }) => {
@@ -140,6 +141,88 @@ test("different numeric lock IDs use their own dice definitions", async ({ page 
   await page.locator("#btn-right").click();
   await page.locator("#btn-right").click();
   await expect(page.locator("#log")).toContainText("Needs a total of twelve.");
+});
+
+test("arbitrary numeric tiles run universal encounter rules from captured roll snapshots", async ({ page }) => {
+  const registry = await createRegistry([
+    {
+      id: 901,
+      name: "Rock",
+      category: "Environmental",
+      definition: {
+        solid: true,
+        encounterRules: {
+          enabled: true,
+          resolution: "all_matches",
+          rules: [{
+            id: "rock-strike",
+            order: 1,
+            trigger: { events: ["after_roll"], minDistance: 1, maxDistance: 1, distance: "manhattan", position: "any", repeat: "every_event" },
+            conditions: [{ type: "expression", expression: "d1 + d2 <= 2" }],
+            actions: [{ type: "damage", amount: 1, message: "Rock strikes for one." }]
+          }]
+        }
+      }
+    },
+    {
+      id: 902,
+      name: "Quiet interactive tile",
+      category: "Interactive",
+      definition: { solid: true }
+    },
+    {
+      id: 903,
+      name: "Rat",
+      category: "Interactive",
+      definition: {
+        solid: true,
+        encounterRules: {
+          enabled: true,
+          resolution: "first_match_per_tile",
+          rules: [{
+            id: "rat-strike",
+            order: 1,
+            trigger: { events: ["after_roll"], minDistance: 1, maxDistance: 2, distance: "manhattan", position: "any", repeat: "every_event" },
+            conditions: [{ type: "expression", expression: "d1 + d2 == 3" }],
+            actions: [{ type: "damage", amount: 2, message: "The rat bites for two." }]
+          }]
+        }
+      }
+    }
+  ]);
+  const map = makeMap(registry, {
+    spawn: { x: 3, y: 1 },
+    placements: [
+      { x: 4, y: 1, id: 901 },
+      { x: 2, y: 1, id: 902 },
+      { x: 3, y: 0, id: 903 }
+    ]
+  });
+  await launchNumericLevel(page, registry, {
+    schemaVersion: 1,
+    defaultLevel: "default",
+    levels: { default: { id: "default", name: "Encounter test", map } }
+  });
+
+  const setNextRoll = async (first, second) => page.evaluate(([die1, die2]) => {
+    const rolls = [(die1 - 1) / 6, (die2 - 1) / 6];
+    let index = 0;
+    Math.random = () => rolls[index++] ?? 0;
+  }, [first, second]);
+
+  await setNextRoll(1, 1);
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  await expect(page.locator("#info")).toContainText("Hearts: 4");
+  await expect(page.locator("#log")).toContainText("Rock strikes for one.");
+  await expect(page.locator("#log")).not.toContainText("rat bites");
+
+  await setNextRoll(1, 2);
+  await page.getByRole("button", { name: "Roll Dice" }).click();
+  // The reroll's first snapshot (1,1) also matches the rock's rule.
+  await expect(page.locator("#info")).toContainText("Hearts: 1");
+  await expect(page.locator("#log")).toContainText("The rat bites for two.");
+  const combatLog = await page.locator("#log").innerText();
+  expect(combatLog.match(/Rock strikes for one\./g)).toHaveLength(2);
 });
 
 test("numeric maps use explicit spawn coordinates and declarative exits", async ({ page }) => {
