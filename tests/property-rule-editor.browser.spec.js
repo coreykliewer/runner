@@ -202,7 +202,7 @@ for (const unsupported of ["version", "field", "operation"]) {
     await setup(page, registry => {
       const tile = registry.tiles[0]; id = tile.id;
       rules = { version: 1, blocks: [{ then: [{ operation: "set", property: "wet", value: 5 }] }] };
-      if (unsupported === "version") rules.version = 2;
+      if (unsupported === "version") rules.version = 3;
       if (unsupported === "field") rules.blocks[0].then[0].future = { keep: true };
       if (unsupported === "operation") rules.blocks[0].then[0].operation = "multiply";
       tile.definition.propertyRules = rules;
@@ -214,6 +214,172 @@ for (const unsupported of ["version", "field", "operation"]) {
     await page.locator("#inspectorFields").getByLabel("Tile name", { exact: true }).fill("Unsupported data preserved");
     await page.locator("#saveDoc").click();
     await expect(page.locator("#statusText")).toContainText("Save blocked");
+    await page.locator("#exportDoc").click();
+    expect((await written(page)).tiles.find(tile => tile.id === id).definition.propertyRules).toEqual(rules);
+  });
+}
+
+test("authors arbitrary V2 thresholds, native effects and order-dependent terminal previews entirely through controls", async ({ page }) => {
+  const persistence = await setup(page);
+  const id = await createTile(page, "Threshold fixture");
+  await editor(page).getByRole("button", { name: "Upgrade property rules to version 2" }).click();
+  await addBlock(page); await effect(page, 1, 1, "add", "charge_x", 1);
+  await addBlock(page); await condition(page, 2, "charge_x", ">=", 3);
+  await editor(page).getByLabel("Block 2 condition values", { exact: true }).selectOption("current");
+  await effect(page, 2, 1, "set", "charge_x", 0);
+  for (const [index, type] of [[2, "lose_hearts"], [3, "achievement"], [4, "narrative"]]) {
+    await editor(page).getByRole("button", { name: "Add effect to block 2", exact: true }).click();
+    await editor(page).getByLabel(`Block 2 effect ${index} type`, { exact: true }).selectOption(type);
+  }
+  await editor(page).getByLabel("Block 2 effect 2 amount", { exact: true }).fill("1");
+  await editor(page).getByLabel("Block 2 effect 3 achievement ID", { exact: true }).fill("sample_award");
+  await editor(page).getByLabel("Block 2 effect 3 achievement title", { exact: true }).fill("Sample award");
+  await editor(page).getByLabel("Block 2 effect 4 narrative text", { exact: true }).fill("Threshold reached");
+  await page.locator("#saveDoc").click();
+  const original = await written(page);
+  const rules = original.tiles.find(tile => tile.id === id).definition.propertyRules;
+  expect(rules.version).toBe(2);
+  expect(rules.blocks[1].then.map(effect => effect.type)).toEqual(["property", "lose_hearts", "achievement", "narrative"]);
+  await page.evaluate(() => localStorage.setItem("runner:v2:state", "preview sentinel"));
+  await sample(page, "charge_x", 2); await run(page);
+  await expect(resultRow(page, "charge_x").locator("td").nth(1)).toHaveText("Acquired: 0");
+  const preview = editor(page).locator(".property-rule-preview-result");
+  await expect(preview).toContainText("Simulated hearts: 3 → 2");
+  await expect(preview).toContainText("SIMULATED Unlock achievement: Sample award");
+  await expect(preview).toContainText("SIMULATED Narrative: Threshold reached");
+  await preview.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: test.info().outputPath("property-rules-v2-preview.png") });
+  await editor(page).getByRole("button", { name: "Use preview result as next sample entry" }).click();
+  await sample(page, "charge_x", 2); await run(page);
+  await expect(preview).toContainText("Achievement already unlocked: Sample award");
+  await expect(preview).toContainText("Simulated hearts: 2 → 1");
+  expect(await page.evaluate(() => localStorage.getItem("runner:v2:state"))).toBe("preview sentinel");
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  await editor(page).getByLabel("Sample hearts", { exact: true }).fill("1");
+  await run(page);
+  await expect(preview).toContainText("Simulated death: subsequent effects stopped");
+  await expect(preview).not.toContainText("SIMULATED Narrative");
+  await expect(resultRow(page, "charge_x").locator("td").nth(1)).toHaveText("Acquired: 0");
+  const up = editor(page).getByRole("button", { name: "Move block 2 effect 2 up", exact: true });
+  await up.focus(); await up.press("Enter");
+  await expect(editor(page).getByRole("button", { name: "Move block 2 effect 1 down", exact: true })).toBeFocused();
+  await run(page);
+  await expect(resultRow(page, "charge_x").locator("td").nth(1)).toHaveText("Acquired: 3");
+  await page.locator("#exportDoc").click();
+  expect((await written(page)).tiles.find(tile => tile.id === id).definition.propertyRules.blocks[1].then.map(effect => effect.type))
+    .toEqual(["lose_hearts", "property", "achievement", "narrative"]);
+  await editor(page).getByRole("button", { name: "Move block 2 up", exact: true }).click();
+  await run(page);
+  await expect(preview).toContainText("Simulated hearts: 1 → 1");
+  await expect(preview).not.toContainText("Simulated death");
+  await page.locator("#saveDoc").click();
+  const reordered = await written(page);
+  persistence.persist(reordered);
+  await page.reload(); await page.locator('.nav-document[data-document="numericTiles"]').click(); await select(page, id);
+  await expect(editor(page).getByLabel("Block 1 effect 1 type", { exact: true })).toHaveValue("lose_hearts");
+  await page.locator("#exportDoc").click();
+  expect(await written(page)).toEqual(reordered);
+  await page.locator("#fallbackFileInput").setInputFiles({ name: "tiles2.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(reordered)) });
+  await select(page, id);
+  await page.locator("#exportDoc").click();
+  expect(await written(page)).toEqual(reordered);
+});
+
+test("V2 existence controls distinguish missing and zero, preserve entry defaults, and validate native fields inline", async ({ page }) => {
+  await setup(page);
+  const id = await createTile(page, "Existence fixture");
+  await addBlock(page); await condition(page, 1, "new_charge", "=", 0); await effect(page, 1, 1, "set", "matched", 0);
+  await editor(page).getByRole("button", { name: "Upgrade property rules to version 2" }).click();
+  await editor(page).getByLabel("Block 1 condition type", { exact: true }).selectOption("exists");
+  await expect(editor(page).getByLabel("Block 1 comparison", { exact: true })).toHaveCount(0);
+  await expect(editor(page).getByLabel("Block 1 condition values", { exact: true })).toHaveValue("entry");
+  await run(page);
+  await expect(resultRow(page, "matched").locator("td").nth(1)).toHaveText("Missing");
+  await sample(page, "new_charge", 0); await run(page);
+  await expect(resultRow(page, "matched").locator("td").nth(1)).toHaveText("Acquired: 0");
+  await editor(page).getByLabel("Block 1 condition type", { exact: true }).selectOption("not_exists");
+  await run(page);
+  await expect(resultRow(page, "matched").locator("td").nth(1)).toHaveText("Missing");
+  await sample(page, "new_charge", undefined); await run(page);
+  await expect(resultRow(page, "matched").locator("td").nth(1)).toHaveText("Acquired: 0");
+  await page.locator("#saveDoc").click();
+  const valid = await written(page);
+  await editor(page).getByLabel("Block 1 effect 1 type", { exact: true }).selectOption("lose_hearts");
+  const amount = editor(page).getByLabel("Block 1 effect 1 amount", { exact: true });
+  await amount.fill("0");
+  await expect(amount).toHaveAttribute("aria-invalid", "true");
+  await expect(editor(page).locator('[data-path="propertyRules.blocks[0].then[0].amount"]')).toContainText("positive");
+  await page.locator("#saveDoc").click();
+  expect(await written(page)).toEqual(valid);
+  await expect(page.locator("#statusText")).toContainText("Save blocked");
+  await amount.fill("2");
+  await expect(amount).toHaveAttribute("aria-invalid", "false");
+  await editor(page).getByLabel("Block 1 effect 1 type", { exact: true }).selectOption("narrative");
+  await expect(editor(page).getByLabel("Block 1 effect 1 narrative text", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await editor(page).getByLabel("Block 1 effect 1 narrative text", { exact: true }).fill("Missing property narrative");
+  await page.locator("#saveDoc").click();
+  const saved = (await written(page)).tiles.find(tile => tile.id === id).definition.propertyRules;
+  expect(saved.blocks[0].if).toEqual({ type: "not_exists", property: "new_charge" });
+});
+
+test("V2 variants retain exact mixed order, inherited JSON, artwork and opaque encounters", async ({ page }) => {
+  let original, id;
+  const persistence = await setup(page, registry => {
+    const tile = registry.tiles[0]; id = tile.id;
+    tile.definition.propertyRules = { version: 2, blocks: [{ then: [
+      { type: "property", operation: "set", property: "custom", value: 0 },
+      { type: "narrative", text: "Variant text" }, { type: "achievement", id: "variant_award", title: "Variant award" },
+      { type: "lose_hearts", amount: 1 }] }] };
+    tile.definition.encounterRules = { enabled: false, resolution: "all_matches", rules: [], future: { keep: [1, 2] } };
+    tile.definition.variants = { decor: { alternate: { svg: '<svg xmlns="http://www.w3.org/2000/svg"/>', future: "preserved" } } };
+    original = structuredClone(tile);
+  });
+  await select(page, id);
+  await page.locator(".tile-builder-section > summary").filter({ hasText: /^Variants$/ }).click();
+  await page.getByRole("button", { name: "Edit decor variant alternate", exact: true }).click();
+  await openCapabilities(page);
+  await expect(editor(page).getByLabel("Block 1 effect 1 type", { exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Override Property rules", exact: true }).click();
+  await editor(page).getByRole("button", { name: "Move block 1 effect 4 up", exact: true }).click();
+  await editor(page).getByRole("button", { name: "Move block 1 effect 3 up", exact: true }).click();
+  await editor(page).getByRole("button", { name: "Move block 1 effect 1 down", exact: true }).click();
+  await editor(page).getByRole("button", { name: "Move block 1 effect 4 up", exact: true }).click();
+  await editor(page).getByRole("button", { name: "Duplicate block 1 effect 2", exact: true }).click();
+  await editor(page).getByRole("button", { name: "Delete block 1 effect 3", exact: true }).click();
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  await page.locator("#exportDoc").click();
+  const exported = await written(page);
+  const tile = exported.tiles.find(tile => tile.id === id);
+  expect(tile.definition.propertyRules).toEqual(original.definition.propertyRules);
+  expect(tile.definition.encounterRules).toEqual(original.definition.encounterRules);
+  expect(tile.definition.variants.decor.alternate.svg).toBe(original.definition.variants.decor.alternate.svg);
+  expect(tile.definition.variants.decor.alternate.propertyRules.blocks[0].then.map(effect => effect.type))
+    .toEqual(["lose_hearts", "property", "achievement", "narrative"]);
+  persistence.persist(exported);
+  await page.reload(); await page.locator('.nav-document[data-document="numericTiles"]').click(); await select(page, id);
+  await page.locator(".tile-builder-section > summary").filter({ hasText: /^Variants$/ }).click();
+  await page.getByRole("button", { name: "Edit decor variant alternate", exact: true }).click();
+  await openCapabilities(page);
+  await expect(editor(page).getByLabel("Block 1 effect 1 type", { exact: true })).toHaveValue("lose_hearts");
+  await page.getByRole("button", { name: "Remove Property rules override", exact: true }).click();
+  await page.locator("#saveDoc").click();
+  await page.locator("#exportDoc").click();
+  expect((await written(page)).tiles.find(tile => tile.id === id)).toEqual(original);
+});
+
+for (const location of ["condition", "effect"]) {
+  test(`V2 future ${location} fields remain read-only and lossless`, async ({ page }) => {
+    let id, rules;
+    await setup(page, registry => {
+      const tile = registry.tiles[0]; id = tile.id;
+      rules = { version: 2, blocks: [{ if: { type: "exists", property: "p" }, then: [{ type: "narrative", text: "Preserved" }] }] };
+      (location === "condition" ? rules.blocks[0].if : rules.blocks[0].then[0]).future = { keep: [0, "value"] };
+      tile.definition.propertyRules = rules;
+    });
+    await select(page, id);
+    await expect(editor(page)).toContainText("original JSON is preserved");
+    await expect(editor(page).getByRole("button", { name: "Add property-rule block" })).toHaveCount(0);
     await page.locator("#exportDoc").click();
     expect((await written(page)).tiles.find(tile => tile.id === id).definition.propertyRules).toEqual(rules);
   });

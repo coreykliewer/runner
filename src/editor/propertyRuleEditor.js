@@ -1,5 +1,6 @@
 import { PROPERTY_COMPARISONS, PROPERTY_OPERATIONS, validatePropertyRules,
   validateRunnerProperties, evaluatePropertyRules } from "../propertyRules.js";
+import { previewPropertyRuleEntry } from "./propertyRulePreview.js";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -8,11 +9,26 @@ const only = (value, keys) => record(value) && Object.keys(value).every(key => k
 // Unknown instructions must never be reconstructed from the subset understood by a form.
 export function propertyRuleFormSupported(value) {
   const numeric = value => value === null || (typeof value === "number" && Number.isFinite(value));
-  const comparison = value => only(value, ["property", "operator", "value"]) &&
-    typeof value.property === "string" && PROPERTY_COMPARISONS.includes(value.operator) && Object.hasOwn(value, "value") && numeric(value.value);
-  const effect = value => only(value, ["property", "operation", "value"]) &&
-    typeof value.property === "string" && PROPERTY_OPERATIONS.includes(value.operation) && Object.hasOwn(value, "value") && numeric(value.value);
-  return only(value, ["version", "blocks"]) && value.version === 1 && Array.isArray(value.blocks) && value.blocks.every(block =>
+  const v2 = value?.version === 2;
+  const comparison = value => {
+    const existence = v2 && ["exists", "not_exists"].includes(value?.type);
+    return only(value, [...(v2 ? ["type", "mode"] : []), "property", ...(existence ? [] : ["operator", "value"])]) &&
+      typeof value.property === "string" && (!v2 || (["comparison", "exists", "not_exists"].includes(value.type) &&
+        (!Object.hasOwn(value, "mode") || ["entry", "current"].includes(value.mode)))) &&
+      (existence || (PROPERTY_COMPARISONS.includes(value.operator) && Object.hasOwn(value, "value") && numeric(value.value)));
+  };
+  const effect = value => {
+    if (v2 && value?.type !== "property") {
+      if (value?.type === "lose_hearts") return only(value, ["type", "amount"]) && Object.hasOwn(value, "amount") && numeric(value.amount);
+      if (value?.type === "narrative") return only(value, ["type", "text"]) && typeof value.text === "string";
+      if (value?.type === "achievement") return only(value, ["type", "id", "title", "body"]) &&
+        typeof value.id === "string" && typeof value.title === "string" && (!Object.hasOwn(value, "body") || typeof value.body === "string");
+      return false;
+    }
+    return only(value, [...(v2 ? ["type"] : []), "property", "operation", "value"]) &&
+      typeof value.property === "string" && PROPERTY_OPERATIONS.includes(value.operation) && Object.hasOwn(value, "value") && numeric(value.value);
+  };
+  return only(value, ["version", "blocks"]) && [1, 2].includes(value.version) && Array.isArray(value.blocks) && value.blocks.every(block =>
     only(block, ["if", "then"]) && (!Object.hasOwn(block, "if") || comparison(block.if)) &&
     Array.isArray(block.then) && block.then.every(effect));
 }
@@ -42,9 +58,10 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
   const samples = [];
   const prefix = `property-rule-${crypto.randomUUID()}`;
   const fields = new Map();
+  let sampleHearts = 3, sampleAchievements = [], lastPreview = null;
   let suggestions, status, preview, output;
   const ownedNames = () => collectPropertyNames({ propertyRules: state });
-  const defaultEffect = () => ({ operation: "set", property: "", value: 0 });
+  const defaultEffect = () => ({ ...(state.version === 2 ? { type: "property" } : {}), operation: "set", property: "", value: 0 });
 
   function commit(mutate, redraw = false) {
     const next = clone(state);
@@ -92,7 +109,7 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
     }
   }
 
-  function field(parent, label, path, value, change, choices = null, numeric = false) {
+  function field(parent, label, path, value, change, choices = null, numeric = false, propertySuggestions = true) {
     const row = element("label", "property-rule-field");
     row.append(element("span", "", label));
     const input = document.createElement(choices ? "select" : "input");
@@ -101,7 +118,7 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
     else {
       input.type = numeric ? "number" : "text";
       if (numeric) input.step = "any";
-      else { input.setAttribute("list", `${prefix}-names`); input.autocomplete = "off"; }
+      else if (propertySuggestions) { input.setAttribute("list", `${prefix}-names`); input.autocomplete = "off"; }
     }
     input.value = value ?? "";
     input.addEventListener(choices ? "change" : "input", () => change(numeric ? input.value === "" ? null : Number(input.value) : input.value));
@@ -115,7 +132,14 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
 
   function orderButtons(parent, label, list, index, reorder) {
     for (const [direction, offset] of [["up", -1], ["down", 1]]) {
-      const control = button(`Move ${label} ${direction}`, direction === "up" ? "Up" : "Down", () => reorder(offset));
+      const control = button(`Move ${label} ${direction}`, direction === "up" ? "Move Up" : "Move Down", () => {
+        reorder(offset);
+        const nextLabel = label.startsWith("block ") && !label.includes("effect") ? `block ${index + offset + 1}`
+          : label.replace(/effect \d+$/, `effect ${index + offset + 1}`);
+        const focus = container.querySelector(`[aria-label="Move ${nextLabel} ${direction}"]`);
+        if (focus && !focus.disabled) focus.focus();
+        else container.querySelector(`[aria-label="Move ${nextLabel} ${direction === "up" ? "down" : "up"}"]`)?.focus();
+      });
       control.disabled = index + offset < 0 || index + offset >= list.length;
       parent.append(control);
     }
@@ -126,7 +150,9 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
     container.replaceChildren();
     const root = element("section", "property-rule-editor");
     root.append(element("p", "property-rule-help", "Triggers once for each successful tile entry: walking, jumping, gravity, turbo and forced movement. Spawn, resume, blocked movement and stationary dice changes do not trigger entry."),
-      element("p", "property-rule-help", "Every IF reads the Runner's properties at the beginning of that entry. Blocks execute top to bottom; THEN effects execute top to bottom on working values, clamped to zero. Missing properties fail every comparison, including !=."));
+      element("p", "property-rule-help", state.version === 2
+        ? "Entry Values (the default) reads the immutable entry snapshot. Current Values reads changes from preceding effects. Each IF is checked once before its block. Blocks and all THEN effect types execute top to bottom, without sorting. Terminal death stops later effects. Acquired zero exists; missing properties fail numeric comparisons, including !=."
+        : "Every IF reads the Runner's properties at the beginning of that entry. Blocks execute top to bottom; THEN effects execute top to bottom on working values, clamped to zero. Missing properties fail every comparison, including !=."));
     suggestions = document.createElement("datalist");
     suggestions.id = `${prefix}-names`;
     root.append(suggestions);
@@ -143,6 +169,15 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
       builder.className = "property-rule-builder";
       builder.disabled = readOnly;
       builder.append(element("legend", "", readOnly ? "Inherited rules — override to edit" : "Authored execution order"));
+      builder.append(element("p", "property-rule-help", `Property Rules version ${state.version}`));
+      if (state.version === 2) builder.append(element("p", "property-rule-help", "Changing an effect type replaces that effect's fields. Move Up / Move Down preserves every field and changes execution order immediately."));
+      if (state.version === 1) builder.append(button("Upgrade property rules to version 2", "Use version 2 features", () => commit(next => {
+        next.version = 2;
+        for (const block of next.blocks) {
+          if (block.if) block.if = { type: "comparison", ...block.if };
+          block.then = block.then.map(effect => ({ type: "property", ...effect }));
+        }
+      }, true)));
       state.blocks.forEach((block, index) => {
         const card = element("section", "property-rule-block");
         card.append(element("h4", "", `Block ${index + 1}`));
@@ -156,7 +191,7 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
         conditional.checked = Object.hasOwn(block, "if");
         conditional.setAttribute("aria-label", `Block ${index + 1} use IF`);
         conditional.addEventListener("change", () => commit(next => {
-          if (conditional.checked) next.blocks[index].if = { property: "", operator: "=", value: 0 };
+          if (conditional.checked) next.blocks[index].if = { ...(state.version === 2 ? { type: "comparison" } : {}), property: "", operator: "=", value: 0 };
           else delete next.blocks[index].if;
         }, true));
         const toggle = element("label", "property-rule-toggle");
@@ -165,9 +200,21 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
         const path = `propertyRules.blocks[${index}]`;
         if (block.if) {
           const condition = element("div", "property-rule-fields");
+          if (state.version === 2) {
+            field(condition, `Block ${index + 1} condition type`, `${path}.if.type`, block.if.type, type => commit(next => {
+              const previous = next.blocks[index].if;
+              next.blocks[index].if = { type, property: previous.property,
+                ...(Object.hasOwn(previous, "mode") ? { mode: previous.mode } : {}),
+                ...(type === "comparison" ? { operator: previous.operator || "=", value: previous.value ?? 0 } : {}) };
+            }, true), [["comparison", "Numeric comparison"], ["exists", "Property Exists"], ["not_exists", "Property Does Not Exist"]]);
+            field(condition, `Block ${index + 1} condition values`, `${path}.if.mode`, block.if.mode || "entry",
+              mode => commit(next => { next.blocks[index].if.mode = mode; }), [["entry", "Entry Values"], ["current", "Current Values"]]);
+          }
           field(condition, `Block ${index + 1} IF property`, `${path}.if.property`, block.if.property, value => commit(next => { next.blocks[index].if.property = value; }));
+          if (state.version === 1 || block.if.type === "comparison") {
           field(condition, `Block ${index + 1} comparison`, `${path}.if.operator`, block.if.operator, value => commit(next => { next.blocks[index].if.operator = value; }), PROPERTY_COMPARISONS.map(value => [value, value]));
           field(condition, `Block ${index + 1} IF value`, `${path}.if.value`, block.if.value, value => commit(next => { next.blocks[index].if.value = value; }), null, true);
+          }
           card.append(condition);
         }
         card.append(element("h5", "", "THEN — ordered effects"));
@@ -184,9 +231,24 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
           commands.append(remove);
           row.append(commands);
           const effectPath = `${path}.then[${effectIndex}]`;
+          if (state.version === 2) field(row, `${label} type`, `${effectPath}.type`, effect.type, type => commit(next => {
+            next.blocks[index].then[effectIndex] = type === "property" ? defaultEffect()
+              : type === "lose_hearts" ? { type, amount: 1 }
+              : type === "narrative" ? { type, text: "" } : { type, id: "", title: "" };
+          }, true), [["property", "Property Set / Add / Subtract"], ["lose_hearts", "Lose Hearts"], ["narrative", "Narrative Event"], ["achievement", "Achievement"]]);
+          if (state.version === 1 || effect.type === "property") {
           field(row, `${label} operation`, `${effectPath}.operation`, effect.operation, value => commit(next => { next.blocks[index].then[effectIndex].operation = value; }), PROPERTY_OPERATIONS.map(value => [value, value[0].toUpperCase() + value.slice(1)]));
           field(row, `${label} property`, `${effectPath}.property`, effect.property, value => commit(next => { next.blocks[index].then[effectIndex].property = value; }));
           field(row, `${label} value`, `${effectPath}.value`, effect.value, value => commit(next => { next.blocks[index].then[effectIndex].value = value; }), null, true);
+          } else {
+            const fields = effect.type === "lose_hearts" ? [["amount", "amount", true]]
+              : effect.type === "narrative" ? [["text", "narrative text"]]
+              : [["id", "achievement ID"], ["title", "achievement title"], ["body", "achievement body (optional)"]];
+            for (const [key, caption, numeric] of fields) field(row, `${label} ${caption}`, `${effectPath}.${key}`, effect[key], value => commit(next => {
+              if (key === "body" && value === "") delete next.blocks[index].then[effectIndex][key];
+              else next.blocks[index].then[effectIndex][key] = value;
+            }), null, Boolean(numeric), false);
+          }
           card.append(row);
         });
         card.append(button(`Add effect to block ${index + 1}`, "+ THEN effect", () => commit(next => next.blocks[index].then.push(defaultEffect()), true)));
@@ -208,6 +270,25 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
   function drawSamples() {
     preview.querySelector(".property-rule-samples")?.remove();
     const body = element("div", "property-rule-samples");
+    if (state.version === 2) {
+      body.append(element("p", "property-rule-help", "Simulation only: no Runner damage, log delivery, achievements or saves occur. Each Run preview starts from the sample values below."));
+      for (const [label, value, numeric, update] of [
+        ["Sample hearts", sampleHearts, true, value => { sampleHearts = value; }],
+        ["Sample unlocked achievement IDs", sampleAchievements.map(item => typeof item === "string" ? item : item.id).join(", "), false,
+          value => { sampleAchievements = value.split(",").map(id => id.trim()).filter(Boolean); }]
+      ]) {
+        const row = element("label", "property-rule-field", label);
+        const input = document.createElement("input");
+        input.type = numeric ? "number" : "text";
+        if (numeric) { input.step = "any"; input.min = "0"; }
+        input.value = value;
+        input.setAttribute("aria-label", label);
+        input.addEventListener("input", () => { update(numeric ? input.value === "" ? null : Number(input.value) : input.value); output.textContent = "Sample changed. Run preview again."; });
+        row.append(input);
+        body.append(row);
+      }
+      body.append(element("small", "", "Enter previously unlocked achievement IDs separated by commas."));
+    }
     body.append(element("div", "property-rule-sample-rows"));
     body.append(button("Add sample property", "+ Sample property", () => { samples.push({ property: "", present: true, value: 0 }); drawSampleRows(); output.textContent = "Sample changed. Run preview again."; }),
       button("Run property-rule preview", "Run preview", runPreview));
@@ -258,7 +339,9 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
       output.textContent = "Invalid sample: use unique valid property IDs and finite non-negative acquired values. " + sampleErrors.map(issue => `${issue.path}: ${issue.message}`).join(" ");
       return;
     }
-    const result = evaluatePropertyRules(state, Object.fromEntries(samples.filter(sample => sample.present).map(sample => [sample.property, sample.value])));
+    const properties = Object.fromEntries(samples.filter(sample => sample.present).map(sample => [sample.property, sample.value]));
+    lastPreview = state.version === 2 ? previewPropertyRuleEntry(state, properties, { hearts: sampleHearts, achievements: sampleAchievements }) : null;
+    const result = lastPreview ? lastPreview.evaluation : evaluatePropertyRules(state, properties);
     if (!result.ok) {
       output.textContent = "Preview not applied. " + result.diagnostics.map(issue => `${issue.path}: ${issue.message}`).join(" ");
       return;
@@ -276,8 +359,30 @@ export function renderPropertyRuleEditor(container, { value, propertyNames = [],
     }
     output.append(table);
     const log = document.createElement("ol");
-    for (const block of result.blocks) log.append(element("li", "", `Block ${block.blockIndex + 1}: ${block.matched ? "matched" : "IF did not match"}`));
-    for (const effect of result.effects) log.append(element("li", "", `Block ${effect.blockIndex + 1} effect ${effect.effectIndex + 1}: ${effect.operation} ${effect.property} ${effect.operand}; ${effect.before.present ? effect.before.value : "Missing"} → ${effect.after.value}${effect.clamped ? " (clamped)" : ""}`));
+    if (lastPreview) {
+      output.append(element("p", "property-rule-simulation-status", `Simulated hearts: ${sampleHearts} → ${lastPreview.hearts}. ${result.status === "terminal" ? "Simulated death: subsequent effects stopped." : "Simulation completed."}`));
+      for (const record of result.records) {
+        const text = record.kind === "block" ? `Block ${record.blockNumber}: ${record.matched ? "matched" : "IF did not match"} (${record.mode === "current" ? "Current Values" : "Entry Values"})`
+          : `Block ${record.blockNumber} effect ${record.effectNumber}: ${record.type === "property"
+            ? `${record.effect.operation} ${record.effect.property} ${record.effect.value}; ${Object.hasOwn(record.before, record.effect.property) ? record.before[record.effect.property] : "Missing"} → ${record.after[record.effect.property]}`
+            : `SIMULATED ${lastPreview.native.find(item => item.effectKey === record.effectKey)?.description || record.type}`}`;
+        log.append(element("li", "", text));
+      }
+      const previewResult = lastPreview;
+      const carry = button("Use preview result as next sample entry", "Use result for next entry", () => {
+        samples.splice(0, samples.length, ...[...new Set([...ownedNames(), ...Object.keys(previewResult.evaluation.properties)])].sort().map(property => ({
+          property, present: Object.hasOwn(previewResult.evaluation.properties, property), value: previewResult.evaluation.properties[property] ?? 0
+        })));
+        sampleHearts = previewResult.hearts;
+        sampleAchievements = previewResult.achievements;
+        drawSamples();
+      });
+      carry.disabled = result.status === "terminal";
+      output.append(carry);
+    } else {
+      for (const block of result.blocks) log.append(element("li", "", `Block ${block.blockIndex + 1}: ${block.matched ? "matched" : "IF did not match"}`));
+      for (const effect of result.effects) log.append(element("li", "", `Block ${effect.blockIndex + 1} effect ${effect.effectIndex + 1}: ${effect.operation} ${effect.property} ${effect.operand}; ${effect.before.present ? effect.before.value : "Missing"} → ${effect.after.value}${effect.clamped ? " (clamped)" : ""}`));
+    }
     output.append(log);
   }
 
