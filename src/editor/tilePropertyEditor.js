@@ -7,6 +7,7 @@ import {
   getTilePropertyStatusLabel
 } from "../tileProperties.js";
 import { renderJsonEditor } from "./fieldEditor.js";
+import { renderEncounterRuleEditor } from "./encounterRuleEditor.js";
 import { VARIANT_BUCKETS } from "../shared/variants.js";
 
 const supportedNames = Object.keys(TILE_PROPERTY_DEFINITIONS);
@@ -307,6 +308,16 @@ export function renderTilePropertyEditor(container, {
       next[propertyName] = cloneJson(nextValue);
       commit(next, rerender);
     };
+    if (propertyName === "encounterRules") {
+      const editor = document.createElement("div");
+      editor.className = "tile-nested-editor encounter-property-editor";
+      renderEncounterRuleEditor(editor, {
+        value: currentValue,
+        onChange: (nextValue, rerender) => update(nextValue, rerender)
+      });
+      parent.append(editor);
+      return;
+    }
     if (propertyName === "svg") {
       const upload = document.createElement("label");
       upload.className = "field-row artwork-upload";

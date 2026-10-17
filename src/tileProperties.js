@@ -1,3 +1,5 @@
+import { createDefaultEncounterRules } from "./encounterRules.js";
+
 const ACTIVE = "active";
 const COMPATIBILITY = "compatibility";
 const UNCONFIRMED = "unconfirmed";
@@ -20,7 +22,8 @@ export const TILE_CAPABILITY_GROUPS = [
   { id: "physics", label: "Physics", properties: ["gravity", "bounce", "slope", "fallDamageThreshold", "fallDamageMultiplier", "jumpAllowed", "sinkSpeed", "riseSpeed", "autoPush"] },
   { id: "hazards", label: "Damage and Hazards", properties: ["insideDamage", "topDamage"] },
   { id: "rewards", label: "Items and Rewards", properties: ["pickupType", "effects", "grantStats", "tags"] },
-  { id: "messaging", label: "Text and Messaging", properties: ["hint", "signMessage", "signHtml", "deathMessage", "pickupMessage", "logKind", "logHtml"] }
+  { id: "messaging", label: "Text and Messaging", properties: ["hint", "signMessage", "signHtml", "deathMessage", "pickupMessage", "logKind", "logHtml"] },
+  { id: "encounters", label: "Encounter Rules", properties: ["encounterRules"] }
 ];
 
 const property = (category, type, initialValue, runtimeDefault, status, description, options = {}) => ({
@@ -98,6 +101,8 @@ export const TILE_PROPERTY_DEFINITIONS = {
     "Accepted and preserved, but no current gameplay effect is confirmed.", { label: "Rise speed" }),
   autoPush: property("advanced", "text", "", "not read by current gameplay engine", UNCONFIRMED,
     "The runtime normalizes this identifier, but no current gameplay effect is confirmed.", { label: "Auto-push target" }),
+  encounterRules: property("advanced", "object", createDefaultEncounterRules(), "disabled", ACTIVE,
+    "Optional, reusable trigger-condition-action rules for this tile. No encounter behavior runs unless enabled.", { label: "Encounter rules" }),
 };
 
 export function getTilePropertyStatusLabel(status) {

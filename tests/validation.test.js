@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { validateAchievements, validateContentDocuments, validateLevels, validateMap, validateNarrative, validateTiles } from "../src/validation.js";
 import { resolveExitDestination } from "../src/levelRouting.js";
 import { getRollLimitState } from "../src/rollLimit.js";
+import { createDefaultEncounterRules } from "../src/encounterRules.js";
+import { ContentDocumentStore } from "../src/editor/documentStore.js";
 import { TILE_CAPABILITY_GROUPS, TILE_EDITOR_CATEGORIES, TILE_PROPERTY_CATEGORIES, TILE_PROPERTY_DEFINITIONS, getTilePropertyInitialValue } from "../src/tileProperties.js";
 
 describe("validation", () => {
@@ -248,6 +250,78 @@ describe("validation", () => {
     assert.equal(getTilePropertyInitialValue("moveCostInside", { insideMoveCost: 6, moveCost: 4 }), 6);
     assert.equal(getTilePropertyInitialValue("fallDamageCancel", { gravity: false }), true);
     assert.deepEqual(getTilePropertyInitialValue("insideDamage"), { amount: 0, when: "instant" });
+    assert.equal(TILE_PROPERTY_DEFINITIONS.encounterRules.type, "object");
+  });
+
+  it("validates optional universal encounter rules and safe expressions", () => {
+    const valid = {
+      enabled: true,
+      resolution: "first_match_per_tile",
+      rules: [{
+        id: "rat-bite",
+        order: 1,
+        trigger: { events: ["after_move", "after_roll"], minDistance: 1, maxDistance: 2, distance: "chebyshev", position: "player_above", repeat: "once_per_roll" },
+        conditions: [
+          { type: "expression", expression: "d1 + d2 <= 2" },
+          { type: "exact_dice", die1: 1, die2: 1, ordered: false }
+        ],
+        actions: [{ type: "damage", amountExpression: "(d1 + d2) / 2", message: "The rat bites." }]
+      }]
+    };
+    assert.deepEqual(validateTiles({ P: { encounterRules: valid } }).filter(item => item.severity === "error"), []);
+
+    const invalid = structuredClone(valid);
+    invalid.rules[0].conditions[0].expression = "window.alert(1)";
+    invalid.rules[0].trigger.maxDistance = -1;
+    invalid.rules[0].actions[0].amount = -1;
+    const issues = validateTiles({ P: { encounterRules: invalid } }).filter(item => item.severity === "error");
+    assert.equal(issues.some(item => item.path.endsWith("conditions[0].expression")), true);
+    assert.equal(issues.some(item => item.path.endsWith("trigger.maxDistance")), true);
+    assert.equal(issues.some(item => item.path.endsWith("actions[0]")), true);
+  });
+
+  it("round-trips lifecycle, priority, activation and extension fields without validation mutations", async () => {
+    const registry = JSON.parse(await readFile("tiles2.json", "utf8"));
+    const encounter = createDefaultEncounterRules();
+    encounter.enabled = true;
+    encounter.extra = { untouched: [1, 2] };
+    const rule = encounter.rules[0];
+    rule.priority = 20;
+    rule.activation = { scope: "once_per_turn" };
+    rule.trigger.events = ["turn_ended"];
+    rule.trigger.extra = "spatial metadata";
+    rule.conditions[0].extra = { keep: true };
+    rule.actions[0].extra = ["keep"];
+    registry.tiles[0].definition.encounterRules = encounter;
+    registry.tiles[0].definition.variants = { decor: { preserved: { encounterRules: structuredClone(encounter) } } };
+    const before = structuredClone(registry);
+    assert.deepEqual(validateTiles(registry).filter(item => item.severity === "error"), []);
+    rule.trigger.events = ["dice_changed"];
+    rule.activation = { scope: "attacker_per_player_roll" };
+    assert.deepEqual(validateTiles(registry).filter(item => item.severity === "error"), []);
+    registry.tiles[0].definition.encounterRules = before.tiles[0].definition.encounterRules;
+    const store = new ContentDocumentStore();
+    store.replace("numericTiles", registry);
+    assert.deepEqual(JSON.parse(store.serialize("numericTiles")), before);
+  });
+
+  it("reports unsupported and malformed encounter JSON without throwing or changing it", () => {
+    for (const mutate of [
+      rules => { rules.rules[0].trigger.events = ["future_event"]; },
+      rules => { rules.rules[0].conditions = [{ type: "future_condition", data: [3] }]; },
+      rules => { rules.rules[0].actions = [{ type: "future_action", data: [4] }]; },
+      rules => { rules.rules[0].activation = { scope: "once_per_turn" }; rules.rules[0].trigger.events = {}; },
+      rules => { rules.rules[0].activation = { scope: "once_per_turn" }; rules.rules[0].trigger.events = ["after_move"]; },
+      rules => { delete rules.rules; },
+      rules => { rules.rules = [null]; }
+    ]) {
+      const rules = createDefaultEncounterRules();
+      mutate(rules);
+      const before = structuredClone(rules);
+      const issues = validateTiles({ P: { encounterRules: rules } });
+      assert.ok(issues.some(issue => issue.severity === "error" && issue.path.includes("encounterRules")));
+      assert.deepEqual(rules, before);
+    }
   });
 
   it("rejects invalid supported tile property types and preserves unknown property validation", () => {

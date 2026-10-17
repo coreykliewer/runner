@@ -453,6 +453,158 @@ test("guided tile creation copies only selected capabilities on mobile", async (
   expect(source.definition.moveCost).toBe(1);
 });
 
+test("Tile Builder configures and persists universal encounter rules on any tile", async ({ page }) => {
+  const persistence = await prepareTileCreationPersistence(page);
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  const tileId = await getNextNumericTileId(page);
+  await createBlankTileThroughWizard(page, "Rock", "Environmental");
+  await addSupportedProperty(page, "encounterRules");
+
+  const encounter = page.locator('[data-property="encounterRules"]');
+  const ruleEditor = encounter.locator(".encounter-rule-editor");
+  await expect(ruleEditor.locator(".encounter-rule-card")).toHaveCount(1);
+  await ruleEditor.getByRole("checkbox", { name: "Enable encounter rules" }).check();
+  await ruleEditor.getByLabel("Condition 1 type").selectOption("expression");
+  const expression = ruleEditor.getByLabel("Condition 1 expression");
+  await expression.fill("d1 + d2 <= 2");
+  const die1 = ruleEditor.getByLabel("Test die 1");
+  const die2 = ruleEditor.getByLabel("Test die 2");
+  await die1.fill("1");
+  await die2.fill("1");
+  await ruleEditor.getByRole("button", { name: "Test Dice" }).click();
+  await expect(ruleEditor.locator(".encounter-dice-test-result")).toContainText("Conditions pass · 1 damage");
+  await die2.fill("2");
+  await ruleEditor.getByRole("button", { name: "Test Dice" }).click();
+  await expect(ruleEditor.locator(".encounter-dice-test-result")).toContainText("Conditions do not pass");
+
+  await ruleEditor.getByRole("button", { name: "Add condition to rule 1" }).click();
+  await expect(ruleEditor.locator(".encounter-condition-row")).toHaveCount(2);
+  await ruleEditor.getByRole("button", { name: "Add rule" }).click();
+  await expect(ruleEditor.locator(".encounter-rule-card")).toHaveCount(2);
+  await expect(ruleEditor.locator(".encounter-rule-summary").first()).toContainText("1–1 Orthogonal");
+  await ruleEditor.locator(".encounter-rule-card").first().getByLabel("Action 1 result message").fill("Edited attack");
+  await ruleEditor.getByRole("button", { name: "Duplicate rule 1", exact: true }).click();
+  await ruleEditor.getByRole("button", { name: "Move rule 3 up", exact: true }).click();
+  await expect(ruleEditor.locator(".encounter-rule-card").nth(1).getByLabel("Action 1 result message")).toHaveValue("Edited attack");
+
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  const savedRegistry = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+  persistence.persist(savedRegistry);
+  const savedTile = savedRegistry.tiles.find(tile => tile.id === tileId);
+  expect(savedTile.category).toBe("Environmental");
+  expect(savedTile.definition.encounterRules.enabled).toBe(true);
+  expect(savedTile.definition.encounterRules.rules).toHaveLength(3);
+  expect(savedTile.definition.encounterRules.rules.map(rule => rule.order)).toEqual([1, 2, 3]);
+  expect(new Set(savedTile.definition.encounterRules.rules.map(rule => rule.id)).size).toBe(3);
+  expect(savedTile.definition.encounterRules.rules[1].actions[0].message).toBe("Edited attack");
+  expect(savedTile.definition.encounterRules.rules[0].conditions[0].expression).toBe("d1 + d2 <= 2");
+
+  await page.reload();
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await page.locator(`.tile-card[data-entry-key="numeric:${tileId}"]`).click();
+  const capabilities = page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) });
+  await capabilities.locator(":scope > summary").click();
+  const reloadedEncounter = page.locator('[data-property="encounterRules"] .encounter-rule-editor');
+  await expect(reloadedEncounter.locator(".encounter-rule-card")).toHaveCount(3);
+  await expect(reloadedEncounter.locator(".encounter-rule-card").first().getByLabel("Condition 1 expression")).toHaveValue("d1 + d2 <= 2");
+});
+
+test("Studio preserves runtime-only encounter settings and opaque rules through edits, duplication and reopen", async ({ page }) => {
+  const { createDefaultEncounterRule } = await import("../src/encounterRules.js");
+  const editable = { ...createDefaultEncounterRule(1), priority: 12, activation: { scope: "attacker_per_player_roll" } };
+  const ended = createDefaultEncounterRule(2);
+  ended.trigger.events = ["turn_ended"];
+  ended.activation = { scope: "once_per_turn" };
+  const dice = createDefaultEncounterRule(3);
+  dice.trigger.events = ["dice_changed"];
+  const extension = createDefaultEncounterRule(4);
+  extension.conditions[0].futureCondition = { preserve: true };
+  extension.actions[0].futureAction = [1, 2];
+  extension.trigger.futureSpatial = { mode: "unchanged" };
+  extension.futureRule = "unchanged";
+  const original = { enabled: true, resolution: "all_matches", futureRoot: { version: 9 }, rules: [editable, ended, dice, extension] };
+  let originalTile;
+  const persistence = await prepareTileCreationPersistence(page, registry => {
+    const tile = registry.tiles[0];
+    tile.definition.encounterRules = original;
+    tile.definition.variants = { decor: { preserved: { svg: tile.definition.svg, encounterRules: structuredClone(original) } } };
+    originalTile = structuredClone(tile);
+  });
+  await page.goto("/editor.html");
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await page.locator(`.tile-card[data-entry-key="numeric:${originalTile.id}"]`).click();
+  await page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) }).locator(":scope > summary").click();
+  const editor = page.locator(".encounter-rule-editor");
+  await expect(editor.getByLabel("Stored match policy (read-only)")).toBeDisabled();
+  await expect(editor).toContainText("Runtime-only settings");
+  await expect(editor.locator(".encounter-rule-summary").nth(1)).toContainText("when the turn ends (runtime only)");
+  await expect(editor.locator(".encounter-rule-summary").nth(2)).toContainText("when dice change (runtime only)");
+  await expect(editor.locator(".encounter-preserved")).toHaveCount(3);
+  await expect(editor.getByRole("button", { name: "Move rule 1 down" })).toBeDisabled();
+  await editor.getByLabel("Action 1 result message").fill("Safely edited");
+  await page.locator("#saveDoc").click();
+  await expect(page.locator("#dirtyStatus")).toHaveText("All changes saved");
+  const saved = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+  const expected = structuredClone(originalTile);
+  expected.definition.encounterRules.rules[0].actions[0].message = "Safely edited";
+  expect(saved.tiles.find(tile => tile.id === originalTile.id)).toEqual(expected);
+  persistence.persist(saved);
+  await page.reload();
+  await page.locator('.nav-document[data-document="numericTiles"]').click();
+  await page.locator(`.tile-card[data-entry-key="numeric:${originalTile.id}"]`).click();
+  await page.locator("#duplicateEntry").click();
+  await page.locator("#saveDoc").click();
+  const duplicated = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+  const copy = duplicated.tiles.at(-1);
+  expect(copy.id).not.toBe(originalTile.id);
+  expect(copy.definition).toEqual(expected.definition);
+  expect(duplicated.tiles.find(tile => tile.id === originalTile.id)).toEqual(expected);
+});
+
+for (const shape of ["unknown event", "unknown condition", "unknown action", "malformed activation", "missing rules", "null rule"]) {
+  test(`Studio preserves ${shape} JSON and blocks unsafe form edits`, async ({ page }) => {
+    const { createDefaultEncounterRules } = await import("../src/encounterRules.js");
+    const original = createDefaultEncounterRules();
+    if (shape === "unknown event") original.rules[0].trigger.events = ["future_event"];
+    if (shape === "unknown condition") original.rules[0].conditions = [{ type: "future_condition", payload: [4] }];
+    if (shape === "unknown action") original.rules[0].actions = [{ type: "future_action", payload: { reward: 3 } }];
+    if (shape === "malformed activation") { original.rules[0].activation = { scope: "once_per_turn" }; original.rules[0].trigger.events = {}; }
+    if (shape === "missing rules") delete original.rules;
+    if (shape === "null rule") original.rules = [null];
+    let tileId;
+    const persistence = await prepareTileCreationPersistence(page, registry => {
+      tileId = registry.tiles[0].id;
+      registry.tiles[0].definition.encounterRules = original;
+    });
+    await page.goto("/editor.html");
+    await page.locator('.nav-document[data-document="numericTiles"]').click();
+    await page.locator(`.tile-card[data-entry-key="numeric:${tileId}"]`).click();
+    await page.locator(".tile-builder-section").filter({ has: page.getByText("Capabilities", { exact: true }) }).locator(":scope > summary").click();
+    const editor = page.locator(".encounter-rule-editor");
+    await expect(editor).toContainText("Read-only: original JSON is preserved");
+    await expect(editor.getByRole("button", { name: "Add rule" })).toHaveCount(0);
+    if (shape === "unknown event") {
+      await expect(editor.locator(".encounter-rule-summary")).toContainText("Unrecognized event: future_event");
+      await expect(editor.locator(".encounter-rule-summary")).not.toContainText("after dice roll");
+    }
+    await page.locator(".tile-builder-section").filter({ has: page.getByText("Identity", { exact: true }) }).locator(":scope > summary").click();
+    await page.locator("#inspectorFields").getByLabel("Tile name", { exact: true }).fill("Preservation test");
+    await page.locator("#saveDoc").click();
+    await expect(page.locator("#statusText")).toContainText("Save blocked");
+    await page.locator("#exportDoc").click();
+    const exported = await page.evaluate(() => JSON.parse(window.__createdRegistryJson));
+    expect(exported.tiles.find(tile => tile.id === tileId).definition.encounterRules).toEqual(original);
+    persistence.persist(exported);
+    await page.reload();
+    await page.locator('.nav-document[data-document="numericTiles"]').click();
+    await page.locator(`.tile-card[data-entry-key="numeric:${tileId}"]`).click();
+    await page.locator("#exportDoc").click();
+    expect(await page.evaluate(id => JSON.parse(window.__createdRegistryJson).tiles.find(tile => tile.id === id).definition.encounterRules, tileId)).toEqual(original);
+  });
+}
+
 test("numeric tile properties use typed controls, preserve custom JSON, and restore fallbacks on removal", async ({ page }) => {
   await page.goto("/editor.html");
   await page.locator('.nav-document[data-document="numericTiles"]').click();
