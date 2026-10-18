@@ -1,4 +1,5 @@
 import { addXp, setStoryFlag, unlockAchievement } from "./progression.js";
+export { setXp } from "./progression.js";
 
 export function runNarrativeEvents(events, context, state) {
   const actions = [];

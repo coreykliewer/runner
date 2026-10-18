@@ -1,6 +1,7 @@
 import { createTileSystemV2RuleDispatcher } from "./tileSystemV2RuleDispatcher.js";
 import { calculateEncounterDistance, encounterPositionMatches } from "./encounterRules.js";
 export { evaluateEncounterExpression } from "./encounterRules.js";
+export { readBuiltInProperties } from "./runnerPropertyNames.js";
 export { createDevelopmentTrace, developmentTraceEnabled } from "./developmentTrace.js";
 export { createTileEntryBatch, tileEntryRule, applyTileEntry, executeTileEntry, restorePropertyEntry } from "./tileEntry.js";
 

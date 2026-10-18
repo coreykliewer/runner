@@ -106,9 +106,9 @@ export function createCheckpointState(levelKey, runner = {}, dice = {}) {
 export function encodeCarryStatsFromRunner(runner) {
   const parts = [
     "v1",
-    "h" + (runner?.hearts ?? 0).toString(36),
-    "s" + (runner?.score ?? 0).toString(36),
-    "k" + (runner?.kills ?? 0).toString(36),
+    "h" + Math.trunc(runner?.hearts ?? 0).toString(36),
+    "s" + Math.trunc(runner?.score ?? 0).toString(36),
+    "k" + Math.trunc(runner?.kills ?? 0).toString(36),
     "t" + ((runner?.turbo ? 1 : 0).toString(36)),
     "m" + ((runner?.turboMultiplier ?? 2).toString(36))
   ];
@@ -126,6 +126,7 @@ export function decodeCarryStats(value) {
 
   const parts = value.split(".");
   if (parts[0] !== "v1") return out;
+  let exactNative = {};
 
   for (const token of parts.slice(1)) {
     if (token.startsWith("h")) out.hearts = parseBase36(token.slice(1), out.hearts);
@@ -138,7 +139,9 @@ export function decodeCarryStats(value) {
       out.turboMultiplier = parseBase36(token.slice(1), out.turboMultiplier);
     }
     else if (token.startsWith("p")) {
-      Object.assign(out, decodeCarryProgress(token.slice(1)));
+      const { exactNative: exact = {}, ...progress } = decodeCarryProgress(token.slice(1));
+      Object.assign(out, progress);
+      exactNative = exact;
     }
   }
 
@@ -147,11 +150,16 @@ export function decodeCarryStats(value) {
   out.kills = Math.max(0, out.kills);
   out.turboMultiplier = Math.max(1, out.turboMultiplier);
 
-  return out;
+  return { ...out, ...exactNative };
 }
 
 function encodeCarryProgress(runner) {
   const payload = {};
+  const exactNative = {};
+  for (const key of ["hearts", "score", "kills"]) {
+    if (Number.isFinite(runner?.[key]) && !Number.isSafeInteger(runner[key])) exactNative[key] = runner[key];
+  }
+  if (Object.keys(exactNative).length) payload.exactNative = exactNative;
 
   if (Number(runner?.xp || 0) > 0) payload.xp = Number(runner.xp || 0);
   if (hasObjectEntries(runner?.counters)) payload.counters = runner.counters;
@@ -177,6 +185,9 @@ function decodeCarryProgress(value) {
 
   return {
     xp: Number.isFinite(xp) && xp >= 0 ? xp : 0,
+    exactNative: Object.fromEntries(["hearts", "score", "kills"].filter(key =>
+      Number.isFinite(payload.exactNative?.[key]) && (key === "hearts" || payload.exactNative[key] >= 0))
+      .map(key => [key, payload.exactNative[key]])),
     ...(Object.hasOwn(payload, "properties") ? { properties: validProperties(payload.properties) } : {}),
     ...(Object.hasOwn(payload, "propertyEntry") ? { propertyEntry: restorePropertyEntry(payload.propertyEntry, null) } : {}),
     counters: plainObjectOrEmpty(payload.counters),

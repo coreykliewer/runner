@@ -1973,9 +1973,10 @@ function checkDeath() {
   return false;
 }
 
-function takeDamage(n, sourceTile) {
+function takeDamage(n, sourceTile, { targetHearts = null } = {}) {
   const heartsBefore = runner.hearts;
-  runner.hearts -= n;
+  if (targetHearts !== null && (!Number.isFinite(targetHearts) || targetHearts < 0 || targetHearts > heartsBefore)) throw new Error("Invalid health target");
+  runner.hearts = targetHearts === null ? runner.hearts - n : targetHearts;
   developmentTrace?.record({ type: "damage_applied", amount: n, heartsBefore, heartsAfter: runner.hearts,
     lethal: runner.hearts <= 0, message: sourceTile.deathMessage, ...sourceTile.traceContext });
   runner.damageFlashTimer = 10;
@@ -1987,6 +1988,23 @@ function takeDamage(n, sourceTile) {
     return;
   }
   checkDeath();
+}
+
+function healRunner(amount, { targetHearts = null } = {}) {
+  const target = targetHearts === null ? runner.hearts + amount : targetHearts;
+  if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(target) || target < runner.hearts) throw new Error("Invalid healing amount");
+  if (gameOver || runner.hearts <= 0) return false;
+  runner.hearts = target;
+  runner.heartFlashTimer = 10;
+  return true;
+}
+
+function readRunnerPropertyValues() {
+  if (!diceEngine) initializeDiceEngine();
+  return EncounterRulesModule.readBuiltInProperties(runner, { getRemainingMoves: () => {
+    const dice = diceEngine.getState().dice;
+    return dice.die1 + dice.die2;
+  } });
 }
 
 function tileDistanceFromRunner(tx, ty) {
@@ -2210,12 +2228,38 @@ function getRuleDispatcher() {
   }, developmentTrace ? record => developmentTrace.record(record) : null, restoredTurn?.ledger || {}, {
     property_rules: (action, context) => {
       if (gameOver) return { applied: false };
-      const result = action.rules?.version === 2
+      const result = [2, 3].includes(action.rules?.version)
         ? EncounterRulesModule.executeTileEntry(action, context.event, runner, {
           checkpoint: checkpointPropertyRuleEntry,
+          readNativeValues: readRunnerPropertyValues,
           isTerminal: () => gameOver || runner.hearts <= 0,
           observe: record => developmentTrace?.record(record),
           handlers: {
+            property: (effect, request) => {
+              const name = request.nativeProperty;
+              if (!["Hearts", "Diamonds", "XP"].includes(name)) throw new Error("Unsupported or read-only native property");
+              if (!Number.isSafeInteger(effect.value) || effect.value < 0) throw new Error("Invalid native operand");
+              const before = readRunnerPropertyValues()[name];
+              const target = Math.max(0, effect.operation === "set" ? effect.value
+                : effect.operation === "add" ? before + effect.value : before - effect.value);
+              if (!Number.isFinite(target)) throw new Error("Native value overflow");
+              if (name === "Hearts") {
+                if (target < before) {
+                  const amount = before - target;
+                  const message = `You lose ${amount} heart${amount === 1 ? "" : "s"}.`;
+                  takeDamage(amount, { deathMessage: message, traceContext: { eventId: context.event.eventId,
+                    source: context.event.source, nativeProperty: name, entrySnapshot: context.event.nativeValues } }, { targetHearts: target });
+                  if (!gameOver) setMessage(message, { kind: "combat" });
+                } else if (target > before) healRunner(target - before, { targetHearts: target });
+              } else if (name === "Diamonds") {
+                runner.score = target;
+                if (target > before) runner.diamondFlashTimer = 10;
+              } else {
+                if (!NarrativeEventsModule) throw new Error("Progression adapter unavailable");
+                applyAchievementState(NarrativeEventsModule.setXp(buildAchievementState(), target));
+              }
+              if (!gameOver) checkStatAchievements();
+            },
             lose_hearts: effect => {
               const message = `You lose ${effect.amount} heart${effect.amount === 1 ? "" : "s"}.`;
               takeDamage(effect.amount, { deathMessage: message, traceContext: {
@@ -2248,11 +2292,14 @@ function getRuleDispatcher() {
         runner.properties = result.properties;
         runner.propertyEntry = result.entryState;
         updateInfo();
-        if (action.rules?.version === 2) draw();
+        if ([2, 3].includes(action.rules?.version)) draw();
       }
       if (result.diagnostics?.some(item => item.code?.startsWith("native_"))) {
         if (!gameOver) setMessage("A tile effect could not finish. Its remaining effects were stopped.");
         console.warn("[Runner] Property effect stopped", result.diagnostics);
+      }
+      if (result.diagnostics?.some(item => item.code === "reserved_property_collision")) {
+        setMessage("Property rules stopped: a saved custom property uses a reserved name. Rename it before using version 3 rules.");
       }
       developmentTrace?.record({ type: "property_rules", eventId: context.event.eventId,
         source: context.event.source, evaluation: result.evaluation, diagnostics: result.diagnostics, applied: result.applied });
@@ -2272,7 +2319,8 @@ function enterRunnerCell(x, y, cause) {
   const source = { instanceId: `${currentLevelKey}:${x}:${y}:${tile.id}`, level: currentLevelKey,
     tileId: tile.id, variant: tile.variant, x, y };
   const batch = EncounterRulesModule.createTileEntryBatch({ entryState: runner.propertyEntry,
-    from, to: { x, y }, cause, source, properties: runner.properties, rollId: diceEngine?.getState().currentRollId ?? null });
+    from, to: { x, y }, cause, source, properties: runner.properties, rollId: diceEngine?.getState().currentRollId ?? null,
+    ...(tile.def.propertyRules?.version === 3 ? { nativeValues: readRunnerPropertyValues() } : {}) });
   developmentTrace?.record({ type: "tile_entry", batch });
   getRuleDispatcher().dispatch({ batches: batch, rules: [EncounterRulesModule.tileEntryRule(source, tile.def)] });
   savePersistentGameState({ checkpoint: true });

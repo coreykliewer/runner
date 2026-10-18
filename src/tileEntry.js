@@ -1,4 +1,5 @@
 import { evaluatePropertyRules, createPropertyRuleExecution, validateRunnerProperties } from "./propertyRules.js";
+import { validateBuiltInValues } from "./runnerPropertyNames.js";
 
 export function restorePropertyEntry(value, runId) {
   const execution = restoreExecution(value?.execution);
@@ -23,12 +24,13 @@ function restoreExecution(value) {
 
 // Adapts the existing interpreter to authoritative state and strict checkpoints.
 // This function schedules no effects and never retries a consumed entry.
-export function executeTileEntry(action, event, runner, { checkpoint, handlers, isTerminal = () => false, observe = () => {} }) {
+export function executeTileEntry(action, event, runner, { checkpoint, handlers, readNativeValues, isTerminal = () => false, observe = () => {} }) {
   const previous = runner.propertyEntry;
   if (event.runId !== previous.runId || event.entrySequence !== previous.sequence + 1) {
     return { applied: false, diagnostics: [{ code: "entry_replay_or_out_of_order", eventId: event.eventId }] };
   }
-  const execution = createPropertyRuleExecution(action.rules, event.before);
+  const v3 = action.rules?.version === 3;
+  const execution = createPropertyRuleExecution(action.rules, event.before, v3 ? { nativeValues: event.nativeValues } : {});
   let step = execution.next();
   const entry = { runId: event.runId, sequence: event.entrySequence,
     execution: { eventId: event.eventId, status: "completed", effectKey: null, diagnostics: [] } };
@@ -64,6 +66,11 @@ export function executeTileEntry(action, event, runner, { checkpoint, handlers, 
         status = "failed";
       }
     }
+    let nativeValues;
+    if (v3) {
+      try { nativeValues = readNativeValues(); }
+      catch (error) { uncertain = true; report("native_snapshot_after_failed", error); status = "failed"; }
+    }
     entry.execution.status = uncertain ? "uncertain" : status === "applied" ? "completed" : status;
     try { checkpoint(); } catch (error) {
       uncertain = true;
@@ -73,7 +80,7 @@ export function executeTileEntry(action, event, runner, { checkpoint, handlers, 
     }
     try { observe({ type: "property_native_effect", eventId: event.eventId, source: event.source,
       effectKey: request.effectKey, effect: request.effect, status: entry.execution.status, terminal: isTerminal() }); } catch { /* Diagnostic only. */ }
-    step = execution.next({ status });
+    step = execution.next({ status, ...(v3 && nativeValues ? { nativeValues } : {}) });
   }
   const evaluation = step.value;
   // Invalid definitions have no prefix to commit; runtime failures retain their prefix.
@@ -87,13 +94,14 @@ export function executeTileEntry(action, event, runner, { checkpoint, handlers, 
   return { applied: true, evaluation, diagnostics: [...diagnostics], entryState: entry, properties: runner.properties };
 }
 
-export function createTileEntryBatch({ entryState, from, to, cause, source, properties, rollId = null }) {
+export function createTileEntryBatch({ entryState, from, to, cause, source, properties, rollId = null, nativeValues }) {
   const sequence = entryState.sequence + 1;
   const actionId = `${entryState.runId}:entry:${sequence}`;
   return decodeTileEntryBatch({ format: "runner.tile-entry-batch", version: 1,
     actionId, parentActionId: null, rollId, events: [{ type: "tile_entered", eventId: actionId,
       actionId, parentActionId: null, rollId, sequence: 1, entrySequence: sequence,
-      runId: entryState.runId, from, to, cause, source, before: properties, after: properties }] });
+      runId: entryState.runId, from, to, cause, source, before: properties, after: properties,
+      ...(nativeValues !== undefined ? { nativeValues } : {}) }] });
 }
 
 export function decodeTileEntryBatch(value) {
@@ -108,7 +116,8 @@ export function decodeTileEntryBatch(value) {
       !point(event.from) || !point(event.to) || (event.from.x === event.to.x && event.from.y === event.to.y) ||
       typeof event.cause !== "string" || !event.cause || typeof event.source?.instanceId !== "string" || !event.source.instanceId ||
       validateRunnerProperties(event.before).length || validateRunnerProperties(event.after).length ||
-      JSON.stringify(event.before) !== JSON.stringify(event.after)) throw new TypeError("Invalid tile-entry batch.");
+      JSON.stringify(event.before) !== JSON.stringify(event.after) ||
+      (Object.hasOwn(event, "nativeValues") && validateBuiltInValues(event.nativeValues).length)) throw new TypeError("Invalid tile-entry batch.");
   return freeze(batch);
 }
 

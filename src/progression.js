@@ -7,6 +7,11 @@ export function addXp(state, amount) {
   return { ...state, runner };
 }
 
+export function setXp(state, value) {
+  if (!Number.isFinite(value)) throw new TypeError("XP must be finite.");
+  return { ...state, runner: { ...state.runner, xp: Math.max(0, value) } };
+}
+
 export function unlockAchievement(state, achievement) {
   const id = typeof achievement === "string" ? achievement : achievement?.id;
   if (!id) return state;
