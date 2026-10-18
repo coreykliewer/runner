@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Runner Property Rules 1.0 and 2.0",
+  "title": "Runner Property Rules versions 1, 2 and 3",
   "$defs": {
     "propertyId": {
       "type": "string",
@@ -261,6 +261,155 @@
           }
         }
       }
+    },
+    "v3Effect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operation",
+            "property",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "property"
+            },
+            "operation": {
+              "enum": [
+                "set",
+                "add",
+                "subtract"
+              ]
+            },
+            "property": {
+              "$ref": "#/$defs/propertyId"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "allOf": [
+            {
+              "not": {
+                "properties": {
+                  "property": {
+                    "type": "string",
+                    "pattern": "^[Mm][Oo][Vv][Ee][Ss](?![\\s\\S])"
+                  }
+                },
+                "required": [
+                  "property"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "property": {
+                    "type": "string",
+                    "pattern": "^([Hh][Ee][Aa][Rr][Tt][Ss]|[Dd][Ii][Aa][Mm][Oo][Nn][Dd][Ss]|[Xx][Pp]|[Mm][Oo][Vv][Ee][Ss])(?![\\s\\S])"
+                  }
+                },
+                "required": [
+                  "property"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "amount"
+          ],
+          "properties": {
+            "type": {
+              "const": "lose_hearts"
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "narrative"
+            },
+            "text": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "title"
+          ],
+          "properties": {
+            "type": {
+              "const": "achievement"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "title": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "body": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      ]
+    },
+    "v3Block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "then"
+      ],
+      "properties": {
+        "if": {
+          "$ref": "#/$defs/v2Condition"
+        },
+        "then": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/v3Effect"
+          }
+        }
+      }
     }
   },
   "oneOf": [
@@ -298,6 +447,25 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/v2Block"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "blocks"
+      ],
+      "properties": {
+        "version": {
+          "const": 3
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v3Block"
           }
         }
       }

@@ -1,6 +1,8 @@
 // Standalone Stage A contract. No gameplay, persistence, or editor dependencies.
+import { resolvePropertyName, validateBuiltInValues, findReservedPropertyCollisions } from "./runnerPropertyNames.js";
+export { resolvePropertyName, readBuiltInProperties, findReservedPropertyCollisions } from "./runnerPropertyNames.js";
 export const PROPERTY_RULES_VERSION = 1;
-export const PROPERTY_RULES_VERSIONS = Object.freeze([1, 2]);
+export const PROPERTY_RULES_VERSIONS = Object.freeze([1, 2, 3]);
 export const PROPERTY_CONDITION_MODES = Object.freeze(["entry", "current"]);
 export const PROPERTY_NATIVE_EFFECTS = Object.freeze(["lose_hearts", "narrative", "achievement"]);
 export const PROPERTY_OPERATIONS = Object.freeze(["set", "add", "subtract"]);
@@ -12,8 +14,9 @@ const propertyId = new RegExp(PROPERTY_ID_PATTERN);
 export function validatePropertyRules(value, path = "propertyRules") {
   const issues = [];
   if (!object(value, path, ["version", "blocks"], issues)) return issues;
-  if (!PROPERTY_RULES_VERSIONS.includes(value.version)) issues.push(error(`${path}.version`, "unsupported_version", "version must be 1 or 2."));
-  const v2 = value.version === 2;
+  if (!PROPERTY_RULES_VERSIONS.includes(value.version)) issues.push(error(`${path}.version`, "unsupported_version", "version must be 1, 2 or 3."));
+  const v2 = value.version === 2 || value.version === 3;
+  const v3 = value.version === 3;
   if (!Array.isArray(value.blocks)) {
     issues.push(error(`${path}.blocks`, "invalid_structure", "blocks must be an array."));
     return issues;
@@ -46,12 +49,19 @@ export function validatePropertyRules(value, path = "propertyRules") {
       const effectPath = `${blockPath}.then[${effectIndex}]`;
       if (v2 && effect?.type !== "property") {
         validateNativeEffect(effect, effectPath, issues);
+        if (v3 && effect?.type === "lose_hearts" && !Number.isSafeInteger(effect.amount)) {
+          issues.push(error(`${effectPath}.amount`, "invalid_native_operand", "Version 3 heart-loss operands must be positive safe integers."));
+        }
         return;
       }
       if (!object(effect, effectPath, [...(v2 ? ["type"] : []), "operation", "property", "value"], issues)) return;
       validateId(effect.property, `${effectPath}.property`, issues);
       if (!PROPERTY_OPERATIONS.includes(effect.operation)) issues.push(error(`${effectPath}.operation`, "unsupported_operation", "Use set, add or subtract."));
       validateNumber(effect.value, `${effectPath}.value`, issues);
+      if (v3 && resolvePropertyName(effect.property).kind === "builtin") {
+        if (resolvePropertyName(effect.property).name === "Moves") issues.push(error(`${effectPath}.property`, "read_only_property", "Moves is read-only; it is owned by the dice engine."));
+        if (!Number.isSafeInteger(effect.value) || effect.value < 0) issues.push(error(`${effectPath}.value`, "invalid_native_operand", "Native property operands must be non-negative safe integers."));
+      }
     });
   });
   return issues;
@@ -77,8 +87,8 @@ export function validateRunnerProperties(properties, path = "properties") {
 }
 
 // One invocation represents one entry. The caller owns entry identity and replay prevention.
-export function evaluatePropertyRules(rules, properties = {}) {
-  const execution = createPropertyRuleExecution(rules, properties);
+export function evaluatePropertyRules(rules, properties = {}, options = {}) {
+  const execution = createPropertyRuleExecution(rules, properties, options);
   const step = execution.next();
   if (step.done) return step.value;
   execution.return();
@@ -89,15 +99,20 @@ export function evaluatePropertyRules(rules, properties = {}) {
 
 // One ordered interpreter. Native instructions suspend; this module performs no I/O.
 // Each yielded instruction requires exactly one applied/terminal/failed acknowledgement.
-export function* createPropertyRuleExecution(rules, properties = {}) {
+export function* createPropertyRuleExecution(rules, properties = {}, { nativeValues } = {}) {
   const stateIssues = validateRunnerProperties(properties);
   const diagnostics = [...validatePropertyRules(rules), ...stateIssues];
+  const v3 = rules?.version === 3;
+  if (v3) diagnostics.push(...validateBuiltInValues(nativeValues), ...findReservedPropertyCollisions(null, properties));
   const entrySnapshot = stateIssues.length ? null : freeze({ ...properties });
   const result = { format: "runner.property-rule-evaluation", version: 1, ok: false,
     entrySnapshot, properties: entrySnapshot, blocks: [], effects: [], diagnostics };
-  const v2 = rules?.version === 2;
-  if (v2) Object.assign(result, { rulesVersion: 2, status: "invalid", records: [] });
+  const v2 = rules?.version === 2 || v3;
+  if (v2) Object.assign(result, { rulesVersion: rules.version, status: "invalid", records: [] });
   if (diagnostics.length) return freeze(result);
+  const entryNativeValues = v3 ? freeze({ ...nativeValues }) : null;
+  let currentNativeValues = entryNativeValues;
+  if (v3) Object.assign(result, { entryNativeValues, nativeValues: currentNativeValues });
 
   // Own the entire definition before yielding: caller edits cannot change a suspended entry.
   if (v2) rules = { ...rules, blocks: rules.blocks.map(block => ({ ...block,
@@ -107,25 +122,43 @@ export function* createPropertyRuleExecution(rules, properties = {}) {
   const record = details => { if (v2) result.records.push({ sequence: result.records.length + 1, ...details }); };
   for (const [blockIndex, block] of rules.blocks.entries()) {
     const mode = v2 ? block.if?.mode || "entry" : "entry";
-    const comparison = Object.hasOwn(block, "if") ? compare(block.if, mode === "current" ? working : entrySnapshot) : null;
+    const resolved = block.if ? resolvePropertyName(block.if.property, rules.version) : null;
+    const conditionSnapshot = v3 && resolved?.kind === "builtin"
+      ? mode === "current" ? currentNativeValues : entryNativeValues
+      : mode === "current" ? working : entrySnapshot;
+    const comparison = Object.hasOwn(block, "if") ? compare(v3 ? { ...block.if, property: resolved.name } : block.if, conditionSnapshot) : null;
+    if (v3 && comparison) Object.assign(comparison, { authoredProperty: block.if.property, kind: resolved.kind });
     const matched = comparison === null || comparison.matched;
     result.blocks.push({ blockIndex, matched, comparison, effectCount: matched ? block.then.length : 0 });
     record({ kind: "block", blockIndex, blockNumber: blockIndex + 1, mode, matched, comparison,
-      snapshot: mode === "current" ? snapshot() : { ...entrySnapshot } });
+      snapshot: mode === "current" ? snapshot() : { ...entrySnapshot },
+      ...(v3 ? { nativeValues: { ...(mode === "current" ? currentNativeValues : entryNativeValues) } } : {}) });
     if (!matched) continue;
     for (const [effectIndex, effect] of block.then.entries()) {
       const location = { blockIndex, effectIndex, blockNumber: blockIndex + 1, effectNumber: effectIndex + 1,
         effectKey: `block:${blockIndex + 1}/effect:${effectIndex + 1}` };
       const path = `propertyRules.blocks[${blockIndex}].then[${effectIndex}]`;
-      if (v2 && effect.type !== "property") {
-        const request = freeze({ ...location, type: effect.type, effect: { ...effect }, before: snapshot() });
+      const target = v3 && effect.type === "property" ? resolvePropertyName(effect.property) : null;
+      if (v2 && (effect.type !== "property" || target?.kind === "builtin")) {
+        const request = freeze({ ...location, type: effect.type, effect: { ...effect }, before: snapshot(),
+          ...(v3 ? { nativeValues: currentNativeValues, ...(target ? { nativeProperty: target.name } : {}) } : {}) });
         const acknowledgement = yield freeze({ effect: request, path,
           evaluation: JSON.parse(JSON.stringify({ ...result, properties: working, status: "awaiting_native" })) });
-        const status = acknowledgement?.status;
+        let status = acknowledgement?.status;
+        const beforeNativeValues = currentNativeValues;
+        if (v3 && (["applied", "terminal"].includes(status) || acknowledgement?.nativeValues !== undefined)) {
+          const issues = validateBuiltInValues(acknowledgement.nativeValues, "acknowledgement.nativeValues");
+          if (issues.length) { diagnostics.push(...issues); status = "failed"; }
+          else {
+            currentNativeValues = freeze({ ...acknowledgement.nativeValues });
+            result.nativeValues = currentNativeValues;
+          }
+        }
         const valid = ["applied", "terminal", "failed"].includes(status);
         const outcome = valid ? status : "failed";
         result.effects.push({ sequence: result.effects.length + 1, ...location, type: effect.type, effect: { ...effect }, status: outcome });
-        record({ kind: "effect", ...location, type: effect.type, effect: { ...effect }, status: outcome, before: snapshot(), after: snapshot() });
+        record({ kind: "effect", ...location, type: effect.type, effect: { ...effect }, status: outcome, before: snapshot(), after: snapshot(),
+          ...(v3 ? { nativeBefore: beforeNativeValues, nativeAfter: currentNativeValues } : {}) });
         if (outcome !== "applied") {
           result.properties = working;
           result.ok = outcome === "terminal";

@@ -221,7 +221,7 @@ test("V2 rejects malformed structures, modes, existence operands, native actions
 
 test("schema versions and V2 vocabularies agree with the standalone validator", async () => {
   const schema = JSON.parse(await readFile(new URL("../schemas/runner-property-rules.schema.json", import.meta.url)));
-  assert.deepEqual(schema.oneOf.map(branch => branch.properties.version.const), [1, 2]);
+  assert.deepEqual(schema.oneOf.map(branch => branch.properties.version.const), [1, 2, 3]);
   assert.deepEqual(schema.$defs.v2Condition.oneOf[0].properties.mode.enum, [...PROPERTY_CONDITION_MODES]);
   assert.deepEqual(schema.$defs.v2Effect.oneOf.slice(1).map(branch => branch.properties.type.const), [...PROPERTY_NATIVE_EFFECTS]);
   for (const fixture of Object.values(fixtures)) assert.deepEqual(validatePropertyRules(fixture), []);
